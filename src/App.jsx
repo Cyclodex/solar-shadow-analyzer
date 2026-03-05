@@ -790,18 +790,27 @@ export default function ShadowAnalysis() {
     const results = [];
     for (let m = 1; m <= 12; m++) {
       const doy = getDayOfYear(m, 15);
-      let maxP = 0, sH = 0;
+      let maxP = 0, sH = 0, sunH = 0;
       for (let h = 6; h <= 20; h += 0.25) {
         const sv = getSolarPosition(doy, h, config);
         if (sv.altitude <= 0) continue;
         const p = getProfileAngle(sv.altitude, sv.azimuth, config);
-        if (p !== null && p > maxP) maxP = p;
-        if (p !== null && p >= geo.criticalAngle) sH += 0.25;
+        if (p !== null) {
+          sunH += 0.25;
+          if (p > maxP) maxP = p;
+          if (p >= geo.criticalAngle) sH += 0.25;
+        }
       }
-      results.push({ month: m, maxProfile: maxP, shadowH: sH });
+      results.push({ month: m, maxProfile: maxP, shadowH: sH, sunH });
     }
     return results;
   }, [JSON.stringify(config)]);
+
+  const annualShadowPct = useMemo(() => {
+    const totalSunH = yearAnalysis.reduce((s, r) => s + r.sunH, 0);
+    const totalShadowH = yearAnalysis.reduce((s, r) => s + r.shadowH, 0);
+    return totalSunH > 0 ? (totalShadowH / totalSunH) * 100 : 0;
+  }, [yearAnalysis]);
 
   const toggleView = (key) => setActiveViews(prev => ({ ...prev, [key]: !prev[key] }));
   const noShadowYear = yearAnalysis.every(r => r.maxProfile < geo.criticalAngle);
@@ -915,13 +924,19 @@ export default function ShadowAnalysis() {
                 { label: "Sonnenhöhe", val: solar.altitude > 0 ? solar.altitude.toFixed(1) + "°" : "—", col: solar.altitude > 0 ? "#fbbf24" : "#475569" },
                 { label: "Azimut", val: solar.altitude > 0 ? solar.azimuth.toFixed(1) + "°" : "—", col: solar.altitude > 0 ? "#f59e0b" : "#475569" },
                 { label: "Profilwinkel", val: profileAngle !== null && profileAngle > 0 ? profileAngle.toFixed(1) + "°" : sunBehind ? "hinter Fassade" : "—", col: profileAngle !== null && profileAngle > 0 ? (isShadow ? "#ef4444" : "#22d3ee") : "#475569" },
-                { label: "Verschattung?", val: solar.altitude <= 0 ? "—" : isShadow ? "JA" : "NEIN", col: solar.altitude <= 0 ? "#475569" : isShadow ? "#ef4444" : "#22c55e" },
               ].map((c, i) => (
                 <div key={i} style={{ background: "#1e293b", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
                   <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>{c.label}</div>
                   <div style={{ fontSize: 16, fontWeight: 700, color: c.col, marginTop: 2 }}>{c.val}</div>
                 </div>
               ))}
+              <div style={{ background: "#1e293b", borderRadius: 8, padding: "10px 8px", textAlign: "center" }}>
+                <div style={{ fontSize: 9, color: "#64748b", textTransform: "uppercase", letterSpacing: 1 }}>Jahres-Verschattung</div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: annualShadowPct === 0 ? "#22c55e" : annualShadowPct < 5 ? "#f59e0b" : "#ef4444", marginTop: 2 }}>
+                  {annualShadowPct.toFixed(1)}%
+                </div>
+                <div style={{ fontSize: 9, color: "#475569", marginTop: 1 }}>der Sonnenstunden</div>
+              </div>
             </div>
 
             {/* Diagrams */}
