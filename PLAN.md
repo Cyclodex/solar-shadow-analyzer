@@ -1,74 +1,38 @@
 # Solar Shadow Analyzer — Erweiterungsplan
 
-## Aktueller Stand (v1.0)
+## Aktueller Stand (v1.2)
 
-Funktionierender Prototyp mit:
-- 3 interaktive Ansichten (Frontal, Seite, Draufsicht) 
-- Sonnenstands-Berechnung basierend auf sphärischer Astronomie
-- Profilwinkel-basierte Verschattungsanalyse (Panel-zu-Panel)
-- Interaktiver Neigungswinkel-Vergleich mit relativem Ertrag
-- Monatsübersicht und Jahrestabelle
+Voll funktionsfähige App mit:
+- **Two-column Widescreen-Layout** — Steuerung links, Ausgaben rechts
+- **3 interaktive SVG-Ansichten** (Frontal, Seite, Draufsicht) — dynamisch nach Config
+- **Vollständiges Config-Panel** — alle Parameter per UI einstellbar (Standort, Balkon, Panels)
+- **Sonnenstands-Berechnung** — sphärische Astronomie, beliebige Standorte
+- **Profilwinkel-basierte Verschattungsanalyse** (Panel-zu-Panel)
+- **Jahres-Verschattung %** — Anteil verschatteter Sonnenstunden übers Jahr
+- **Neigungswinkel-Vergleich** mit relativem Ertrag und Schattenstunden
+- **Monatsdiagramm** und Jahrestabelle
+- **Panelneigung 0–90°** — 0° = senkrecht, Anzeige mit Grad-vom-Boden-Hinweis
+- **Mehrere Stockwerke** — FrontalView rendert N Balkone dynamisch
 
-Alle Werte sind aktuell hardcoded (Münchenbuchsee, 213° SSW, 280cm Balkon, etc.)
-
-
-## Phase 1 — Refactoring & Konfigurierbarkeit
-
-**Ziel:** Saubere Code-Struktur, alle Parameter dynamisch konfigurierbar.
-
-### 1.1 Code aufteilen
-
-```
-src/
-  lib/
-    solar.js          # getSolarPosition, getProfileAngle, getDayOfYear
-    geometry.js        # getPanelGeometry, getRelativeYield
-    constants.js       # DEFAULT_CONFIG mit allen Standardwerten
-  components/
-    views/
-      FrontalView.jsx
-      ProfileView.jsx
-      TopDownView.jsx
-    charts/
-      TiltComparison.jsx
-      MonthlyYield.jsx
-    controls/
-      ConfigPanel.jsx   # NEU: Eingabefelder für alle Parameter
-      TimeControls.jsx   # Jahreszeit-Buttons + Uhrzeit-Slider
-      ViewToggles.jsx
-    cards/
-      SolarInfoCards.jsx
-      ResultBox.jsx
-    tables/
-      YearTable.jsx
-  App.jsx              # State-Management, Layout
-```
-
-### 1.2 Konfigurierbare Parameter
-
-Alle diese Werte sollen über ein Config-Panel einstellbar sein:
+### Konfigurierbare Parameter (implementiert)
 
 | Parameter | Default | Einheit | Bereich |
 |---|---|---|---|
 | Breitengrad | 47.1 | ° | 0–90 |
 | Längengrad | 7.45 | ° | -180–180 |
-| Fassaden-Azimut | 213 | ° | 0–360 |
+| Fassaden-Azimut | 202 | ° | 0–360 |
 | Balkonhöhe (Decke-Decke) | 280 | cm | 200–400 |
-| Geländerhöhe | 100 | cm | 70–130 |
-| Panel-Länge (Höhe) | 113.4 | cm | 50–250 |
+| Geländerhöhe | 100 | cm | 60–150 |
+| Panel-Länge | 113.4 | cm | 50–250 |
 | Panel-Breite | 176.2 | cm | 50–250 |
-| Panel-Dicke | 3 | cm | 2–5 |
 | Anzahl Panels nebeneinander | 2 | Stk | 1–6 |
-| Panel-Neigung | 45 | ° | 15–85 |
+| Panel-Neigung | 45 | ° (von senkrecht) | 0–90 |
 | Anzahl Stockwerke | 2 | Stk | 1–5 |
 
-### 1.3 Config-Panel UI
+### Bekannte Einschränkungen
 
-- Aufklappbares Seitenpanel oder Modal
-- Gruppiert: "Standort", "Balkon", "Panels"
-- Jeder Wert mit Slider + Zahleneingabe
-- "Zurücksetzen auf Standard" Button
-- Optional: Config als JSON exportieren/importieren
+- Streiflicht-Schatten (Sonne fast parallel zur Fassade) werden mitgezählt, haben aber nur minimalen Praxiseinfluss
+- Code ist noch ein Monolith (App.jsx ~900 Zeilen) — Code-Splitting noch ausstehend
 
 
 ## Phase 2 — Erweiterte Verschattungsanalyse
@@ -208,11 +172,13 @@ Deine Aufgabe: [spezifische Aufgabe hier]
 
 | Prio | Task | Aufwand | Impact |
 |---|---|---|---|
-| 🔴 | Phase 1.2: Config Panel | Mittel | Hoch — macht App universell nutzbar |
-| 🔴 | Phase 1.1: Code aufteilen | Mittel | Hoch — Grundlage für alles weitere |
+| ✅ | Phase 1.2: Config Panel | Mittel | Hoch — macht App universell nutzbar |
+| ✅ | Two-column Widescreen-Layout | Klein | Hoch — Usability |
+| ✅ | Jahres-Verschattung % | Klein | Hoch — wichtige Kennzahl |
+| 🔴 | Phase 1.1: Code aufteilen | Mittel | Mittel — Wartbarkeit |
 | 🟡 | Phase 2.1: Decken-Verschattung | Klein | Hoch — Winter-relevant |
 | 🟡 | Phase 3.1: kWh-Ertrag | Mittel | Hoch — die Frage die jeder hat |
-| 🟡 | Phase 4.1: Responsive | Mittel | Mittel |
+| 🟡 | Phase 4.1: Responsive (Mobile) | Mittel | Mittel |
 | 🟢 | Phase 5.1: Jahres-Heatmap | Klein | Mittel — schöne Visualisierung |
 | 🟢 | Phase 3.2: PVGIS-API | Klein | Mittel — reale Daten |
 | 🟢 | Phase 5.3: Animation | Klein | Nice-to-have |

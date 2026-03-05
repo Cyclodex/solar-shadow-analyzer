@@ -1,82 +1,90 @@
-# Solar Shadow Analyzer ☀️
+# Solar Shadow Analyzer
 
-Interaktive Verschattungsanalyse für Balkon-Solarpanels. Berechnet ob und wann übereinander liegende Panels sich gegenseitig verschatten, mit drei synchronisierten Ansichten und Ertragsvergleich.
+Interaktive Verschattungsanalyse für Balkon-Solarpanels. Berechnet ob und wann übereinander liegende Panels sich gegenseitig verschatten — mit konfigurierbaren Parametern, drei synchronisierten Ansichten, Jahresanalyse und Ertragsvergleich.
 
 ## Features
 
-- **Profilwinkel-Berechnung** — exakte Geometrie-basierte Verschattungsanalyse
-- **3 Ansichten** — Frontal (Süden), Seitenansicht (Profil), Draufsicht (Kompass)
-- **Interaktiver Neigungswinkel** — live sehen wie verschiedene Winkel die Verschattung beeinflussen
-- **Sonnenstands-Berechnung** — basierend auf sphärischer Astronomie für beliebige Standorte
-- **Ertragsvergleich** — relativer Ertrag pro Neigungswinkel und Monat
+- **Vollständig konfigurierbar** — alle Parameter per UI einstellbar: Standort, Fassaden-Azimut, Balkonmasse, Panelgrösse, Stockwerke
+- **Profilwinkel-Berechnung** — exakte geometriebasierte Verschattungsanalyse (Panel-zu-Panel)
+- **3 synchronisierte Ansichten** — Frontal (von Süden), Seitenansicht (Profil), Draufsicht (Kompass)
+- **Interaktive Steuerung** — Panelneigung (0–90°), Jahreszeit, Uhrzeit
+- **Jahres-Verschattung %** — Anteil der verschatteten Sonnenstunden übers Jahr
+- **Neigungsvergleich** — kritischer Winkel, relativer Ertrag und Schattenstunden für 10 Neigungen
+- **Monatsvergleich** — Ertragspotential über das Jahr für verschiedene Neigungen
+- **Sonnenstands-Berechnung** — sphärische Astronomie, für beliebige Standorte weltweit
 
 ## Setup
 
 ```bash
-# Repo klonen
-git clone <your-repo-url>
-cd solar-shadow-analyzer
-
-# Dependencies installieren
+git clone https://github.com/Cyclodex/solar-shadow-analyzer.git
+cd solar-shadow-analyzer/app
 npm install
-
-# Dev-Server starten
 npm run dev
 ```
 
 Öffne http://localhost:5173
 
-## Weiterentwicklung
+## Bedienung
 
-Siehe [PLAN.md](./PLAN.md) für den detaillierten Erweiterungsplan.
+**Linke Spalte — Eingaben:**
+- Panelneigung: 0° = senkrecht, 90° = liegend (Wert in Klammern = Grad vom Boden)
+- Jahreszeit: Wintersonnenwende / Tagundnachtgleiche / Sommersonnenwende
+- Uhrzeit: 5–21 Uhr
+- Ansichten ein-/ausblenden
+- Einstellungen: Standort, Balkon, Panels — mit Slider und Zahleneingabe, Reset-Button
 
-### Mit Claude Code
+**Rechte Spalte — Ausgaben:**
+- Ergebnis-Box: kritischer Profilwinkel, Panelgeometrie, Jahres-Verschattung %
+- Live-Karten: Sonnenhöhe, Azimut, Profilwinkel, Jahres-Verschattung
+- SVG-Visualisierungen (alle dynamisch)
+- Neigungswinkel-Vergleichstabelle
+- Monatsertrag-Diagramm
+- Jahrestabelle
 
-```bash
-# Claude Code installieren (falls noch nicht vorhanden)
-npm install -g @anthropic-ai/claude-code
+## Standardwerte (anpassbar)
 
-# Im Projektverzeichnis starten
-cd solar-shadow-analyzer
-claude
-
-# Beispiel-Aufgaben:
-# "Refactore App.jsx in separate Komponenten gemäss PLAN.md Phase 1.1"
-# "Erstelle ein Config-Panel gemäss PLAN.md Phase 1.2"
-# "Füge Balkondecken-Verschattung hinzu gemäss PLAN.md Phase 2.1"
-```
+| Parameter | Wert |
+|---|---|
+| Standort | 47.1°N, 7.45°E |
+| Fassaden-Azimut | 202° |
+| Balkonhöhe | 280 cm |
+| Geländerhöhe | 100 cm |
+| Panel | 176.2 × 113.4 cm |
+| Anzahl Panels | 2 nebeneinander |
+| Stockwerke | 2 |
+| Panelneigung | 45° (von senkrecht) |
 
 ## Technischer Hintergrund
 
 ### Sonnenposition
-Berechnet via klassische sphärische Astronomie:
+Klassische sphärische Astronomie:
 - Sonnendeklination aus Tag im Jahr
-- Stundenwinkel aus Uhrzeit  
+- Stundenwinkel aus Uhrzeit
 - Höhe und Azimut aus Breitengrad
-- Genauigkeit: ~0.5-1°
+- Genauigkeit: ~0.5–1°
 
 ### Verschattungsgeometrie
-Der kritische Profilwinkel bestimmt, ab welchem scheinbaren Sonnenwinkel (projiziert auf die Fassadennormale) das obere Panel einen Schatten auf das untere wirft:
+Der kritische Profilwinkel bestimmt, ab welchem Sonnenwinkel (projiziert auf die Fassadennormale) das obere Panel einen Schatten auf das untere wirft:
 
 ```
 kritischer_winkel = arctan(vertikaler_abstand / horizontaler_versatz)
 ```
 
+Die Panelneigung wird intern als Winkel von der Horizontalen verarbeitet (`intern = 90° − Anzeigewert`).
+
 ### Einschränkungen
 - Flacher Horizont (keine Geländeabschattung)
-- Keine Diffusstrahlung / Wolken
-- Keine Temperatureffekte auf Panels
+- Keine Diffusstrahlung / Bewölkung
+- Keine Temperatureffekte
 - Für reale Ertragsprognosen → PVGIS verwenden
 
-## Aktuell konfigurierte Werte
+## Stack
 
-| Parameter | Wert |
-|---|---|
-| Standort | Münchenbuchsee, 47.1°N |
-| Fassade | 213° (SSW) |
-| Balkonhöhe | 280 cm |
-| Geländer | 100 cm |
-| Panels | 2× 176.2 × 113.4 × 3 cm |
+React 18 · Vite 5 · reines CSS-in-JS · alle Visualisierungen SVG · keine externen UI-Libraries
+
+## Weiterentwicklung
+
+Siehe [PLAN.md](./PLAN.md) für den Erweiterungsplan (Phasen 2–5).
 
 ## Lizenz
 
