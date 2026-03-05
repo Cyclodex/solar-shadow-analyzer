@@ -6,7 +6,7 @@ import { useState, useMemo } from "react";
 const DEFAULT_CONFIG = {
   latitude: 47.1,
   longitude: 7.45,
-  facadeAzimuth: 213,
+  facadeAzimuth: 202,
   balconyHeight: 280,
   railingHeight: 100,
   panelLength: 113.4,
@@ -571,7 +571,7 @@ function ProfileDiagram({ tilt, profileAngle, season, cfg }) {
         );
       })()}
 
-      <text x={12} y={18} fill="#e2e8f0" fontSize={13} fontWeight={700}>Seitenansicht — Neigung {tilt}°</text>
+      <text x={12} y={18} fill="#e2e8f0" fontSize={13} fontWeight={700}>Seitenansicht — Neigung {90 - tilt}° ({tilt}° vom Boden)</text>
       <text x={12} y={34} fill="#94a3b8" fontSize={10}>
         {season ? season.label : ""}{profileAngle !== null && profileAngle > 0 ? ` · Profil: ${profileAngle.toFixed(1)}°` : ""}
       </text>
@@ -778,7 +778,7 @@ export default function ShadowAnalysis() {
   const handleConfigChange = (key, value) => setConfig(prev => ({ ...prev, [key]: value }));
   const handleReset = () => setConfig(DEFAULT_CONFIG);
 
-  const tilt = config.panelTilt;
+  const tilt = 90 - config.panelTilt; // config stores angle from vertical (0=senkrecht), geometry needs angle from horizontal
   const geo = getPanelGeometry(tilt, config);
   const season = seasonDays[selectedMonth];
   const solar = getSolarPosition(season.day, hour, config);
@@ -822,13 +822,19 @@ export default function ShadowAnalysis() {
             <div style={{ background: "linear-gradient(135deg, #1e1b4b, #312e81)", borderRadius: 12, padding: "14px 16px", marginBottom: 12, border: "1px solid #4f46e5" }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#a5b4fc" }}>Panelneigung</span>
-                <span style={{ fontSize: 26, fontWeight: 800, color: "#f8fafc", fontVariantNumeric: "tabular-nums" }}>{tilt}°</span>
+                <span style={{ fontVariantNumeric: "tabular-nums" }}>
+                  <span style={{ fontSize: 26, fontWeight: 800, color: "#f8fafc" }}>{config.panelTilt}°</span>
+                  <span style={{ fontSize: 12, color: "#818cf8", marginLeft: 6 }}>({tilt}° vom Boden)</span>
+                </span>
               </div>
-              <input type="range" min={20} max={75} step={1} value={tilt}
+              <input type="range" min={0} max={90} step={1} value={config.panelTilt}
                 onChange={e => handleConfigChange("panelTilt", parseInt(e.target.value))}
                 style={{ width: "100%", accentColor: "#818cf8" }} />
               <div style={{ display: "flex", justifyContent: "space-between", fontSize: 10, color: "#6366f1", marginTop: 2 }}>
-                <span>20° (flach)</span><span>75° (steil)</span>
+                <span>0° (senkrecht)</span><span>90° (liegend)</span>
+              </div>
+              <div style={{ fontSize: 10, color: "#6366f1", marginTop: 4, opacity: 0.7 }}>
+                0° = senkrecht zur Fassade (90° vom Boden)
               </div>
             </div>
 
