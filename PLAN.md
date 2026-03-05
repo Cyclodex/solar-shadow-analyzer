@@ -37,24 +37,36 @@ Voll funktionsfähige App mit:
 
 ## Phase 2 — Erweiterte Verschattungsanalyse
 
-### 2.1 Balkondecken-Verschattung
+### 2.1 Diagonale 3D-Verschattung (obere → untere Panels)
 
-Die Balkondecke (Platte des oberen Stockwerks) ist im Winter der Haupt-Schattenwerfer, nicht das obere Panel. Berechnung:
+Das aktuelle Modell arbeitet **2D im Querschnitt** (Profilwinkel, senkrecht zur Fassade). Damit wird nur berechnet ob die Unterkante des oberen Panels die Sonne zum direkt darunter liegenden Panel blockiert.
 
-- Deckenplatte ragt X cm über die Fassade hinaus (= Balkontiefe)
-- Vertikaler Abstand Decke → Panelkante
-- Kritischer Profilwinkel für Decken-Verschattung
-- In Seitenansicht visualisieren (schraffierter Schattenbereich)
+Was fehlt: morgens/abends kommt die Sonne **seitlich**, und die oberen Panels werfen einen **diagonalen Schatten** auf die unteren — verschoben in Richtung der Sonnenseite:
 
-### 2.2 Mehrere Stockwerke
+```
+Sonne morgens (von Osten/rechts):
 
-- N Stockwerke mit Panels simulieren
-- Jedes Stockwerk kann unterschiedliche Verschattung haben
-- Oberstes Stockwerk: nur Decken-Verschattung
-- Mittlere: Decke + Panel darüber
-- Visualisierung in Frontalansicht
+  Obere Panels:   [  Panel 1  ][  Panel 2  ]
+                        ↘ diagonaler Schatten
+  Untere Panels:  [Schat][  Panel 1  ][  Panel 2  ]
+                   ^^^^
+                   im Schatten, obwohl vertikal
+                   kein Panel direkt darüber
+```
 
-### 2.3 Nachbar-Verschattung (optional, komplex)
+Horizontaler Schattenversatz:
+```
+versatz = vertikaler_abstand / tan(sonnenhöhe) × sin(azimut_diff_zur_fassade)
+```
+
+Umsetzung: vollständige 3D-Schattenberechnung statt 2D-Profilwinkel:
+- Für jeden Punkt der unteren Panels prüfen ob die Sichtlinie zur Sonne durch ein oberes Panel blockiert wird
+- Verschatteten Flächenanteil als % ausgeben (nicht nur ja/nein)
+- In Frontalansicht als Schattenbereich visualisieren
+
+> Hinweis: Die Balkondecke ist für aussen am Geländer hängende Panels nicht relevant, da die Panels ausserhalb des Überhangbereichs sind.
+
+### 2.2 Nachbar-Verschattung (optional)
 
 - Einfaches Modell: ein rechteckiges Hindernis in konfigurierbarem Abstand/Höhe/Azimut
 - Zeigt wann das Hindernis die Sonne blockiert
@@ -120,25 +132,44 @@ https://re.jrc.ec.europa.eu/api/v5_3/PVcalc?lat=47.1&lon=7.45&peakpower=0.8&loss
 
 ## Phase 5 — Erweiterte Visualisierungen
 
-### 5.1 Jahres-Sonnenuhr
+### 5.1 Jahres-Sonnenuhr (Heatmap)
 
 - Alle 365 Tage × 24h als Heatmap
 - X-Achse: Stunden, Y-Achse: Monate
 - Farbe: Verschattungsstatus oder Profilwinkel
 - Sofort sichtbar wann Schatten auftritt
 
-### 5.2 3D-Ansicht (optional, Three.js)
-
-- Einfaches 3D-Modell: Fassade + Balkone + Panels
-- Sonne als Lichtquelle, Echtzeit-Schatten
-- Interaktiv drehbar
-- Hoher Wow-Faktor, aber aufwändig
-
-### 5.3 Animierter Tageslauf
+### 5.2 Animierter Tageslauf
 
 - Play-Button: Sonne wandert automatisch über den Tag
 - Geschwindigkeit einstellbar
 - Alle drei Ansichten synchron
+
+
+## Phase 6 — 3D-Visualisierung
+
+Die aufwändigste, aber visuell eindrücklichste Erweiterung. Sinnvoll erst nach Phase 2.1 (korrekte 3D-Schattenberechnung), da die 3D-Ansicht dann echte Schattenflächen darstellen kann.
+
+### 6.1 3D-Modell (Three.js)
+
+- Fassade, Balkone, Panels als 3D-Objekte
+- Sonne als gerichtete Lichtquelle an der berechneten Position
+- Echtzeit-Schatten via Three.js Shadow Maps
+- Interaktiv drehbar und zoombar
+- Schattenbereich auf unteren Panels klar sichtbar — auch diagonal
+
+### 6.2 Was 3D besonders zeigt
+
+- Den diagonalen Schatten (Phase 2.1) intuitiv verständlich machen
+- Morgen/Abend-Situation direkt sichtbar: Schatten wandert über die Panels
+- Gebäudegeometrie (Wände links/rechts) einbeziehbar
+
+### 6.3 Technischer Aufwand
+
+- Three.js oder React Three Fiber als Library
+- Shadow Maps benötigen korrekte Lichtquellen-Position (aus getSolarPosition)
+- Panel-Geometrie aus Config direkt übernehmen
+- Performance: nur bei Interaktion neu rendern, nicht in Schleifen
 
 
 ## Technische Hinweise für Claude Code / Sonnet
@@ -153,9 +184,13 @@ von Balkon-Solarpanels. Die App berechnet Sonnenstände basierend auf
 sphärischer Astronomie und visualisiert die Verschattung zwischen
 übereinander liegenden Panels in drei SVG-Ansichten.
 
-Aktuelle Datei: src/App.jsx (Monolith, ~700 Zeilen)
+Aktuelle Datei: src/App.jsx (Monolith, ~900 Zeilen)
 Stack: React 18, Vite 5, reines CSS-in-JS (inline styles)
 Keine externen UI-Libraries, alle Visualisierungen sind SVG.
+Alle Parameter sind in DEFAULT_CONFIG definiert und werden als `cfg`
+an alle Komponenten und Pure Functions weitergegeben.
+Panelneigung: config.panelTilt = Winkel von senkrecht (0=senkrecht),
+intern wird 90-panelTilt als Winkel von horizontal verwendet.
 
 Deine Aufgabe: [spezifische Aufgabe hier]
 ```
@@ -166,6 +201,7 @@ Deine Aufgabe: [spezifische Aufgabe hier]
 - `useMemo` ist essentiell für die Jahresanalyse und Yield-Berechnungen
 - Die SVG viewBox-Koordinaten sind in jedem View unterschiedlich — beim Refactoring aufpassen
 - Die Frontalansicht hat eine nicht-triviale Skalierung (building scale vs. sun scale)
+- `config.panelTilt` ist Winkel von senkrecht; `tilt = 90 - config.panelTilt` ist der interne Winkel von horizontal
 
 
 ## Priorisierung
@@ -176,11 +212,11 @@ Deine Aufgabe: [spezifische Aufgabe hier]
 | ✅ | Two-column Widescreen-Layout | Klein | Hoch — Usability |
 | ✅ | Jahres-Verschattung % | Klein | Hoch — wichtige Kennzahl |
 | 🔴 | Phase 1.1: Code aufteilen | Mittel | Mittel — Wartbarkeit |
-| 🟡 | Phase 2.1: Decken-Verschattung | Klein | Hoch — Winter-relevant |
+| 🔴 | Phase 2.1: Diagonale 3D-Verschattung | Gross | Hoch — aktuelles Modell unterschätzt Morgen/Abend-Schatten |
 | 🟡 | Phase 3.1: kWh-Ertrag | Mittel | Hoch — die Frage die jeder hat |
 | 🟡 | Phase 4.1: Responsive (Mobile) | Mittel | Mittel |
 | 🟢 | Phase 5.1: Jahres-Heatmap | Klein | Mittel — schöne Visualisierung |
 | 🟢 | Phase 3.2: PVGIS-API | Klein | Mittel — reale Daten |
-| 🟢 | Phase 5.3: Animation | Klein | Nice-to-have |
-| ⚪ | Phase 5.2: 3D | Gross | Nice-to-have |
-| ⚪ | Phase 2.3: Nachbar-Schatten | Gross | Nische |
+| 🟢 | Phase 5.2: Animation | Klein | Nice-to-have |
+| ⚪ | Phase 6: 3D-Visualisierung (Three.js) | Gross | Wow-Faktor — sinnvoll nach Phase 2.1 |
+| ⚪ | Phase 2.2: Nachbar-Verschattung | Gross | Nische |
