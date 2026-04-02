@@ -45,4 +45,5 @@ export interface ActiveViews {
   frontal: boolean;
   profile: boolean;
   topdown: boolean;
+  floorShadow: boolean;
 }
