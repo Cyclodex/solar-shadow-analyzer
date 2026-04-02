@@ -187,8 +187,8 @@ export default function ShadowAnalysis() {
             {/* Diagrams */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {activeViews.frontal && <FrontalView tilt={tilt} hour={hour} season={season} allSeasons={seasonDays} cfg={config} />}
-              {activeViews.topdown && <TopDownView tilt={tilt} hour={hour} season={season} allSeasons={seasonDays} cfg={config} />}
               {activeViews.profile && <ProfileDiagram tilt={tilt} profileAngle={profileAngle !== null && profileAngle > 0 ? profileAngle : null} season={season} cfg={config} />}
+              {activeViews.topdown && <TopDownView tilt={tilt} hour={hour} season={season} allSeasons={seasonDays} cfg={config} />}
             </div>
 
             <TiltComparisonChart currentTilt={tilt} cfg={config} />
