@@ -6,6 +6,7 @@ import { ConfigPanel } from './components/ConfigPanel';
 import { FrontalView } from './components/FrontalView';
 import { ProfileDiagram } from './components/ProfileDiagram';
 import { TopDownView } from './components/TopDownView';
+import { FloorShadowView } from './components/FloorShadowView';
 import { TiltComparisonChart } from './components/TiltComparisonChart';
 import { MonthlyYieldChart } from './components/MonthlyYieldChart';
 
@@ -16,7 +17,7 @@ export default function ShadowAnalysis() {
   const [config, setConfig] = useState<Config>(DEFAULT_CONFIG);
   const [selectedMonth, setSelectedMonth] = useState(0);
   const [hour, setHour] = useState(12);
-  const [activeViews, setActiveViews] = useState<ActiveViews>({ frontal: true, profile: true, topdown: true });
+  const [activeViews, setActiveViews] = useState<ActiveViews>({ frontal: true, profile: true, topdown: true, floorShadow: true });
 
   const handleConfigChange = (key: keyof Config, value: number) =>
     setConfig(prev => ({ ...prev, [key]: value }));
@@ -122,6 +123,7 @@ export default function ShadowAnalysis() {
                 { key: 'frontal' as const, label: 'Frontalansicht' },
                 { key: 'profile' as const, label: 'Seitenansicht' },
                 { key: 'topdown' as const, label: 'Draufsicht' },
+                { key: 'floorShadow' as const, label: 'Stockwerkansicht' },
               ]).map(v => (
                 <button key={v.key} onClick={() => toggleView(v.key)} style={{
                   padding: '6px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 11, fontWeight: 600, textAlign: 'left',
@@ -189,6 +191,7 @@ export default function ShadowAnalysis() {
               {activeViews.frontal && <FrontalView tilt={tilt} hour={hour} season={season} allSeasons={seasonDays} cfg={config} />}
               {activeViews.profile && <ProfileDiagram tilt={tilt} profileAngle={profileAngle !== null && profileAngle > 0 ? profileAngle : null} season={season} cfg={config} />}
               {activeViews.topdown && <TopDownView tilt={tilt} hour={hour} season={season} allSeasons={seasonDays} cfg={config} />}
+              {activeViews.floorShadow && <FloorShadowView tilt={tilt} hour={hour} season={season} cfg={config} />}
             </div>
 
             <TiltComparisonChart currentTilt={tilt} cfg={config} />
