@@ -80,7 +80,7 @@ export function TopDownView({ tilt, hour, season, allSeasons, cfg }: TopDownView
   const panelW = totalPanelWidth * topSc;
   const normR = toRad(cfg.facadeAzimuth);
   const perpR = toRad(facadePerp);
-  const railDist = 30;
+  const railDist = 0;
   const railCx = cx + railDist * Math.sin(normR);
   const railCy = cy - railDist * Math.cos(normR);
 
@@ -135,10 +135,13 @@ export function TopDownView({ tilt, hour, season, allSeasons, cfg }: TopDownView
         const angle = toRad(cfg.facadeAzimuth);
         const hw = bldgW / 2;
         const hh = 35;
-        const cos = Math.cos(angle);
-        const sin = Math.sin(angle);
+        const cosA = Math.cos(angle);
+        const sinA = Math.sin(angle);
+        // Shift building center inward so its facade face aligns with the panel rail
+        const bx = cx - (hh - railDist) * sinA;
+        const by = cy + (hh - railDist) * cosA;
         const corners = [[-hw, -hh], [hw, -hh], [hw, hh], [-hw, hh]].map(([dx, dy]) => ({
-          x: cx + dx * cos - dy * sin, y: cy + dx * sin + dy * cos
+          x: bx + dx * cosA - dy * sinA, y: by + dx * sinA + dy * cosA
         }));
         return <polygon points={corners.map(p => `${p.x},${p.y}`).join(' ')} fill="#334155" stroke="#475569" strokeWidth={1.5} />;
       })()}
