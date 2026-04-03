@@ -26,8 +26,8 @@ interface FloorShadowViewProps {
 //   t = balconyH / (sin(alt) + cos(alt)·cos(azDiff)·(panelH/panelD))
 //
 // The horizontal shift of the intersection point:
-//   ΔX = t · cos(alt) · sin(azDiff)
-//   ΔY = t · cos(alt) · cos(azDiff)
+//   ΔX = -t · cos(alt) · sin(azDiff)  (negative: X_local = -cosAlt·sinAzDiff)
+//   ΔY =  t · cos(alt) · cos(azDiff)
 //
 // Point Q is in shadow when the intersection lands inside the upper panel:
 //   qx + ΔX ∈ [-W/2, W/2]  →  qx ∈ [-W/2 - ΔX, W/2 - ΔX]
@@ -83,7 +83,8 @@ export function FloorShadowView({ tilt, hour, season, cfg }: FloorShadowViewProp
     const denom = sinAlt + cosAlt * cosAzDiff * (panelH / panelD);
     if (denom > 0.001) {
       const t = cfg.balconyHeight / denom;
-      const deltaX = t * cosAlt * sinAzDiff;
+      // X_local component of sun direction = -cosAlt·sin(azDiff) (note negative sign)
+      const deltaX = -t * cosAlt * sinAzDiff;
       const deltaY = t * cosAlt * cosAzDiff;
 
       // Intersection of upper-panel shadow region with lower panel bounds
@@ -112,11 +113,11 @@ export function FloorShadowView({ tilt, hour, season, cfg }: FloorShadowViewProp
   const indicCx = vw - 66;
   const indicCy = marginTop + (panelFarY - marginTop) / 2;
   const arrowLen = 28;
-  // Arrow: drawn FROM the sun's direction TOWARD the center of the indicator
+  // Arrow: drawn FROM the sun's direction TOWARD the panel center
   const arrowFromX = indicCx - sunDirSvgX * arrowLen;
-  const arrowFromY = indicCy - sunDirSvgY * arrowLen;
-  const arrowToX = indicCx + sunDirSvgX * 6;
-  const arrowToY = indicCy + sunDirSvgY * 6;
+  const arrowFromY = indicCy + sunDirSvgY * arrowLen;
+  const arrowToX = indicCx;
+  const arrowToY = indicCy;
 
   // ── Legend Y positions ────────────────────────────────────────
   const legendY = vh - 88;
