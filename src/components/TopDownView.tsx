@@ -80,7 +80,7 @@ export function TopDownView({ tilt, hour, season, allSeasons, cfg }: TopDownView
   const panelW = totalPanelWidth * topSc;
   const normR = toRad(cfg.facadeAzimuth);
   const perpR = toRad(facadePerp);
-  const railDist = 30;
+  const railDist = 0;
   const railCx = cx + railDist * Math.sin(normR);
   const railCy = cy - railDist * Math.cos(normR);
 
