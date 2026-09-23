@@ -17,7 +17,9 @@ export function clamp(value: number, min: number, max: number): number {
 /** Normalizes an angle to [0, 360). */
 export function normalizeDeg(deg: number): number {
   const r = deg % 360;
-  return r < 0 ? r + 360 : r;
+  const n = r < 0 ? r + 360 : r;
+  // Tiny negative inputs round up to exactly 360; −0 becomes +0.
+  return n >= 360 ? 0 : n + 0;
 }
 
 /** Signed difference a − b normalized to (−180, 180]. */

@@ -37,3 +37,11 @@ describe('units', () => {
     expect(roundToStep(47, 5)).toBe(45);
   });
 });
+
+describe('normalizeDeg edge cases', () => {
+  it('never returns 360 or −0', () => {
+    expect(normalizeDeg(-1e-14)).toBe(0);
+    expect(Object.is(normalizeDeg(-0), 0)).toBe(true);
+    expect(Object.is(normalizeDeg(-360), 0)).toBe(true);
+  });
+});

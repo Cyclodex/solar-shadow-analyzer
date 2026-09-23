@@ -318,7 +318,7 @@ export interface FloorYield {
   /** Loss due to the floor above, kWh / %. */
   shadingLossKwh: number;
   shadingLossPct: number;
-  /** Plane-of-array irradiation incl. shading, kWh/m² per year. */
+  /** Effective plane-of-array irradiation incl. shading (substring model: electrical loss), kWh/m² per year. */
   poaKwhPerM2: number;
   /** Energy clipped by the inverter limit, kWh. */
   clippedKwh: number;

@@ -17,7 +17,8 @@
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "e2e": "playwright test"
+    "e2e": "playwright test",
+    "validate:terrain": "tsx scripts/validate-terrain.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

@@ -79,8 +79,10 @@ Ein Punkt `(u, v)` der unteren Reihe ist verschattet, wenn `(u + Δu, v + Δv)` 
 Verschattetes Rechteck: `v ∈ [0, L − Δv]`, `u ∈ Modul − Δu`. Für θ = 0 (senkrecht) gibt es keinen Schatten.
 Äquivalent zum 2D-Kriterium: Schatten beginnt, sobald der Profilwinkel `atan(s_z/s_n)` den kritischen Winkel
 `atan((H − L·cos θ)/(L·sin θ))` überschreitet — aber nur, wenn zusätzlich `|Δu|` kleiner als die Reihenbreite ist.
-Nur das direkt darüberliegende Stockwerk ist relevant (weiter entfernte Stockwerke verschieben den Schatten weiter
-in dieselbe Richtung).
+Modelliert wird nur das direkt darüberliegende Stockwerk: Weiter entfernte Stockwerke verschieben den Schatten weiter in
+dieselbe Richtung und liegen bei lückenlosen Reihen vollständig im Schatten des nächsten Stockwerks. Nur durch Lücken
+zwischen Modulen kann ein höheres Stockwerk zusätzlich schatten; der Effekt liegt in realistischen Setups unter
+0.01 Prozentpunkten des Jahresertrags und wird vernachlässigt.
 
 Die Gebäudewand blockiert Sonne mit `s_n ≤ 0` („Sonne hinter der Fassade“). Die Balkonplatte liegt hinter der
 Geländerebene und wirft keinen Schatten auf aussen hängende Panels.
@@ -97,8 +99,11 @@ Pro Zeitschritt (Wetterdaten stündlich, Werte = Mittel der vorangehenden Stunde
 5. Bodenreflexion: `GHI · Albedo · (1 − cos β)/2`.
 6. Modultemperatur `T_c = T_a + POA·(NOCT − 20)/800`, DC = `Wp·POA/1000·(1 + γ_T·(T_c − 25))`, dann Systemverluste, AC-Begrenzung je Stockwerk.
 
-Datenquellen: Open-Meteo Archive (ERA5, CORS, ohne Key) für ein wählbares Jahr; Fallback: Clear-Sky (Meinel-DNI, DHI = 0.1·DNI)
-— in der UI als „theoretisches Maximum bei klarem Himmel“ gekennzeichnet.
+Datenquellen: Open-Meteo Historical Weather API (Modell `best_match`, CORS, ohne Key) für ein wählbares Jahr; Fallback:
+Clear-Sky (Meinel-DNI, DHI = 0.1·DNI) — in der UI als „theoretisches Maximum bei klarem Himmel“ gekennzeichnet.
+
+Validierung (Bern, 47.1° N / 7.45° E, freistehend, 1 kWp, 14 % Verluste): Abweichung zu PVGIS-ERA5 (gleiche Jahre
+2020–2023) −0.7 % bis −1.3 %, zu PVGIS-SARAH3 (2005–2023) +3.6 % bis +5.8 % für β = 35° Süd, 45° und 90° bei 202°.
 
 ## Gelände-Horizont
 

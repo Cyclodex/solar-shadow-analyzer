@@ -196,7 +196,7 @@ function parseNumber(s: string): number | null {
  */
 export function parseHorizonCsv(text: string): HorizonPoint[] {
   const out: HorizonPoint[] = [];
-  for (const raw of text.replace(/^﻿/, '').split(/\r\n|\r|\n/)) {
+  for (const raw of text.replace(/^\uFEFF/, '').split(/\r\n|\r|\n/)) {
     const line = raw.replace(/#.*$/, '').trim();
     if (!line) continue;
     let fields: string[];
