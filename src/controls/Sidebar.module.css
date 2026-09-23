@@ -1,0 +1,48 @@
+.quick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.settings {
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-4) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.heading {
+  padding: 0 var(--space-1) var(--space-2);
+  font-size: var(--fs-xs);
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.reset {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
+.confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-sm);
+  background: var(--bad-soft);
+}
+
+.confirmText {
+  font-size: var(--fs-sm);
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}

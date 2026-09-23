@@ -1,0 +1,177 @@
+/*
+ * Page grid. Mobile/tablet (< 1100 px): one column, areas in reading order
+ *   top (warnings + KPIs) → quick (time + tilt) → results (views + analysis) → settings → footer.
+ * The <aside> and <main> wrappers are `display: contents` there, so their children are grid items.
+ * `reading-flow` (progressive enhancement) makes keyboard focus follow the visual order.
+ * Desktop (≥ 1100 px): sticky sidebar (own scroll) | main column, footer below main.
+ */
+
+.shell {
+  --gutter: clamp(12px, 3vw, 24px);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-areas:
+    'top'
+    'quick'
+    'results'
+    'settings'
+    'footer';
+  gap: var(--space-5);
+  max-width: var(--content-max);
+  margin: 0 auto;
+  padding: var(--space-4) var(--gutter) 0;
+  reading-flow: grid-rows;
+}
+
+.sidebar,
+.main {
+  display: contents;
+}
+
+.top {
+  grid-area: top;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+  scroll-margin-top: var(--space-4);
+}
+
+.top:focus {
+  outline: none;
+}
+
+.quick {
+  grid-area: quick;
+  min-width: 0;
+}
+
+.results {
+  grid-area: results;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-8);
+  min-width: 0;
+  container-type: inline-size;
+}
+
+.settings {
+  grid-area: settings;
+  min-width: 0;
+}
+
+.footer {
+  grid-area: footer;
+  min-width: 0;
+}
+
+.block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.blockHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.blockTitle {
+  font-size: var(--fs-lg);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-4);
+}
+
+.grid:empty {
+  display: none;
+}
+
+@container (min-width: 640px) {
+  .grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.fallback3d {
+  display: grid;
+  place-items: center;
+  min-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+
+.empty {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.skip {
+  position: absolute;
+  z-index: 100;
+  top: var(--space-2);
+  left: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: var(--accent-strong);
+  color: var(--on-accent);
+  font-weight: 600;
+  transform: translateY(-200%);
+}
+
+.skip:focus {
+  transform: none;
+}
+
+@media (min-width: 1100px) {
+  .shell {
+    grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+    grid-template-areas:
+      'sidebar main'
+      'sidebar footer';
+    grid-template-rows: auto 1fr;
+    column-gap: var(--space-6);
+    row-gap: 0;
+    padding-top: 0;
+  }
+
+  .sidebar {
+    grid-area: sidebar;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    max-height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: var(--space-4) var(--space-1) var(--space-6);
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+
+  .main {
+    grid-area: main;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    min-width: 0;
+    padding: var(--space-4) 0 var(--space-6);
+  }
+
+  .top,
+  .quick,
+  .results,
+  .settings {
+    grid-area: auto;
+  }
+}

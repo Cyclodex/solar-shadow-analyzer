@@ -32,6 +32,8 @@ src/
     economics.ts             Wirtschaftlichkeit
     presets.ts               Standort- und Modul-Presets
     share.ts                 Config ⇄ URL-Hash (Base64url), Validierung/Migration
+  app/                       App-Shell: Header, Hinweise, KPI-Leiste, Ansichts-Chips, Footer, Teilen/Export, DataLoader
+  components/                Generische UI-Bausteine (NumberField, Section, Segmented, ViewCard …)
   state/                     Zustand-Store(s) und Selektoren
   i18n/                      Sprache (de/en), useMessages, Zahl-/Datumsformat
   hooks/                     React-Hooks, die Modell-Funktionen memoisiert aufrufen
@@ -40,6 +42,7 @@ src/
   charts/                    Diagramme
   export/                    PNG/CSV/JSON-Export
   styles/                    globale Styles / Design-Tokens
+  test/                      Test-Hilfen (resetStores)
 ```
 
 ## Einheiten und Konventionen
@@ -114,11 +117,18 @@ inkl. Erdkrümmung und Refraktion (`Δz = d²/(2R)·(1 − k)`, k = 0.13). Valid
 
 ## State
 
-- `useConfigStore` (Zustand, persistiert): `config: Config` + Setter pro Bereich.
-- `useTimeStore` (nicht persistiert): Datum, Uhrzeit (lokale Minuten), Animation.
-- `useUiStore` (persistiert): Sprache, Theme, sichtbare Ansichten.
-- URL-Hash `#c=…` überschreibt beim Laden die gespeicherte Config (Teilen-Link).
-- Abgeleitete Daten (Wetter, Horizont, Simulation) über Hooks in `hooks/`, memoisiert per stabiler Config-Referenz.
+- `useConfigStore` (Zustand, persistiert unter `ssa.config`, Version 2): `config: Config` + `patch(section, partial)`,
+  `setConfig(updater)`, `replace(config)`, `reset()`. Jeder Schreibzugriff läuft durch `sanitizeConfig` und wird
+  strukturell geteilt: unveränderte Abschnitte (`location`, `building`, …) behalten ihre Objektidentität.
+- `useTimeStore` (nicht persistiert): Datum, Uhrzeit (lokale Minuten), Animation (`playing`, `speed`).
+- `useUiStore` (persistiert unter `ssa.ui`): Sprache, Theme, sichtbare Ansichten, offene Abschnitte, analysiertes Stockwerk.
+- `useDataStore` (nicht persistiert): Gelände-Horizont und Wetterreihe inkl. Ladezustand/Fehler; geschrieben von den
+  Loadern in `hooks/useTerrain.ts` und `hooks/useWeather.ts` (einmal in `<DataLoader/>` gemountet).
+- URL-Hash `#c=…` überschreibt beim Laden die gespeicherte Config (Teilen-Link, `state/urlSync.ts`); danach wird der
+  Hash bei Config-Änderungen (entprellt) nachgeführt.
+- Abgeleitete Daten über Hooks in `hooks/useModel.ts`: ein komponentenübergreifender Cache (`hooks/cache.ts`), dessen
+  Schlüssel die Config-*Abschnitte* sind. Neigungsänderungen berechnen daher z. B. den Neigungs-Sweep nicht neu,
+  Zeitänderungen nur den Momentanzustand. Jahresrechnungen lesen ihre Eingaben über `useDeferredValue`.
 
 ## i18n
 
