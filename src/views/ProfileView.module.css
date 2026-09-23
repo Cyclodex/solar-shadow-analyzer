@@ -1,0 +1,18 @@
+/* Side view specifics (shared drawing classes: svg/svg.module.css). */
+
+.interior {
+  fill: var(--surface-2);
+}
+
+/* Shaded part of a panel's front face (exact model). */
+.shadeBand {
+  fill: var(--shade);
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.criticalArc {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 1.25;
+}
