@@ -19,6 +19,7 @@ const TILTS = [25, 30, 35, 40, 45, 50, 55, 60, 65, 70];
 // TILT COMPARISON CHART
 // ─────────────────────────────────────────────
 export function TiltComparisonChart({ currentTilt, cfg }: TiltComparisonChartProps) {
+  const cfgKey = JSON.stringify(cfg);
   const data = useMemo(() => {
     const baseY = getRelativeYield(40, cfg);
     return TILTS.map(t => {
@@ -35,7 +36,7 @@ export function TiltComparisonChart({ currentTilt, cfg }: TiltComparisonChartPro
       }
       return { tilt: t, critAngle: geo.criticalAngle, relYield: relY, shadowH: sH, noShadow: maxP < geo.criticalAngle };
     });
-  }, [JSON.stringify(cfg)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cfgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const maxY = Math.max(...data.map(d => d.relYield));
 

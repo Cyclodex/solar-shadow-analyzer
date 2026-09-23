@@ -15,6 +15,7 @@ export function MonthlyYieldChart({ currentTilt, cfg }: MonthlyYieldChartProps) 
   const compareTilts = [35, currentTilt, 55].filter((v, i, a) => a.indexOf(v) === i).sort((a, b) => a - b);
   const tiltColors: Record<number, string> = { 35: '#f59e0b', 55: '#22c55e' };
 
+  const cfgKey = JSON.stringify(cfg);
   const data = useMemo(() => {
     const months: Record<string, number>[] = [];
     for (let m = 1; m <= 12; m++) {
@@ -39,7 +40,7 @@ export function MonthlyYieldChart({ currentTilt, cfg }: MonthlyYieldChartProps) 
     const mx = Math.max(...months.flatMap(e => compareTilts.map(t => e[`t${t}`])));
     for (const e of months) for (const t of compareTilts) e[`t${t}`] /= mx;
     return months;
-  }, [currentTilt, JSON.stringify(cfg)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [currentTilt, cfgKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const barW = 28 / compareTilts.length;
 

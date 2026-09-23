@@ -31,6 +31,7 @@ export default function ShadowAnalysis() {
   const isShadow = profileAngle !== null && profileAngle >= geo.criticalAngle;
   const sunBehind = solar.altitude > 0 && profileAngle === null;
 
+  const configKey = JSON.stringify(config);
   const yearAnalysis = useMemo<YearlyMonthResult[]>(() => {
     const results: YearlyMonthResult[] = [];
     for (let m = 1; m <= 12; m++) {
@@ -49,7 +50,7 @@ export default function ShadowAnalysis() {
       results.push({ month: m, maxProfile: maxP, shadowH: sH, sunH });
     }
     return results;
-  }, [JSON.stringify(config)]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [configKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const annualShadowPct = useMemo(() => {
     const totalSunH = yearAnalysis.reduce((s, r) => s + r.sunH, 0);
