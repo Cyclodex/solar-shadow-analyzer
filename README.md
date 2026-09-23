@@ -80,7 +80,7 @@ Die Panelneigung wird intern als Winkel von der Horizontalen verarbeitet (`inter
 
 ## Stack
 
-React 18 · Vite 5 · reines CSS-in-JS · alle Visualisierungen SVG · keine externen UI-Libraries
+React 19 · Vite 8 · TypeScript 6 · reines CSS-in-JS · alle Visualisierungen SVG · keine externen UI-Libraries
 
 ## Weiterentwicklung
 
