@@ -107,7 +107,10 @@ export function sunVectorEnu(sun: SunPosition): Vec3 {
 }
 
 export interface SunTimes {
-  /** Local clock minutes since midnight of the date; null if the sun does not rise in this solar day. */
+  /**
+   * Local clock minutes since midnight of the date; null if the sun does not rise in this solar day. May be
+   * negative at high latitudes (rises before local midnight, e.g. 85° N on 2025-03-31: −26 min).
+   */
   sunrise: number | null;
   /** Local clock minutes of the upper transit (hour angle 0). */
   solarNoon: number;
@@ -188,7 +191,8 @@ export interface SolarPathPoint {
 
 /**
  * Sun positions over the local day 00:00–24:00 every `stepMinutes` (24:00 included when on the grid).
- * Clock times that do not exist (DST gap) are skipped; repeated times (DST end) use the first occurrence.
+ * Clock times that do not exist (DST gap, also 24:00 if the next day starts in a gap) are skipped; repeated times
+ * (DST end) use the first occurrence.
  * Throws RangeError for an invalid date or step.
  */
 export function solarPath(
@@ -203,7 +207,11 @@ export function solarPath(
   const tNoon = localToUtc(date, 720, timeZone);
   const t1 = localToUtc(date, 1440, timeZone);
   // No offset change during the day (usual case) → clock minutes map linearly; no Intl call per point.
-  const uniform = tNoon - t0 === 720 * MS_PER_MINUTE && t1 - t0 === 1440 * MS_PER_MINUTE;
+  // The last check catches a gap starting at 24:00 (e.g. Santiago, Havana, Cairo): t1 is then shifted to 01:00.
+  const uniform =
+    tNoon - t0 === 720 * MS_PER_MINUTE &&
+    t1 - t0 === 1440 * MS_PER_MINUTE &&
+    localClockMinutes(t1, date, timeZone) === 1440;
   const out: SolarPathPoint[] = [];
   const n = Math.floor(1440 / stepMinutes + 1e-9);
   for (let i = 0; i <= n; i++) {

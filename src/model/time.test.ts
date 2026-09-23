@@ -153,6 +153,42 @@ describe('localToUtc', () => {
     for (const [tz, from, to, expected] of windows) expect(roundTripMisses(tz, from, to, 1)).toBe(expected);
   });
 
+  it('handles 30/60 min DST, :45 offsets and a gap at midnight (Lord Howe, Chatham, Santiago)', () => {
+    // References: Python 3.11 zoneinfo (system tzdata 2025b), wall time with fold=0 (= earlier / pre-transition offset).
+    // Lord Howe: +10:30 ↔ +11 (30 min); Chatham: +12:45 ↔ +13:45; Santiago: gap 2025-09-07 00:00 → 01:00.
+    expect(localToUtc('2025-10-05', 135, 'Australia/Lord_Howe')).toBe(utc('2025-10-04T15:45:00Z')); // gap 02:00–02:30
+    expect(localToUtc('2025-10-05', 150, 'Australia/Lord_Howe')).toBe(utc('2025-10-04T15:30:00Z'));
+    expect(localToUtc('2025-04-06', 105, 'Australia/Lord_Howe')).toBe(utc('2025-04-05T14:45:00Z')); // 01:30–02:00 twice
+    expect(localToUtc('2025-04-06', 120, 'Australia/Lord_Howe')).toBe(utc('2025-04-05T15:30:00Z'));
+    expect(localToUtc('2025-09-28', 180, 'Pacific/Chatham')).toBe(utc('2025-09-27T14:15:00Z')); // gap 02:45–03:45
+    expect(localToUtc('2025-04-06', 180, 'Pacific/Chatham')).toBe(utc('2025-04-05T13:15:00Z')); // 02:45–03:45 twice
+    expect(localToUtc('2025-09-07', 0, 'America/Santiago')).toBe(utc('2025-09-07T04:00:00Z'));
+    expect(utcToLocal(utc('2025-09-07T04:00:00Z'), 'America/Santiago')).toEqual({ date: '2025-09-07', minutes: 60 });
+    expect(localToUtc('2025-04-05', 1410, 'America/Santiago')).toBe(utc('2025-04-06T02:30:00Z')); // 23:00–24:00 twice
+    expect(localToUtc('2025-04-06', 0, 'America/Santiago')).toBe(utc('2025-04-06T04:00:00Z'));
+    // Minute by minute ±1 day around each transition: exactly the repeated minutes map to their first occurrence.
+    const windows: [string, string, string, number][] = [
+      ['Australia/Lord_Howe', '2025-04-04T15:00:00Z', '2025-04-06T15:00:00Z', 30],
+      ['Australia/Lord_Howe', '2025-10-03T15:30:00Z', '2025-10-05T15:30:00Z', 0],
+      ['Pacific/Chatham', '2025-04-04T14:00:00Z', '2025-04-06T14:00:00Z', 60],
+      ['Pacific/Chatham', '2025-09-26T14:00:00Z', '2025-09-28T14:00:00Z', 0],
+      ['America/Santiago', '2025-04-05T03:00:00Z', '2025-04-07T03:00:00Z', 60],
+      ['America/Santiago', '2025-09-06T04:00:00Z', '2025-09-08T04:00:00Z', 0],
+    ];
+    for (const [tz, from, to, expected] of windows) {
+      let misses = 0;
+      for (let t = utc(from); t < utc(to); t += MS_PER_MINUTE) {
+        const { date, minutes } = utcToLocal(t, tz);
+        const back = localToUtc(date, minutes, tz);
+        if (back !== t) {
+          expect(back).toBe(t - expected * MS_PER_MINUTE);
+          misses++;
+        }
+      }
+      expect(misses).toBe(expected);
+    }
+  });
+
   it('round-trips with utcToLocal across the whole year', () => {
     // 97 min is co-prime to 60, so the samples cover every minute-of-hour phase. Kolkata/UTC have no repeated
     // hour; elsewhere a 97 min step can land at most once in the single repeated hour.
@@ -243,6 +279,20 @@ describe('dayOffsetsForYear', () => {
     const o = dayOffsetsForYear(2025, 'Australia/Sydney');
     // AEST (+600) from 2025-04-06 (doy 96) through 2025-10-04 (doy 277).
     o.forEach((v, i) => expect(v).toBe(i >= 95 && i <= 276 ? 600 : 660));
+  });
+
+  it('handles 30 min DST, :45 offsets and midnight transitions (2025)', () => {
+    // Index runs from Python zoneinfo (tzdata 2025b), offset at local noon with fold=0.
+    const runs: [string, [number, number, number][]][] = [
+      ['Australia/Lord_Howe', [[0, 94, 660], [95, 276, 630], [277, 364, 660]]],
+      ['Pacific/Chatham', [[0, 94, 825], [95, 269, 765], [270, 364, 825]]],
+      ['America/Santiago', [[0, 94, -180], [95, 248, -240], [249, 364, -180]]],
+    ];
+    for (const [tz, r] of runs) {
+      const o = dayOffsetsForYear(2025, tz);
+      expect(o).toHaveLength(365);
+      for (const [from, to, v] of r) for (let i = from; i <= to; i++) expect(o[i]).toBe(v);
+    }
   });
 
   it('matches tzOffsetMinutes at local noon and handles leap years / fixed zones', () => {

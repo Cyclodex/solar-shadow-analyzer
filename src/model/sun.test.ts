@@ -166,6 +166,28 @@ describe('sunTimes', () => {
     }
   });
 
+  it('reports DST-switch days in the clock time valid at each event', () => {
+    // astronomy-engine 2.1.19: geocentric apparent sun center crossing −0.833° (bisection to 0.1 s) and
+    // SearchHourAngle(ha 0); UTC → local clock via Intl. Covers 30 min DST (Lord Howe), :45 offsets (Chatham)
+    // and a gap at midnight (Santiago 09-07 starts at 01:00). Worst |Δ| over all of 2025 at these sites: 4.0 s.
+    const dst: [string, number, number, string, number, number, number][] = [
+      ['2025-03-30', 47.3769, 8.5417, 'Europe/Zurich', 428.5012, 810.2009, 1192.8059],
+      ['2025-10-26', 47.3769, 8.5417, 'Europe/Zurich', 420.5682, 729.7875, 1038.328],
+      ['2025-04-06', -33.4489, -70.6693, 'America/Santiago', 418.6169, 764.9425, 1110.7839],
+      ['2025-09-07', -33.4489, -70.6693, 'America/Santiago', 472.2156, 820.5549, 1169.3787],
+      ['2025-04-06', -31.5553, 159.0821, 'Australia/Lord_Howe', 368.035, 716.1175, 1063.7469],
+      ['2025-10-05', -31.5553, 159.0821, 'Australia/Lord_Howe', 356.8033, 732.1525, 1108.0006],
+      ['2025-04-06', -43.9535, -176.5597, 'Pacific/Chatham', 413.8187, 753.7039, 1092.8919],
+      ['2025-09-28', -43.9535, -176.5597, 'Pacific/Chatham', 429.9832, 801.9876, 1174.7713],
+    ];
+    for (const [date, lat, lon, tz, rise, transit, set] of dst) {
+      const st = sunTimes(date, lat, lon, tz);
+      expect(Math.abs(st.sunrise! - rise)).toBeLessThan(RISE_SET_TOL);
+      expect(Math.abs(st.solarNoon - transit)).toBeLessThan(EOT_TOL);
+      expect(Math.abs(st.sunset! - set)).toBeLessThan(RISE_SET_TOL);
+    }
+  });
+
   it('puts the sun at −0.833° geometric altitude at sunrise/sunset', () => {
     const st = sunTimes('2025-06-21', 46.948, 7.447, 'Europe/Zurich');
     for (const m of [st.sunrise!, st.sunset!]) {
@@ -232,6 +254,14 @@ describe('solarPath', () => {
     expect(p.some((pt) => pt.minutes >= 120 && pt.minutes < 180)).toBe(false);
     expect(p.find((pt) => pt.minutes === 110)!.utcMs).toBe(utc('2025-03-30T00:50:00Z'));
     expect(p.find((pt) => pt.minutes === 180)!.utcMs).toBe(utc('2025-03-30T01:00:00Z'));
+  });
+
+  it('skips 24:00 when the next day starts in a DST gap (America/Santiago)', () => {
+    // Chile 2025-09-07 00:00 −04 → 01:00 −03 (transition 2025-09-07T04:00Z, Python zoneinfo / tzdata 2025b):
+    // 24:00 of 09-06 never shows on a clock; the instant 04:00Z reads 01:00 of 09-07. Regression: was kept as 1440.
+    const p = solarPath('2025-09-06', -33.45, -70.67, 'America/Santiago');
+    expect(p).toHaveLength(144);
+    expect(p[143]).toMatchObject({ minutes: 1430, utcMs: utc('2025-09-07T03:50:00Z') }); // 23:50 −04
   });
 
   it('uses the first occurrence of repeated clock times (fall back)', () => {

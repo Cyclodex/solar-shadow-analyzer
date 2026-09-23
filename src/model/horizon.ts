@@ -117,7 +117,8 @@ function rayEntry(ou: number, on: number, du: number, dn: number, b: Footprint):
     tNear = Math.max(tNear, Math.min(ta, tb));
     tFar = Math.min(tFar, Math.max(ta, tb));
   }
-  if (tNear > tFar || tFar < 0) return -1;
+  // tFar ≤ 0: box behind the ray (tFar = 0: observer on a face, looking away from the box).
+  if (tNear > tFar || tFar <= 0) return -1;
   return Math.max(0, tNear);
 }
 

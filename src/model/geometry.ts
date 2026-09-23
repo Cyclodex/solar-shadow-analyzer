@@ -28,14 +28,15 @@ const VERTICAL_SIN_EPS = 1e-9;
 /** Shaded u-intervals shorter than this (m) are dropped; touching intervals closer than this are merged. */
 const U_EPS = 1e-12;
 
-/** Bypass substrings per module (parallel to the long side) and square cells across the short side. */
+/** Bypass-diode substrings per module, parallel to the module's long side. */
 export const SUBSTRINGS_PER_MODULE = 3;
+/** Square cells across the module's short side (2 cell rows per substring). */
 export const CELLS_ACROSS_SHORT_SIDE = 6;
 
 /** cos/sin of 90° are 6e-17, not 0 — snap so that flat/vertical panels get exact zeros. */
 const snap = (x: number): number => (Math.abs(x) < 1e-15 ? 0 : x);
 
-/** Unit vectors of the facade frame in ENU: outward normal `n`, and `u` along the facade (+ = right seen from outside). */
+/** Unit vectors of the facade frame in ENU: outward normal `n`, `u` along the facade (+ = right seen from outside). */
 export function facadeFrame(facadeAzimuth: number): { n: Vec3; u: Vec3 } {
   const g = toRad(facadeAzimuth);
   const s = Math.sin(g);
@@ -156,6 +157,9 @@ function noShade(count: number, du = 0, dv = 0): ShadeResult {
  * The point is shaded iff that lands on an upper module, so the shade is the upper row translated by (−du, −dv).
  * Zero shade (du = dv = 0) if s_n ≤ 0, s_z ≤ 0, cosInc ≤ 0 or θ = 0 (vertical, coplanar rows).
  * `rects` holds, per shaded module, the disjoint u-intervals (clipped to that module) × the shaded v-band.
+ * Rows further up (shift j·(du, dv)) add nothing for gapless rows or single modules; with module gaps they can
+ * reach through the gaps of the row directly above (e.g. flat, L = 1, w = 0.6, gap = 0.3, (du, dv) = (0.45, 0.25):
+ * true 0.625 instead of 0.375 on the left module). Not modelled — annual effect < 0.01 %-points in realistic setups.
  */
 export function shadeFromAbove(sf: FacadeVector, layout: PanelLayout): ShadeResult {
   const { modules, length: L, moduleWidth: w } = layout;
@@ -247,7 +251,9 @@ export function substringBeamLoss(shade: ShadeResult, layout: PanelLayout): numb
       const a1 = landscape ? ru1 - m.u0 : rv1;
       const c0 = landscape ? rv0 : ru0 - m.u0;
       const c1 = landscape ? rv1 : ru1 - m.u0;
-      for (let p = 0; p < across; p++) acrossOverlap[p] = Math.max(0, Math.min(c1, (p + 1) * cs) - Math.max(c0, p * cs));
+      for (let p = 0; p < across; p++) {
+        acrossOverlap[p] = Math.max(0, Math.min(c1, (p + 1) * cs) - Math.max(c0, p * cs));
+      }
       const q0 = Math.max(0, Math.floor(a0 / cl));
       const q1 = Math.min(nAlong - 1, Math.ceil(a1 / cl) - 1);
       for (let q = q0; q <= q1; q++) {
