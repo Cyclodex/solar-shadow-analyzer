@@ -1,0 +1,72 @@
+import { fireEvent, render, screen, within } from '@testing-library/react';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useConfigStore } from '../../state/configStore';
+import { useTimeStore } from '../../state/timeStore';
+import { resetStores } from '../../test/utils';
+import Scene3D from './Scene3D';
+
+// Pretend WebGL 2 exists: the DOM part of the view renders; R3F never creates a renderer in jsdom
+// (the stubbed ResizeObserver never reports a canvas size).
+vi.mock('./webgl', () => ({ isWebGL2Available: () => true, resetWebGLDetection: () => {} }));
+
+/** Renders the view and waits for the lazily loaded WebGL part. */
+async function renderLoaded(): Promise<HTMLElement> {
+  render(<Scene3D />);
+  return screen.findByRole('toolbar', { name: 'Kamera' }, { timeout: 10_000 });
+}
+
+describe('Scene3D stage (DOM parts)', () => {
+  beforeEach(() => {
+    resetStores();
+  });
+
+  it('offers PNG export, camera presets and layer toggles', async () => {
+    const camera = await renderLoaded();
+    expect(screen.getByRole('button', { name: '3D-Ansicht als PNG exportieren' })).toBeInTheDocument();
+    for (const name of ['Ansicht zurücksetzen', 'Front', 'Seite', 'Oben', 'Aus Sonnenrichtung']) {
+      expect(within(camera).getByRole('button', { name })).toBeInTheDocument();
+    }
+    const layers = screen.getByRole('list', { name: 'Ebenen' });
+    const model = within(layers).getByRole('button', { name: 'Modell-Schatten' });
+    expect(model).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(model);
+    expect(model).toHaveAttribute('aria-pressed', 'false');
+    expect(within(layers).getByRole('button', { name: 'Schattenwurf' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+    expect(within(layers).getByRole('button', { name: 'Sonnenbahn' })).toHaveAttribute(
+      'aria-pressed',
+      'true',
+    );
+  });
+
+  it('lists the model state per floor, top floor first, and describes the scene', async () => {
+    await renderLoaded();
+    const items = screen.getAllByRole('listitem').filter((li) => /OG/.test(li.textContent ?? ''));
+    expect(items.map((li) => li.textContent)).toEqual([
+      expect.stringMatching(/^2\. OG/),
+      expect.stringMatching(/^1\. OG/),
+    ]);
+    // Top floor: nothing above it. Lower floor at noon on 21 June: shaded by the row above.
+    expect(items[0]).toHaveTextContent('besonnt');
+    expect(items[1]).toHaveTextContent(/\d+ % verschattet/);
+    const scene = screen.getByRole('group', { name: /^3D-Modell von Gebäude und Panels/ });
+    expect(scene).toHaveAccessibleName(expect.stringMatching(/Sonne \d+° hoch, Azimut \d+°/));
+    expect(scene).toHaveAccessibleDescription(/Pfeiltasten drehen/);
+    expect(scene).toHaveAttribute('tabindex', '0');
+  });
+
+  it('disables the sun view at night and reports the night per floor', async () => {
+    useTimeStore.getState().setMinutes(60);
+    await renderLoaded();
+    expect(screen.getByRole('button', { name: 'Aus Sonnenrichtung' })).toBeDisabled();
+    expect(screen.getAllByText('Sonne unter dem Horizont')).toHaveLength(2);
+  });
+
+  it('follows the configuration (floor labels from the storey numbers)', async () => {
+    useConfigStore.getState().patch('building', { numFloors: 3, lowestFloor: 0 });
+    await renderLoaded();
+    for (const label of ['EG', '1. OG', '2. OG']) expect(screen.getByText(label)).toBeInTheDocument();
+  });
+});
