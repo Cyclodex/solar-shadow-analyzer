@@ -21,7 +21,10 @@ export default defineConfig({
       // Registered from the app (virtual:pwa-register/react), not by an injected script.
       injectRegister: false,
       manifest: {
-        id: './',
+        // The app's identity for installation. A relative id resolves against the origin, not the start URL
+        // (W3C manifest: './' would be https://cyclodex.github.io/), so it names the base path explicitly.
+        // Never change it after release: browsers would treat the installed app as a different one.
+        id: basePath(),
         name: 'Solar Shadow Analyzer – Verschattungsanalyse',
         short_name: 'Verschattung',
         description:

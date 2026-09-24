@@ -73,11 +73,15 @@ test('web app manifest is served and valid, the icons load', async ({ page, requ
     theme_color: '#0b1120',
     background_color: '#0b1120',
   });
-  // Start URL, scope and id point to the app under its base path.
+  // Start URL, scope and id point to the app under its base path. The id resolves against the start URL's
+  // origin (W3C manifest), not against the start URL itself.
   const startUrl = new URL(manifest.start_url, manifestUrl).href;
   expect(startUrl).toBe(appUrl);
   expect(new URL(manifest.scope, manifestUrl).href).toBe(appUrl);
-  expect(new URL(manifest.id, startUrl).href).toBe(appUrl);
+  expect(new URL(manifest.id, new URL(startUrl).origin).href).toBe(appUrl);
+  // The same identity as Chromium computes it.
+  const cdp = await page.context().newCDPSession(page);
+  expect(await cdp.send('Page.getAppId')).toMatchObject({ appId: appUrl });
 
   expect(manifest.icons.map((i) => `${i.sizes} ${i.purpose}`)).toEqual([
     '192x192 any',

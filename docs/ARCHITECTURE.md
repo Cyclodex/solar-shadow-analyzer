@@ -230,9 +230,12 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   `scripts/basePath.ts`). GitHub Pages dient die App als Projektseite unter `/solar-shadow-analyzer/` aus
   (`.github/workflows/pages.yml` baut mit `BASE_PATH=/solar-shadow-analyzer/`). Laufzeit-URLs hängen nicht vom Pfad ab:
   `index.html` verweist auf `/favicon.svg` usw., Vite setzt beim Build den Basis-Pfad davor; das Manifest nutzt
-  relative URLs (`start_url`, `scope`, `id` = `./`, Icons ohne Pfad), der Service Worker liegt unter
-  `<base>sw.js` mit Scope `<base>`; Teilen-Link (`buildShareUrl` aus `location.href`), URL-Hash (`pathname` +
-  `search`) und Druck (im Dokument) bleiben unter dem Pfad. Die App lädt keine eigenen Dateien per `fetch`.
+  relative URLs (`start_url`, `scope`, Icons ohne Pfad), nur `id` ist der Basis-Pfad selbst (eine relative `id`
+  löst der Browser gegen den Origin auf, nicht gegen `start_url`; `./` wäre `https://cyclodex.github.io/`). Die
+  `id` ist die Identität der installierten App und darf sich nach der Veröffentlichung nicht mehr ändern. Der
+  Service Worker liegt unter `<base>sw.js` mit Scope `<base>`; Teilen-Link (`buildShareUrl` aus `location.href`),
+  URL-Hash (`pathname` + `search`) und Druck (im Dokument) bleiben unter dem Pfad. Die App lädt keine eigenen
+  Dateien per `fetch`.
 - **Manifest** (vite-plugin-pwa, in `vite.config.ts`): Name, `short_name` «Verschattung», Deutsch,
   `display: standalone`, Theme- und Hintergrundfarbe = `--bg` des dunklen Themes (`#0b1120`). Icons 192 und 512 px
   (`any`) und 512 px `maskable` (deckend, Logo auf 60 % innerhalb der Safe Zone) sowie `apple-touch-icon` 180 px
