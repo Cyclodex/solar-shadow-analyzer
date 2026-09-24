@@ -28,4 +28,10 @@ describe('PrintReport', () => {
     expect(row('Coordinates')).toBe('33.8688° S, 70.5000° W');
     expect(row('Floor-to-floor height')).toMatch(/^280\scm$/);
   });
+
+  it('gives the tilt from vertical with β = 90° − θ from horizontal (θ = 30°, where they differ)', () => {
+    useConfigStore.getState().patch('panels', { tiltFromVertical: 30 });
+    render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+    expect(row('Neigung θ ab Senkrechte')).toBe('30° (β = 60° ab Horizontal)');
+  });
 });

@@ -15,6 +15,12 @@ describe('TiltControl', () => {
     useConfigStore.getState().patch('horizon', { terrainEnabled: false });
   });
 
+  it('shows β = 90° − θ from horizontal (θ = 30°, where θ and β differ)', () => {
+    useConfigStore.getState().patch('panels', { tiltFromVertical: 30 });
+    render(<TiltControl />);
+    expect(screen.getByText('β = 60° ab Horizontal')).toBeInTheDocument();
+  });
+
   it('shows the optimum of the loaded weather series', () => {
     useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(latitude, longitude, 2025) });
     render(<TiltControl />);

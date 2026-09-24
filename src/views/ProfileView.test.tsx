@@ -44,6 +44,17 @@ describe('ProfileView', () => {
     expectSaneSvg(svg);
   });
 
+  it('labels θ from vertical and β = 90° − θ from horizontal (θ = 30°, where they differ)', () => {
+    setConfig({ panels: { tiltFromVertical: 30 } });
+    const { container } = render(<ProfileView />);
+    const texts = svgTexts(figureOf(container));
+    expect(texts).toContain('θ 30°');
+    expect(texts).toContain('β 60°');
+    expect(figureOf(container)).toHaveAccessibleDescription(
+      /Neigung θ 30° ab Senkrechte \(β 60° ab Horizontal\)/,
+    );
+  });
+
   it.each(EXTREME_CASES)('stays inside the viewBox: $name', ({ patch }) => {
     setConfig(patch);
     const { container } = render(<ProfileView />);
