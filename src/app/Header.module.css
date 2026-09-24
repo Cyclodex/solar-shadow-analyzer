@@ -4,7 +4,9 @@
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3) var(--space-4);
-  padding: var(--space-3) var(--space-4);
+  /* Safe areas: below the status bar of the installed iOS app, beside a landscape notch. */
+  padding: calc(var(--space-3) + var(--safe-top)) max(var(--space-4), var(--safe-right)) var(--space-3)
+    max(var(--space-4), var(--safe-left));
   border-bottom: 1px solid var(--border);
   background: var(--surface);
 }

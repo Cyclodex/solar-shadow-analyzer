@@ -2,7 +2,9 @@
 <html lang="de" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- viewport-fit=cover: the page runs to the screen edges (notch, home indicator); global.css keeps the
+         content inside env(safe-area-inset-*). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <title>Verschattungsanalyse · Balkon-Solarpanels</title>
     <meta
       name="description"
@@ -17,6 +19,13 @@
     <meta name="color-scheme" content="dark light" />
     <meta name="theme-color" content="#0b1120" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Home screen app (iOS/iPadOS; the manifest link is added by vite-plugin-pwa). Status bar
+         black-translucent: the page runs under it, global.css paints a dark strip for its white symbols. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Verschattung" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <script>
       // Apply the stored (or OS-preferred) theme and language before the first paint (no flash).
       (function () {

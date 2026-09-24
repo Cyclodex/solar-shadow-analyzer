@@ -70,6 +70,15 @@
   --touch: 36px; /* minimum touch target */
   --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
   --transition: 150ms ease;
+
+  /* Safe areas (index.html: viewport-fit=cover): screen parts covered by the notch, the status bar of the
+     installed iOS app or the home indicator; 0 wherever nothing covers the page. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  /* Behind the status bar of the installed iOS app (black-translucent: always white symbols), both themes. */
+  --statusbar: #0b1120;
 }
 
 /* ── Dark theme (default) ─────────────────── */
@@ -224,6 +233,18 @@ body {
   line-height: var(--lh);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+
+/* Installed iOS app: the page runs under the transparent status bar. A fixed strip as tall as the covered
+   area keeps its white symbols readable in the light theme and over scrolled content. */
+body::before {
+  content: '';
+  position: fixed;
+  z-index: 1000;
+  inset: 0 0 auto;
+  height: var(--safe-top);
+  background: var(--statusbar);
+  pointer-events: none;
 }
 
 h1,
