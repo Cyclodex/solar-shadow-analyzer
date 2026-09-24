@@ -10,15 +10,18 @@ import { useDataStore } from '../state/dataStore';
 import { AxisX, AxisY, type AxisTick } from './lib/Axes';
 import { ChartDataTable } from './lib/DataTable';
 import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
-import { SvgLegend } from './lib/SvgLegend';
+import { ChartLegend } from './lib/ChartLegend';
 import { floorColor } from './lib/colors';
 import { topDown, useFloorLabels } from './lib/floors';
-import { LEGEND_TOP, layoutLegend, type LegendItem, type LegendLayout } from './lib/legend';
+import { LEGEND_TOP, layoutChartLegend, type ChartLegendItem, type ChartLegendLayout } from './lib/legend';
 import { linePath } from './lib/paths';
 import { nearestIndex, niceTicks, scaleLinear, stepDigits, type LinearScale } from './lib/scale';
 import { useSourceLabel } from './lib/sourceLabel';
-import { estimateTextWidth } from './lib/text';
+import { estimateTextWidth, measureTextWidth } from './lib/text';
 import { useElementWidth } from './lib/useElementWidth';
+import { isFocusVisible } from './lib/focus';
+import { HoverMarks, PlotSlider } from './lib/PlotSlider';
+import { stepValue } from './lib/sliderKeys';
 import { usePlotPointer } from './lib/usePlotPointer';
 import { useSvgId } from './lib/useSvgId';
 import chart from './lib/chart.module.css';
@@ -84,7 +87,7 @@ interface Geometry {
   plot: { left: number; right: number; top: number; bottom: number };
   x: LinearScale;
   y: LinearScale;
-  legend: LegendLayout;
+  legend: ChartLegendLayout;
   xTicks: AxisTick[];
   yTicks: AxisTick[];
   lines: { key: string; d: string; color: string; total: boolean }[];
@@ -94,11 +97,11 @@ function buildGeometry(
   width: number,
   sweep: TiltSweepResult,
   showTotal: boolean,
-  legendItems: readonly LegendItem[],
+  legendItems: readonly ChartLegendItem[],
   f: Format,
 ): Geometry {
   const n = sweep.points[0]?.floorsKwh.length ?? 0;
-  const legend = layoutLegend(legendItems, width - M.left);
+  const legend = layoutChartLegend(legendItems, width - M.left);
   const plotH = width < 420 ? 180 : width < 640 ? 200 : 220;
   const top = LEGEND_TOP + (legend.height > 0 ? legend.height + 6 : 0) + M.band;
   const plot = { left: M.left, right: width - M.right, top, bottom: top + plotH };
@@ -137,6 +140,20 @@ function buildGeometry(
   };
 }
 
+/** Screen y-range [min, max] of a polyline (points sorted by x) between x0 and x1 (px), linear in between. */
+function yRange(points: readonly (readonly [number, number])[], x0: number, x1: number): [number, number] {
+  const at = (px: number): number => {
+    const i = points.findIndex(([x]) => x >= px);
+    if (i < 0) return points[points.length - 1][1];
+    if (i === 0) return points[0][1];
+    const [xa, ya] = points[i - 1];
+    const [xb, yb] = points[i];
+    return xb === xa ? yb : ya + ((px - xa) / (xb - xa)) * (yb - ya);
+  };
+  const ys = [at(x0), at(x1), ...points.filter(([x]) => x > x0 && x < x1).map(([, y]) => y)];
+  return [Math.min(...ys), Math.max(...ys)];
+}
+
 /** Floor-wise optimum (first maximum) of the sweep. */
 function floorOptimum(sweep: TiltSweepResult, k: number): { tilt: number; kwh: number } {
   return sweep.points.reduce(
@@ -154,6 +171,9 @@ interface MarkersProps {
   t: Texts;
 }
 
+/** Optimum label: gap to the drop line, text extent above/below the baseline incl. halo (11 px font), px. */
+const OPT_LABEL = { gap: 7, ascent: 11, descent: 4 };
+
 /** Current tilt (accent line + pill) and the optimum (sun-coloured point with label) — part of the export. */
 function Markers({ geom, sweep, theta, showTotal, f, t }: MarkersProps) {
   const { plot, x, y } = geom;
@@ -169,10 +189,33 @@ function Markers({ geom, sweep, theta, showTotal, f, t }: MarkersProps) {
   const w = estimateTextWidth(label, 11) + 14;
   const px = Math.max(plot.left - 2, Math.min(cx - w / 2, geom.width - w));
   const optLabel = (n > 1 && !optOnTotal ? t.optimumTotal : t.optimum)(f.deg(opt.tiltFromVertical));
-  const optW = estimateTextWidth(optLabel, 11);
-  // Optimum label below the point (the space under the curve is free; above it sits the tilt pill),
-  // on the side with room.
-  const right = ox + 8 + optW <= plot.right;
+  // Measured: the collision checks below need the real width of the bold label.
+  const optW = measureTextWidth(optLabel, 11, 600);
+
+  // Side of the drop line: one with room that the θ marker line does not cross.
+  const span = OPT_LABEL.gap + optW;
+  const fitsR = ox + span <= plot.right;
+  const fitsL = ox - span >= plot.left;
+  const markerR = cx > ox && cx < ox + span + 4;
+  const markerL = cx < ox && cx > ox - span - 4;
+  const right = fitsR && !markerR ? true : fitsL && !markerL ? false : fitsR;
+  const lx0 = right ? ox + OPT_LABEL.gap : ox - span;
+  const lx1 = lx0 + optW;
+
+  // Height: right below the optimum point when no curve runs through the label there, else at the foot of
+  // the drop line (the curves stay far above zero). Without the total line the foot is the only place:
+  // the highest floor curve peaks at the top of the plot.
+  const curves = [
+    ...(optOnTotal ? [sweep.points.map((p) => p.totalKwh)] : []),
+    ...Array.from({ length: n }, (_, k) => sweep.points.map((p) => p.floorsKwh[k])),
+  ].map((values) => values.map((v, i) => [x(sweep.points[i].tiltFromVertical), y(v)] as const));
+  const ranges = curves.map((c) => yRange(c, lx0 - 2, lx1 + 2));
+  const clear = (baseline: number): boolean =>
+    ranges.every(([lo, hi]) => hi < baseline - OPT_LABEL.ascent || lo > baseline + OPT_LABEL.descent);
+  const foot = plot.bottom - 8;
+  const underCurve =
+    n > 1 && !optOnTotal ? foot : Math.min(foot, Math.max(optY + 18, ranges[0][1] + OPT_LABEL.ascent + 3));
+  const labelY = clear(underCurve) ? underCurve : foot;
   return (
     <g aria-hidden="true">
       <line className={chart.marker} x1={cx} x2={cx} y1={plot.top - 4} y2={plot.bottom} />
@@ -192,8 +235,8 @@ function Markers({ geom, sweep, theta, showTotal, f, t }: MarkersProps) {
       )}
       <text
         className={`${chart.markerLabel} ${chart.halo}`}
-        x={right ? ox + 7 : ox - 7}
-        y={optY + 18}
+        x={right ? lx0 : lx1}
+        y={labelY}
         textAnchor={right ? 'start' : 'end'}
       >
         {optLabel}
@@ -261,60 +304,55 @@ function SweepInteraction({ geom, sweep, theta, labels, showTotal, f, t, keysId,
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-    const step = 5;
-    let next: number | null = null;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = (Math.floor(theta / step + 1e-9) + 1) * step;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown')
-      next = (Math.ceil(theta / step - 1e-9) - 1) * step;
-    else if (e.key === 'PageUp') next = theta + 15;
-    else if (e.key === 'PageDown') next = theta - 15;
-    else if (e.key === 'Home') next = TILT.min;
-    else if (e.key === 'End') next = TILT.max;
+    // Escape hides the crosshair and tooltip (WCAG 1.4.13); the tilt stays.
+    if (e.key === 'Escape') {
+      if (keyboard || pointer.hover !== null) {
+        e.preventDefault();
+        pointer.clear();
+        setKeyboard(false);
+      }
+      return;
+    }
+    const next = stepValue(e.key, theta, { step: 5, page: 15, min: TILT.min, max: TILT.max });
     if (next === null) return;
     e.preventDefault();
     pointer.clear();
     setKeyboard(true);
-    onTilt(Math.min(TILT.max, Math.max(TILT.min, next)));
+    onTilt(next);
   };
 
   const px = point ? geom.x(point.tiltFromVertical) : 0;
   return (
     <>
       {point && (
-        <svg className={styles.hoverLayer} width={geom.width} height={geom.height} aria-hidden="true">
-          <line className={chart.crosshair} x1={px} x2={px} y1={plot.top} y2={plot.bottom} />
-          {withTotal && (
-            <circle className={chart.dot} cx={px} cy={geom.y(point.totalKwh)} r={4} fill="var(--text)" />
-          )}
-          {topDown(n).map((k) => (
-            <circle
-              key={k}
-              className={chart.dot}
-              cx={px}
-              cy={geom.y(point.floorsKwh[k])}
-              r={4}
-              fill={floorColor(k)}
-            />
-          ))}
-        </svg>
+        <HoverMarks
+          width={geom.width}
+          height={geom.height}
+          x={px}
+          plot={plot}
+          dots={[
+            ...(withTotal ? [{ key: 'total', y: geom.y(point.totalKwh), color: 'var(--text)' }] : []),
+            ...topDown(n).map((k) => ({
+              key: String(k),
+              y: geom.y(point.floorsKwh[k]),
+              color: floorColor(k),
+            })),
+          ]}
+        />
       )}
-      <div
-        className={`${chart.overlay} ${styles.overlay}`}
-        style={{
-          left: plot.left,
-          top: plot.top,
-          width: plot.right - plot.left,
-          height: plot.bottom - plot.top,
-        }}
-        role="slider"
-        tabIndex={0}
-        aria-label={t.slider}
-        aria-describedby={keysId}
-        aria-valuemin={TILT.min}
-        aria-valuemax={TILT.max}
-        aria-valuenow={theta}
-        aria-valuetext={valueText()}
+      <PlotSlider
+        plot={plot}
+        label={t.slider}
+        describedBy={keysId}
+        min={TILT.min}
+        max={TILT.max}
+        value={theta}
+        valueText={valueText()}
         onKeyDown={onKeyDown}
+        // Keyboard focus shows the readout of the current tilt without changing it.
+        onFocus={(e) => {
+          if (isFocusVisible(e.currentTarget)) setKeyboard(true);
+        }}
         onBlur={() => setKeyboard(false)}
         {...pointer.handlers}
       />
@@ -356,9 +394,9 @@ export function TiltSweepChart() {
   const showTotal = totalChoice ?? n <= 3;
   const withTotal = showTotal && n > 1;
 
-  const legendItems = useMemo<LegendItem[]>(() => {
+  const legendItems = useMemo<ChartLegendItem[]>(() => {
     if (n <= 1) return [];
-    const items: LegendItem[] = Array.from({ length: n }, (_, k) => ({
+    const items: ChartLegendItem[] = Array.from({ length: n }, (_, k) => ({
       key: `f${k}`,
       label: labels[k] ?? String(k),
       swatch: 'line',
@@ -432,7 +470,12 @@ export function TiltSweepChart() {
       busy={busy}
       footer={
         table ? (
-          <ChartDataTable caption={t.tableCaption} columns={table.columns} rows={table.rows} />
+          <ChartDataTable
+            caption={t.tableCaption}
+            context={t.title}
+            columns={table.columns}
+            rows={table.rows}
+          />
         ) : undefined
       }
     >
@@ -450,7 +493,9 @@ export function TiltSweepChart() {
             >
               <title id={titleId}>{t.title}</title>
               <desc id={descId}>{summary}</desc>
-              {geom.legend.height > 0 && <SvgLegend layout={geom.legend} x={geom.plot.left} y={LEGEND_TOP} />}
+              {geom.legend.height > 0 && (
+                <ChartLegend layout={geom.legend} x={geom.plot.left} y={LEGEND_TOP} />
+              )}
               <AxisY
                 ticks={geom.yTicks}
                 x0={geom.plot.left}

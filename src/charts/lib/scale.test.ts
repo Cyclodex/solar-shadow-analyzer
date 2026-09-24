@@ -101,6 +101,17 @@ describe('paths', () => {
         [2.345, 3],
       ]),
     ).toBe('M0 1L2.3 3');
+    expect(
+      linePath(
+        [
+          [0, 1],
+          [2, 3],
+          [2, 1],
+        ],
+        true,
+      ),
+    ).toBe('M0 1L2 3L2 1Z');
+    expect(linePath([], true)).toBe('');
   });
 
   it('rounds only the top corners and skips empty bars', () => {

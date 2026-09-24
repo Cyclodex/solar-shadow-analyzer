@@ -1,6 +1,6 @@
 import type { HeatmapStats } from '../../model/analysis';
 import type { SimulationResult } from '../../model/types';
-import { toCsv, type CsvCell } from '../../export/csv';
+import { toCsv, type CsvCell, type CsvOptions } from '../../export/csv';
 
 // ─────────────────────────────────────────────
 // MONTHLY TABLE DATA
@@ -13,7 +13,7 @@ export interface MonthlyRow {
   /** AC energy per floor (index = floor), kWh. */
   floorsKwh: number[];
   totalKwh: number;
-  /** Unshaded − shaded energy of all floors, kWh. */
+  /** Shading loss of all floors (sum of unshaded − shaded per floor, as in the chart and the CSV export), kWh. */
   lossKwh: number;
   /** lossKwh / unshaded energy, %. */
   lossPct: number;
@@ -32,7 +32,10 @@ export function monthlyRows(
     const floorsKwh = sim.floors.map((fl) => fl.monthlyKwh[m]);
     const unshaded = sim.floors.reduce((s, fl) => s + fl.monthlyUnshadedKwh[m], 0);
     const total = floorsKwh.reduce((a, b) => a + b, 0);
-    const loss = Math.max(0, unshaded - total);
+    const loss = sim.floors.reduce(
+      (s, fl) => s + Math.max(0, fl.monthlyUnshadedKwh[m] - fl.monthlyKwh[m]),
+      0,
+    );
     return {
       month: m,
       floorsKwh,
@@ -54,8 +57,14 @@ export function monthlyRows(
   return { months, year };
 }
 
-/** Rounds for the CSV export (machine-readable numbers, no grouping). */
-const r1 = (v: number): number => Math.round(v * 10) / 10;
+/** Rounds for the CSV export like the export menu's CSVs: no float noise, −0 → 0, non-finite → empty. */
+function round(value: number, digits: number): number {
+  if (!Number.isFinite(value)) return NaN;
+  const r = Number(value.toFixed(digits));
+  return r === 0 ? 0 : r;
+}
+
+const kwh = (v: number): number => round(v, 2);
 
 export interface MonthlyCsvLabels {
   month: string;
@@ -72,10 +81,14 @@ export interface MonthlyCsvLabels {
   year: string;
 }
 
-/** CSV text (RFC 4180, dot decimals, 1 decimal) of the monthly table incl. the year row. */
+/**
+ * CSV text (RFC 4180, dot decimals; kWh and % to 2 decimals, hours to 1) of the monthly table incl. the
+ * year row. Pass the separator of the UI language (csvSeparator: ';' for German spreadsheets).
+ */
 export function monthlyCsv(
   rows: { months: MonthlyRow[]; year: MonthlyRow },
   labels: MonthlyCsvLabels,
+  { separator = ',' }: Pick<CsvOptions, 'separator'> = {},
 ): string {
   const withTotal = labels.floors.length > 1;
   const header: CsvCell[] = [
@@ -87,10 +100,10 @@ export function monthlyCsv(
   ];
   const line = (r: MonthlyRow): CsvCell[] => [
     r.month === null ? labels.year : labels.monthNames[r.month],
-    ...r.floorsKwh.map(r1),
-    ...(withTotal ? [r1(r.totalKwh)] : []),
-    ...(labels.lossKwh && labels.lossPct ? [r1(r.lossKwh), r1(r.lossPct)] : []),
-    ...(labels.shadedHours ? [r1(r.shadedHours ?? 0)] : []),
+    ...r.floorsKwh.map(kwh),
+    ...(withTotal ? [kwh(r.totalKwh)] : []),
+    ...(labels.lossKwh && labels.lossPct ? [kwh(r.lossKwh), round(r.lossPct, 2)] : []),
+    ...(labels.shadedHours ? [round(r.shadedHours ?? 0, 1)] : []),
   ];
-  return toCsv([header, ...rows.months.map(line), line(rows.year)]);
+  return toCsv([header, ...rows.months.map(line), line(rows.year)], { separator });
 }

@@ -10,15 +10,17 @@ import { AxisX, AxisY, type AxisTick } from './lib/Axes';
 import { ChartStats } from './lib/ChartStats';
 import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
 import { HatchPattern } from './lib/HatchPattern';
-import { SvgLegend } from './lib/SvgLegend';
+import { ChartLegend } from './lib/ChartLegend';
 import { floorColor } from './lib/colors';
 import { topDown, useFloorLabels } from './lib/floors';
-import { LEGEND_TOP, layoutLegend, type LegendItem, type LegendLayout } from './lib/legend';
+import { LEGEND_TOP, layoutChartLegend, type ChartLegendItem, type ChartLegendLayout } from './lib/legend';
 import { roundedTopBar } from './lib/paths';
 import { niceTicks, scaleBand, scaleLinear, stepDigits, type BandScale, type LinearScale } from './lib/scale';
 import { useSourceLabel } from './lib/sourceLabel';
 import { useElementWidth } from './lib/useElementWidth';
 import { isFocusVisible } from './lib/focus';
+import { PlotSlider } from './lib/PlotSlider';
+import { stepValue } from './lib/sliderKeys';
 import { usePlotPointer } from './lib/usePlotPointer';
 import { useSvgId } from './lib/useSvgId';
 import chart from './lib/chart.module.css';
@@ -28,12 +30,11 @@ type Mode = 'grouped' | 'stacked';
 
 const de = {
   title: 'Monatsertrag',
-  subtitle: 'Ertrag je Stockwerk und Monat; schraffiert: Verlust durch Verschattung',
+  subtitle: 'Ertrag je Stockwerk und Monat; schraffiert: Verschattungsverlust',
   mode: 'Darstellung',
   grouped: 'Nebeneinander',
   stacked: 'Gestapelt',
   loss: 'Verschattungsverlust',
-  lossStat: 'Verlust durch Verschattung',
   lossOf: (kwh: string) => `Verlust ${kwh}`,
   year: (year: number) => `Jahr ${year}`,
   slider: 'Monat im Diagramm',
@@ -50,12 +51,11 @@ const messages: Messages<Texts> = {
   de,
   en: {
     title: 'Monthly yield',
-    subtitle: 'Yield per floor and month; hatched: loss due to shading',
+    subtitle: 'Yield per floor and month; hatched: shading loss',
     mode: 'Layout',
     grouped: 'Side by side',
     stacked: 'Stacked',
     loss: 'Shading loss',
-    lossStat: 'Loss due to shading',
     lossOf: (kwh) => `loss ${kwh}`,
     year: (year) => `Year ${year}`,
     slider: 'Month in the chart',
@@ -85,7 +85,7 @@ interface Geometry {
   plot: { left: number; right: number; top: number; bottom: number };
   x: BandScale;
   y: LinearScale;
-  legend: LegendLayout;
+  legend: ChartLegendLayout;
   xTicks: AxisTick[];
   yTicks: AxisTick[];
   segments: Segment[];
@@ -103,13 +103,13 @@ function buildGeometry(
   width: number,
   sim: SimulationResult,
   mode: Mode,
-  legendItems: readonly LegendItem[],
+  legendItems: readonly ChartLegendItem[],
   monthLabels: readonly string[],
   patternId: (k: number | 'loss') => string,
   f: Format,
 ): Geometry {
   const n = sim.floors.length;
-  const legend = layoutLegend(legendItems, width - M.left);
+  const legend = layoutChartLegend(legendItems, width - M.left);
   const plotH = width < 420 ? 180 : width < 640 ? 200 : 220;
   const top = LEGEND_TOP + (legend.height > 0 ? legend.height + 6 : 0) + M.title;
   const plot = { left: M.left, right: width - M.right, top, bottom: top + plotH };
@@ -246,10 +246,13 @@ interface InteractionProps {
  */
 function MonthInteraction({ geom, sim, labels, months, f, t, keysId }: InteractionProps) {
   const c = useCommon();
-  const [kbMonth, setKbMonth] = useState<number | null>(null);
+  /** Slider value (month 0…11). */
+  const [month, setMonth] = useState(0);
+  /** Keyboard cursor and tooltip shown (keyboard focus or a key press, until Escape or blur). */
+  const [keyboard, setKeyboard] = useState(false);
   const { plot } = geom;
   const pointer = usePlotPointer({ locate: (px) => geom.x.indexAt(plot.left + px) });
-  const active = pointer.hover ?? kbMonth;
+  const active = pointer.hover ?? (keyboard ? month : null);
 
   const rows = (m: number): TooltipRow[] => {
     const floors: TooltipRow[] = topDown(sim.floors.length).map((k) => {
@@ -296,19 +299,23 @@ function MonthInteraction({ geom, sim, labels, months, f, t, keysId }: Interacti
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-    const cur = kbMonth ?? 0;
-    let next: number | null = null;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = Math.min(11, cur + 1);
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') next = Math.max(0, cur - 1);
-    else if (e.key === 'Home') next = 0;
-    else if (e.key === 'End') next = 11;
+    // Escape hides the highlight and tooltip (WCAG 1.4.13); the month stays.
+    if (e.key === 'Escape') {
+      if (active !== null) {
+        e.preventDefault();
+        pointer.clear();
+        setKeyboard(false);
+      }
+      return;
+    }
+    const next = stepValue(e.key, month, { step: 1, min: 0, max: 11 });
     if (next === null) return;
     e.preventDefault();
     pointer.clear();
-    setKbMonth(next);
+    setMonth(next);
+    setKeyboard(true);
   };
 
-  const month = kbMonth ?? 0;
   return (
     <>
       {active !== null && (
@@ -328,27 +335,21 @@ function MonthInteraction({ geom, sim, labels, months, f, t, keysId }: Interacti
           />
         </svg>
       )}
-      <div
-        className={`${chart.overlay} ${styles.overlay}`}
-        style={{
-          left: plot.left,
-          top: plot.top,
-          width: plot.right - plot.left,
-          height: plot.bottom - plot.top,
-        }}
-        role="slider"
-        tabIndex={0}
-        aria-label={t.slider}
-        aria-describedby={keysId}
-        aria-valuemin={1}
-        aria-valuemax={12}
-        aria-valuenow={month + 1}
-        aria-valuetext={valueText(month)}
+      <PlotSlider
+        className={styles.overlay}
+        plot={plot}
+        label={t.slider}
+        describedBy={keysId}
+        min={1}
+        max={12}
+        value={month + 1}
+        valueText={valueText(month)}
         onKeyDown={onKeyDown}
+        // Keyboard focus shows the readout of the current month.
         onFocus={(e) => {
-          if (isFocusVisible(e.currentTarget)) setKbMonth((m) => m ?? 0);
+          if (isFocusVisible(e.currentTarget)) setKeyboard(true);
         }}
-        onBlur={() => setKbMonth(null)}
+        onBlur={() => setKeyboard(false)}
         {...pointer.handlers}
       />
       {active !== null && (
@@ -387,8 +388,8 @@ export function MonthlyYieldChart() {
   const months = monthNames(lang, 'long');
   const shortMonths = monthNames(lang, 'short');
 
-  const legendItems = useMemo<LegendItem[]>(() => {
-    const items: LegendItem[] =
+  const legendItems = useMemo<ChartLegendItem[]>(() => {
+    const items: ChartLegendItem[] =
       numFloors > 1
         ? Array.from({ length: numFloors }, (_, k) => ({
             key: `f${k}`,
@@ -445,7 +446,7 @@ export function MonthlyYieldChart() {
             { key: 'year', label: t.year(simulation.year), value: f.kwh(simulation.totalAnnualKwh) },
             {
               key: 'loss',
-              label: t.lossStat,
+              label: t.loss,
               value: `${f.kwh(simulation.totalShadingLossKwh)} (${f.pct(lossPct, 1)})`,
             },
           ]}
@@ -483,7 +484,7 @@ export function MonthlyYieldChart() {
                 ))}
                 <HatchPattern id={patternId('loss')} color="var(--text-faint)" />
               </defs>
-              <SvgLegend layout={geom.legend} x={geom.plot.left} y={LEGEND_TOP} />
+              <ChartLegend layout={geom.legend} x={geom.plot.left} y={LEGEND_TOP} />
               <AxisY
                 ticks={geom.yTicks}
                 x0={geom.plot.left}

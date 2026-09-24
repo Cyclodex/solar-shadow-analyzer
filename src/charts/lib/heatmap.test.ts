@@ -3,7 +3,15 @@ import { HEATMAP_BEHIND, HEATMAP_HORIZON, HEATMAP_NIGHT } from '../../model/anal
 import type { DailyProfilePoint, HeatmapData } from '../../model/types';
 import { CELL, cellClass, floorColor, floorToken, shadeColor, shadeStep } from './colors';
 import { parseColor } from './canvasTheme';
-import { cellAt, classifyCells, layoutHeatmap, mix, monthStartDays, visibleSlots } from './heatmap';
+import {
+  cellAt,
+  classifyCells,
+  layoutHeatmap,
+  mix,
+  monthStartDays,
+  sameDayIn,
+  visibleSlots,
+} from './heatmap';
 import {
   daylightWindow,
   hourTickStep,
@@ -87,6 +95,15 @@ describe('heatmap data prep', () => {
     expect(starts[2]).toBe(60);
     expect(starts[12]).toBe(366);
     expect(monthStartDays(2025)[12]).toBe(365);
+  });
+
+  it('maps a date onto the heatmap year by month and day (not by day of the year)', () => {
+    expect(sameDayIn(2024, '2026-09-24')).toBe('2024-09-24');
+    expect(sameDayIn(2024, '2026-03-01')).toBe('2024-03-01');
+    expect(sameDayIn(2024, '2026-12-31')).toBe('2024-12-31');
+    expect(sameDayIn(2025, '2028-09-24')).toBe('2025-09-24');
+    expect(sameDayIn(2025, '2028-02-29')).toBe('2025-02-28');
+    expect(sameDayIn(2024, '2028-02-29')).toBe('2024-02-29');
   });
 
   it('lays out plot and legend, and finds cells under the pointer', () => {

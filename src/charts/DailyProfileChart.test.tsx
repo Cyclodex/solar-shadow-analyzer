@@ -1,14 +1,17 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConfigStore } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { DailyProfileChart } from './DailyProfileChart';
 
-// jsdom has no layout: the chart renders at the 600 px fallback width, so the plot spans x = 48 … 586
-// (538 px). On 21 June at 47.1° N the visible window is 04:00–23:00 (sunrise 05:3x, sunset 21:2x).
-const PLOT_W = 538;
+// Focus in these tests stands for keyboard focus (jsdom's :focus-visible depends on earlier events).
+vi.mock('./lib/focus', () => ({ isFocusVisible: () => true }));
+
+// jsdom has no layout: the chart renders at the 600 px fallback width, so the plot spans x = 48 … 582
+// (534 px). On 21 June at 47.1° N the visible window is 04:00–23:00 (sunrise 05:3x, sunset 21:2x).
+const PLOT_W = 534;
 const WIN = { start: 240, end: 1380 };
 const minutesAt = (x: number): number =>
   Math.round((WIN.start + (x / PLOT_W) * (WIN.end - WIN.start)) / 5) * 5;
@@ -75,6 +78,50 @@ describe('DailyProfileChart', () => {
     expect(screen.getByText('Klicken oder ziehen setzt die Uhrzeit')).toBeInTheDocument();
     fireEvent.pointerLeave(slider, { pointerId: 1, pointerType: 'mouse' });
     expect(screen.queryByText(/^13:30 · Sonnenhöhe/)).not.toBeInTheDocument();
+  });
+
+  it('keyboard focus shows the readout; Escape hides it and a hover tooltip', () => {
+    render(<DailyProfileChart />);
+    const slider = screen.getByRole('slider', { name: 'Uhrzeit im Tagesverlauf' });
+    act(() => slider.focus());
+    // Focus alone shows the selected time's readout without changing it.
+    expect(screen.getByText(/^12:00 · Sonnenhöhe/)).toBeInTheDocument();
+    expect(useTimeStore.getState().minutes).toBe(720);
+    fireEvent.keyDown(slider, { key: 'ArrowRight' });
+    expect(screen.getByText(/^12:10 · Sonnenhöhe/)).toBeInTheDocument();
+    fireEvent.keyDown(slider, { key: 'Escape' });
+    expect(screen.queryByText(/^12:10 · Sonnenhöhe/)).not.toBeInTheDocument();
+    expect(slider).toHaveFocus();
+    expect(useTimeStore.getState().minutes).toBe(730);
+    // Hover tooltip: Escape closes it wherever the focus is.
+    act(() => slider.blur());
+    fireEvent.pointerMove(slider, { clientX: PLOT_W / 2, clientY: 50, pointerId: 1, pointerType: 'mouse' });
+    expect(screen.getByText(/^13:30 · Sonnenhöhe/)).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByText(/^13:30 · Sonnenhöhe/)).not.toBeInTheDocument();
+  });
+
+  it('draws shaded periods in the colour and opacity of their legend swatch', () => {
+    const { container } = render(<DailyProfileChart />);
+    const shades = [...container.querySelectorAll('rect[fill^="var(--seq-"]')];
+    // One legend swatch plus one band per shaded period.
+    expect(shades.length).toBeGreaterThan(1);
+    const looks = new Set(shades.map((r) => `${r.getAttribute('fill')} ${r.getAttribute('fill-opacity')}`));
+    expect([...looks]).toEqual(['var(--seq-5) 0.3']);
+  });
+
+  it('keeps the polar-night note legible over the time marker', () => {
+    act(() => {
+      useConfigStore.getState().patch('location', {
+        latitude: 69.65,
+        longitude: 18.96,
+        timezone: 'Europe/Oslo',
+      });
+      useTimeStore.getState().setDate('2025-12-21');
+    });
+    render(<DailyProfileChart />);
+    const note = screen.getByText('Polarnacht: Die Sonne geht nicht auf.', { selector: 'text' });
+    expect(note.getAttribute('class')).toMatch(/halo/);
   });
 
   it('has an hourly table twin and English texts', () => {

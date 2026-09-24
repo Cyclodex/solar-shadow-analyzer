@@ -80,8 +80,34 @@ describe('monthlyCsv', () => {
     expect(lines[0]).toBe(
       'Monat,1. OG (kWh),2. OG (kWh),Total (kWh),Verlust (kWh),Verlust (%),Verschattete Stunden 1. OG (h)',
     );
-    expect(lines[1]).toBe('Jan,90,110,200,10,4.8,10');
-    expect(lines[13]).toBe('Jahr,1080,1320,2400,120,4.8,120');
+    expect(lines[1]).toBe('Jan,90,110,200,10,4.76,10');
+    expect(lines[13]).toBe('Jahr,1080,1320,2400,120,4.76,120');
+  });
+
+  it('uses the given separator and rounds kWh to 2 decimals', () => {
+    const odd: SimulationResult = {
+      ...sim,
+      floors: [floor(0, 90.123456, 100.5), floor(1, 110, 110)],
+    };
+    const csv = monthlyCsv(
+      monthlyRows(odd, stats),
+      {
+        month: 'Monat',
+        floors: ['1. OG (kWh)', '2. OG (kWh)'],
+        total: 'Total (kWh)',
+        lossKwh: 'Verlust (kWh)',
+        lossPct: 'Verlust (%)',
+        shadedHours: 'Verschattete Stunden 1. OG (h)',
+        monthNames: months,
+        year: 'Jahr',
+      },
+      { separator: ';' },
+    );
+    const lines = csv.trimEnd().split('\r\n');
+    expect(lines[0]).toBe(
+      'Monat;1. OG (kWh);2. OG (kWh);Total (kWh);Verlust (kWh);Verlust (%);Verschattete Stunden 1. OG (h)',
+    );
+    expect(lines[1]).toBe('Jan;90.12;110;200.12;10.38;4.93;10');
   });
 
   it('drops the total and loss columns for a single floor', () => {

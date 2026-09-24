@@ -105,6 +105,7 @@
 /* ── Interactive overlay (pointer + keyboard) ── */
 .overlay {
   position: absolute;
+  z-index: 1;
   border-radius: 2px;
   cursor: crosshair;
   touch-action: pan-y;
@@ -114,6 +115,15 @@
 .overlay:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 3px;
+}
+
+/* Crosshair and dots while hovering (a separate SVG over the chart, not part of the PNG export) */
+.hoverLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
 }
 
 /* ── Tooltip ────────────────────────────── */
