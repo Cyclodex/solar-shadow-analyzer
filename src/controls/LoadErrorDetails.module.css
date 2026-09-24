@@ -10,6 +10,14 @@
   cursor: pointer;
 }
 
+/* Touch target of the disclosure (keeps the default list-item marker), as in WarningsBar. */
+@media (pointer: coarse) {
+  .details summary {
+    min-height: var(--touch);
+    line-height: var(--touch);
+  }
+}
+
 .details code {
   display: block;
   margin-top: var(--space-1);

@@ -21,11 +21,17 @@
   line-height: 1;
 }
 
-/* Larger hit area without changing the visual size. */
+/* Larger hit area without changing the visual size: 36 × 36 px, 44 × 44 px on touch screens. */
 .button::after {
   content: '';
   position: absolute;
   inset: -8px;
+}
+
+@media (pointer: coarse) {
+  .button::after {
+    inset: -12px;
+  }
 }
 
 .button:hover,
