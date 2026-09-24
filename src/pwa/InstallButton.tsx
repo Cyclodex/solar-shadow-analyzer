@@ -13,10 +13,12 @@ const de = {
   installTitle: 'Als App auf diesem Gerät installieren',
   iosTitle: 'Als App auf den Home-Bildschirm',
   iosButtonTitle: 'Anleitung: als App auf den Home-Bildschirm',
+  // Labels as in Apple's iPhone guide (de-de, iOS 26 and 27): «Zu Home-Bildschirm hinzufügen», «Als Web-App
+  // öffnen», «Hinzufügen».
   steps: [
-    '«Teilen» antippen (bei neueren iOS-Versionen im Menü «…» neben der Adresszeile).',
-    '«Zum Home-Bildschirm» wählen, falls nötig weiter unten in der Liste.',
-    'Mit «Hinzufügen» bestätigen.',
+    '«Teilen» antippen (bei neueren iOS-Versionen zuerst «…» neben der Adresszeile, dann «Teilen»).',
+    '«Zu Home-Bildschirm hinzufügen» wählen, falls nötig weiter unten in der Liste.',
+    '«Als Web-App öffnen» einschalten, falls angezeigt, und mit «Hinzufügen» bestätigen.',
   ],
   note: 'Die App startet dann vom Home-Bildschirm, nach dem ersten Besuch auch ohne Internet.',
 };
@@ -28,9 +30,9 @@ const messages: Messages<typeof de> = {
     iosTitle: 'Add the app to the Home Screen',
     iosButtonTitle: 'How to add the app to the Home Screen',
     steps: [
-      'Tap “Share” (on newer iOS versions in the “…” menu next to the address bar).',
+      'Tap “Share” (on newer iOS versions first “…” next to the address bar, then “Share”).',
       'Choose “Add to Home Screen”, further down the list if needed.',
-      'Confirm with “Add”.',
+      'Turn on “Open as Web App” if shown, then confirm with “Add”.',
     ],
     note: 'The app then starts from the Home Screen, after the first visit also without internet.',
   },
@@ -54,7 +56,7 @@ function useInstallMode(): InstallMode {
 
 /**
  * Header button "Installieren": opens the browser's install dialog, or on iOS/iPadOS (no install API)
- * a popover with the steps "Teilen → Zum Home-Bildschirm". Hidden when the app cannot be installed or
+ * a popover with the steps "Teilen → Zu Home-Bildschirm hinzufügen". Hidden when the app cannot be installed or
  * already runs installed.
  */
 export function InstallButton() {

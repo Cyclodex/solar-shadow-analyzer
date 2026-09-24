@@ -47,9 +47,9 @@ Sie lässt sich auch wie eine App installieren, auf dem Handy, dem Tablet oder d
 
 - **Android (Chrome, Edge, Samsung Internet) und Chrome oder Edge am Computer:** Knopf «Installieren» oben rechts
   (auf schmalen Bildschirmen nur das Symbol mit dem Pfeil) oder im Browsermenü «App installieren».
-- **iPhone und iPad (Safari):** «Teilen» antippen (bei neueren iOS-Versionen im Menü «…» neben der Adresszeile),
-  «Zum Home-Bildschirm» wählen und mit «Hinzufügen» bestätigen. Der Knopf «Installieren» zeigt diese Schritte
-  ebenfalls.
+- **iPhone und iPad (Safari):** «Teilen» antippen (bei neueren iOS-Versionen zuerst «…» neben der Adresszeile,
+  dann «Teilen»), «Zu Home-Bildschirm hinzufügen» wählen, «Als Web-App öffnen» eingeschaltet lassen (falls
+  angezeigt) und mit «Hinzufügen» bestätigen. Der Knopf «Installieren» zeigt diese Schritte ebenfalls.
 
 Nach dem ersten Besuch startet die App auch ohne Internet, installiert oder im Browser: Alle App-Dateien liegen dann
 im Browser. Wetterdaten und Geländehorizont für einen neuen Standort oder ein anderes Jahr brauchen eine Verbindung;

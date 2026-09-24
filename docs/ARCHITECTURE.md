@@ -266,7 +266,8 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
 - **Installieren:** `initInstallPrompt()` (vor dem ersten Render) hält `beforeinstallprompt` fest (ohne Chromes
   Mini-Infoleiste) und merkt sich `appinstalled`. `InstallButton` im Header: mit Event öffnet es den Installdialog
   (`prompt()`, das Event ist danach verbraucht), auf iOS/iPadOS (User-Agent, iPadOS über Touchpunkte) ein Popover
-  mit den Schritten «Teilen → Zum Home-Bildschirm → Hinzufügen» (`usePopover`-Helfer, Escape und Klick ausserhalb
+  mit den Schritten «Teilen → Zu Home-Bildschirm hinzufügen → Als Web-App öffnen → Hinzufügen» (Beschriftungen
+  wie in Apples deutscher iPhone-Anleitung für iOS 26/27; `usePopover`-Helfer, Escape und Klick ausserhalb
   schliessen). Ausgeblendet als installierte App (`display-mode: standalone`, `navigator.standalone`) und in
   Browsern ohne Installationsweg (z. B. Firefox, Safari auf dem Mac).
 - **Deployment:** `.github/workflows/pages.yml` (Push auf `main` und manuell): Build-Job (Node aus `.nvmrc`,

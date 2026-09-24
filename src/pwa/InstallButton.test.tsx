@@ -134,9 +134,12 @@ describe('InstallButton', () => {
     expect(button).toHaveAttribute('aria-expanded', 'true');
     const steps = screen.getByRole('group', { name: 'Als App auf den Home-Bildschirm' });
     expect(button).toHaveAttribute('aria-controls', steps.id);
+    // Labels as in Apple's German iPhone guide.
     expect(steps).toHaveTextContent('«Teilen» antippen');
-    expect(steps).toHaveTextContent('«Zum Home-Bildschirm» wählen');
-    expect(steps).toHaveTextContent('Mit «Hinzufügen» bestätigen.');
+    expect(steps).toHaveTextContent('«Zu Home-Bildschirm hinzufügen» wählen');
+    expect(steps).toHaveTextContent(
+      '«Als Web-App öffnen» einschalten, falls angezeigt, und mit «Hinzufügen» bestätigen.',
+    );
 
     // Escape closes and returns focus to the button.
     fireEvent.keyDown(screen.getByRole('button', { name: 'Schliessen' }), { key: 'Escape' });
@@ -157,6 +160,7 @@ describe('InstallButton', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Install' }));
     const steps = screen.getByRole('group', { name: 'Add the app to the Home Screen' });
     expect(steps).toHaveTextContent('Choose “Add to Home Screen”');
+    expect(steps).toHaveTextContent('Turn on “Open as Web App” if shown, then confirm with “Add”.');
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(screen.queryByRole('group')).not.toBeInTheDocument();
   });

@@ -5,7 +5,7 @@ import { create } from 'zustand';
 // Chromium browsers (Chrome, Edge, Samsung Internet; desktop and Android) fire `beforeinstallprompt` once
 // the app is installable: initInstallPrompt() keeps the event, so the header button can open the
 // browser's install dialog later (promptInstall). `appinstalled` hides the button. iOS/iPadOS has no such
-// event: there the button explains "Teilen → Zum Home-Bildschirm" (InstallButton). Other browsers
+// event: there the button explains "Teilen → Zu Home-Bildschirm hinzufügen" (InstallButton). Other browsers
 // (Firefox, Safari on macOS) get no button.
 // ─────────────────────────────────────────────
 
