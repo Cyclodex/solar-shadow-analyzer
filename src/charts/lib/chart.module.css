@@ -1,0 +1,259 @@
+/*
+ * Shared chart chrome (SVG axes, legend, overlay, tooltip, stats).
+ * Colours: theme tokens only. Axis/grid are recessive hairlines; text uses text tokens, never series colours.
+ */
+
+.root {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+
+.svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* ── Axes ───────────────────────────────── */
+.grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.axis {
+  stroke: var(--axis);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.tick {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.axisTitle {
+  fill: var(--text-faint);
+  font-size: 11px;
+}
+
+/* ── Legend (inside the SVG so PNG exports are complete) ── */
+.legendText {
+  fill: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Markers ────────────────────────────── */
+.series {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.dot {
+  stroke: var(--surface);
+  stroke-width: 2;
+}
+
+.crosshair {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.pill {
+  fill: var(--accent-strong);
+}
+
+.pillText {
+  fill: var(--on-accent);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.marker {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+
+.markerLabel {
+  fill: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.note {
+  fill: var(--text-faint);
+  font-size: 11px;
+}
+
+/* Surface-coloured outline behind text that sits on lines (keeps labels legible where lines cross). */
+.halo {
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+/* ── Interactive overlay (pointer + keyboard) ── */
+.overlay {
+  position: absolute;
+  border-radius: 2px;
+  cursor: crosshair;
+  touch-action: pan-y;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.overlay:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+
+/* ── Tooltip ────────────────────────────── */
+.tooltip {
+  position: absolute;
+  z-index: 2;
+  top: 0;
+  left: 0;
+  width: max-content;
+  min-width: 8rem;
+  max-width: min(19rem, 100%);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  font-size: var(--fs-xs);
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.tooltipTitle {
+  margin-bottom: var(--space-1);
+  font-weight: 650;
+}
+
+.tooltipRows {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  align-items: center;
+  column-gap: var(--space-2);
+  row-gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.tooltipRow {
+  display: contents;
+}
+
+.tooltipValue {
+  align-self: start;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.tooltipValueWide {
+  grid-column: 2 / -1;
+  text-align: left;
+  white-space: normal;
+}
+
+.tooltipLabel {
+  color: var(--text-muted);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.tooltipNote {
+  margin-top: var(--space-1);
+  color: var(--text-faint);
+}
+
+.key {
+  align-self: start;
+  margin-top: 3px;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  background: var(--key);
+}
+
+.keyLine {
+  height: 2px;
+  border-radius: 1px;
+}
+
+.keyRect {
+  border-radius: 2px;
+}
+
+.keyHatch {
+  border-radius: 2px;
+  background: repeating-linear-gradient(
+    45deg,
+    var(--key) 0 1.5px,
+    color-mix(in srgb, var(--key) 22%, transparent) 1.5px 4px
+  );
+}
+
+.keyNone {
+  background: none;
+}
+
+/* ── Summary numbers above/below a chart ── */
+.stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.stat {
+  display: flex;
+  gap: var(--space-1);
+  align-items: baseline;
+  min-width: 0;
+}
+
+.stat dt {
+  color: var(--text-muted);
+}
+
+.stat dd {
+  margin: 0;
+  color: var(--text);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.caption {
+  margin-top: var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.empty {
+  display: grid;
+  place-items: center;
+  min-height: inherit;
+  padding: var(--space-4);
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-sm);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
