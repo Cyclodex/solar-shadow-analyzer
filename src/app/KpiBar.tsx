@@ -113,17 +113,19 @@ function Kpi({
   label,
   value,
   sub,
+  className,
   children,
 }: {
   label: string;
   value: ReactNode;
   /** Secondary text; several entries become separate lines. */
   sub?: ReactNode | readonly string[];
+  className?: string;
   children?: ReactNode;
 }) {
   const lines = Array.isArray(sub) ? sub : null;
   return (
-    <div className={styles.kpi}>
+    <div className={className ? `${styles.kpi} ${className}` : styles.kpi}>
       <dt className={styles.label}>{label}</dt>
       <dd className={styles.value}>{value}</dd>
       {lines
@@ -323,6 +325,7 @@ export function KpiBar() {
         <dl className={styles.grid}>
           <Kpi
             label={t.sun}
+            className={styles.explain}
             value={sun.altitude > 0 ? f.deg(sun.altitude, 1) : '–'}
             sub={[
               t.azimuth(`${f.deg(sun.azimuth)} ${compassPoint(sun.azimuth, lang)}`),
@@ -335,7 +338,7 @@ export function KpiBar() {
               .filter(Boolean)
               .join(' · ')}
           />
-          <Kpi label={t.profile} value={profileValue} sub={profileSub} />
+          <Kpi label={t.profile} value={profileValue} sub={profileSub} className={styles.explain} />
           <Kpi label={t.shadeOn(shadedName)} value={shadeValue} sub={shadeSub} />
           <Kpi label={t.power} value={<Num value={totalPower} unit="W" />} sub={t.powerSub}>
             {numFloors > 1 && (

@@ -4,6 +4,16 @@
   gap: var(--space-3);
 }
 
+/* Tablet / landscape phone, one-column page (< 1100 px, see App.module.css): time and tilt side by side.
+   Desktop keeps the stacked cards in the 340 px sidebar. */
+@media (min-width: 700px) and (max-width: 1099.98px) {
+  .quick {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+  }
+}
+
 .settings {
   display: flex;
   flex-direction: column;
