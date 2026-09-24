@@ -139,8 +139,8 @@ aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
 - Isotropes Diffusmodell, ohne zirkumsolare Aufhellung und ohne Horizontaufhellung.
 - Seitenwände und Nachbarbalkone werden nicht modelliert; die Balkonplatte liegt hinter der Panelebene und
   schattet nicht.
-- Wetterdaten eines einzelnen Jahres aus Reanalyse-Modellen (Open-Meteo `best_match`); das Jahr mit klarem Himmel
-  ist eine Obergrenze.
+- Wetterdaten eines einzelnen Jahres aus der Open-Meteo Historical Weather API (Modellauswahl `best_match`), kein
+  langjähriges Mittel; das Jahr mit klarem Himmel ist eine Obergrenze.
 - Der Geländehorizont hängt von der Auflösung der Höhenkacheln ab. Lassen sich die Kacheln nicht laden, rechnet die
   App ohne Gelände und zeigt einen Hinweis.
 - Wirtschaftlichkeit mit konstanten Preisen, ohne Diskontierung und ohne laufende Kosten.
