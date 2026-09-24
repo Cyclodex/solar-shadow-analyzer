@@ -1,14 +1,4 @@
-import {
-  useId,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent,
-  type PointerEvent,
-  type ReactNode,
-  type RefObject,
-} from 'react';
+import { useMemo, useState, type KeyboardEvent, type PointerEvent, type ReactNode } from 'react';
 import { Skeleton } from '../components/Skeleton';
 import { ViewCard } from '../components/ViewCard';
 import { cssVars } from '../components/cssVars';
@@ -20,6 +10,11 @@ import type { EconomicsConfig, EconomicsResult } from '../model/types';
 import { EXPORT_IGNORE } from '../export/png';
 import { useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
+import { isFocusVisible } from './lib/focus';
+import { linePath } from './lib/paths';
+import { stepValue } from './lib/sliderKeys';
+import { useElementWidth } from './lib/useElementWidth';
+import { useSvgId } from './lib/useSvgId';
 import styles from './EconomicsCard.module.css';
 
 const de = {
@@ -137,22 +132,6 @@ function xStep(years: number, plotWidth: number): number {
   return years > 20 && plotWidth < 260 ? 10 : 5;
 }
 
-/** Width of the element (ResizeObserver); `fallback` until it has been laid out. */
-function useWidth(ref: RefObject<HTMLElement | null>, fallback: number): number {
-  const [width, setWidth] = useState(fallback);
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width ?? 0;
-      if (w > 0) setWidth(Math.round(w));
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, [ref]);
-  return width;
-}
-
 // ── Cash-flow chart ──────────────────────────
 
 interface CashFlowChartProps {
@@ -170,10 +149,9 @@ interface CashFlowChartProps {
  */
 function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps) {
   const f = useFormat();
-  const wrapRef = useRef<HTMLDivElement>(null);
-  const width = useWidth(wrapRef, 560);
+  const [wrapRef, width] = useElementWidth<HTMLDivElement>({ fallback: 560 });
   const [active, setActive] = useState<number | null>(null);
-  const uid = useId().replace(/[^\w-]/g, '');
+  const uid = useSvgId('ec');
   const years = values.length - 1;
 
   const height = width < 420 ? 210 : 250;
@@ -192,8 +170,9 @@ function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps
   const y = (v: number): number => m.top + (1 - (v - d0) / (d1 - d0)) * plotH;
   const y0 = y(0);
 
-  const line = values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join('');
-  const area = `${line}L${x(years).toFixed(1)},${y0.toFixed(1)}L${x(0).toFixed(1)},${y0.toFixed(1)}Z`;
+  const points = values.map((v, i) => [x(i), y(v)] as const);
+  const line = linePath(points);
+  const area = linePath([...points, [x(years), y0], [x(0), y0]], true);
   // Year ticks; the last one carries the unit ("25 Jahre"), ticks too close to it are dropped.
   const step = xStep(years, plotW);
   const xTicks = Array.from({ length: Math.floor(years / step) + 1 }, (_, i) => i * step).filter(
@@ -216,20 +195,10 @@ function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-    const cur = active ?? years;
-    const next: Record<string, number> = {
-      ArrowRight: cur + 1,
-      ArrowUp: cur + 1,
-      ArrowLeft: cur - 1,
-      ArrowDown: cur - 1,
-      PageUp: cur + 5,
-      PageDown: cur - 5,
-      Home: 0,
-      End: years,
-    };
-    if (!(e.key in next)) return;
+    const next = stepValue(e.key, active ?? years, { step: 1, page: 5, min: 0, max: years });
+    if (next === null) return;
     e.preventDefault();
-    setActive(Math.min(years, Math.max(0, next[e.key])));
+    setActive(next);
   };
 
   return (
@@ -251,6 +220,10 @@ function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps
         aria-valuenow={shown}
         aria-valuetext={readout}
         onKeyDown={onKeyDown}
+        // Keyboard focus shows the year cursor (at the last year, whose balance the readout shows).
+        onFocus={(e) => {
+          if (isFocusVisible(e.currentTarget)) setActive((a) => a ?? years);
+        }}
         onBlur={() => setActive(null)}
       >
         <svg

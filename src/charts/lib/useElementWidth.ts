@@ -1,23 +1,31 @@
-import { useLayoutEffect, useRef, useState, type RefObject } from 'react';
+import { useCallback, useState } from 'react';
+
+export interface ElementWidthOptions {
+  /** Width until the element has been measured (first render, environments without layout such as jsdom). */
+  fallback?: number;
+  /** Lower bound of the returned width. */
+  min?: number;
+}
 
 /**
- * Content width (px, floored) of the element behind the returned ref, updated with a ResizeObserver.
- * Returns `fallback` until the element has been measured (and in environments without layout, e.g. jsdom).
- * Charts render in real pixels at this width so text keeps its size on narrow screens.
+ * Content width (px, floored so a layout never overflows its container) of the element behind the returned
+ * callback ref, updated with a ResizeObserver. The first measurement happens in the ref callback, before
+ * paint, so there is no frame at the fallback width. Charts render in real pixels at this width so text
+ * keeps its size on narrow screens.
  */
-export function useElementWidth<T extends HTMLElement>(fallback = 600): [RefObject<T | null>, number] {
-  const ref = useRef<T>(null);
-  const [width, setWidth] = useState(0);
-
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!el) return;
+export function useElementWidth<T extends HTMLElement>({
+  fallback = 600,
+  min = 0,
+}: ElementWidthOptions = {}): [(el: T | null) => (() => void) | undefined, number] {
+  const [width, setWidth] = useState<number | null>(null);
+  const ref = useCallback((el: T | null) => {
+    if (!el) return undefined;
     const apply = (w: number): void => {
       const px = Math.floor(w);
-      if (px > 0) setWidth((prev) => (prev === px ? prev : px));
+      if (px > 0) setWidth(px);
     };
     apply(el.getBoundingClientRect().width);
-    if (typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver((entries) => {
       const entry = entries[entries.length - 1];
       if (entry) apply(entry.contentRect.width);
@@ -25,6 +33,5 @@ export function useElementWidth<T extends HTMLElement>(fallback = 600): [RefObje
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
-
-  return [ref, width > 0 ? width : fallback];
+  return [ref, Math.max(min, width ?? fallback)];
 }

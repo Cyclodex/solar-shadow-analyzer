@@ -84,6 +84,42 @@ describe('ShadeHeatmap', () => {
     expect(useTimeStore.getState().date).toBe('2025-05-22');
   });
 
+  it('marks the same calendar day when the heatmap year differs in leap status', () => {
+    act(() => {
+      useConfigStore.getState().patch('weather', { source: 'clear-sky', year: 2024 });
+      useTimeStore.getState().setDate('2026-09-24');
+      useTimeStore.getState().setMinutes(720);
+    });
+    render(<ShadeHeatmap />);
+    const widget = screen.getByRole('application');
+    act(() => widget.focus());
+    fireEvent.keyDown(widget, { key: 'ArrowLeft' });
+    fireEvent.keyDown(widget, { key: 'ArrowRight' });
+    expect(
+      screen.getByText(/^24\. September 2024, 12:00–12:10: /, { selector: '[aria-live]' }),
+    ).toBeInTheDocument();
+    fireEvent.keyDown(widget, { key: 'Enter' });
+    expect(useTimeStore.getState().date).toBe('2024-09-24');
+  });
+
+  it('Escape hides the keyboard cursor and a hover tooltip', () => {
+    render(<ShadeHeatmap />);
+    const widget = screen.getByRole('application');
+    act(() => widget.focus());
+    fireEvent.keyDown(widget, { key: 'ArrowRight' });
+    expect(screen.getByText('Eingabe übernimmt Datum und Uhrzeit')).toBeInTheDocument();
+    fireEvent.keyDown(widget, { key: 'Escape' });
+    expect(screen.queryByText('Eingabe übernimmt Datum und Uhrzeit')).not.toBeInTheDocument();
+    expect(screen.getByText('', { selector: '[aria-live]' })).toBeInTheDocument();
+    expect(widget).toHaveFocus();
+    expect(useTimeStore.getState().date).toBe('2025-06-21');
+    act(() => widget.blur());
+    fireEvent.pointerMove(widget, { clientX: PLOT_W / 2, clientY: 120, pointerId: 1, pointerType: 'mouse' });
+    expect(screen.getByText('Klicken übernimmt Datum und Uhrzeit')).toBeInTheDocument();
+    fireEvent.keyDown(document.body, { key: 'Escape' });
+    expect(screen.queryByText('Klicken übernimmt Datum und Uhrzeit')).not.toBeInTheDocument();
+  });
+
   it('offers a floor selector with more than two floors (shared focus floor)', () => {
     act(() => useConfigStore.getState().patch('building', { numFloors: 4 }));
     render(<ShadeHeatmap />);

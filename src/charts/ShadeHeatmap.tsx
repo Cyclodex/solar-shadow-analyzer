@@ -38,13 +38,14 @@ import {
   layoutHeatmap,
   mix,
   monthStartDays,
+  sameDayIn,
   visibleSlots,
   type HeatmapLayout,
   type HeatmapLegendText,
   type HeatmapPalette,
   type SlotRange,
 } from './lib/heatmap';
-import { estimateTextWidth } from './lib/text';
+import { measureTextWidth } from './lib/text';
 import { useElementWidth } from './lib/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { usePlotPointer } from './lib/usePlotPointer';
@@ -124,17 +125,8 @@ const messages: Messages<Texts> = {
 
 // ── Canvas helpers ────────────────────────────
 
-let measureCtx: CanvasRenderingContext2D | null | undefined;
-
-/** Legend text width at 12 px in the UI font (canvas measureText; estimated without a canvas, e.g. jsdom). */
-function measureLegendText(text: string): number {
-  if (measureCtx === undefined) {
-    measureCtx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
-  }
-  if (!measureCtx) return estimateTextWidth(text, 12);
-  measureCtx.font = `12px ${cssVar(document.documentElement, '--font-sans') || 'sans-serif'}`;
-  return Math.ceil(measureCtx.measureText(text).width);
-}
+/** Legend text width at 12 px in the UI font. */
+const measureLegendText = (text: string): number => measureTextWidth(text, 12);
 
 function readPalette(canvas: HTMLCanvasElement, ctx: CanvasRenderingContext2D): HeatmapPalette {
   const get = (name: string): string => cssVar(canvas, name);
@@ -251,8 +243,9 @@ function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: Int
     onSelect: select,
   });
 
-  // Selected date/time (the heatmap's year may differ from the selected date's year: same day of year).
-  const selDay = Math.min(days - 1, Math.max(0, dayOfYear(date) - 1));
+  // Selected date/time: the same calendar day in the heatmap's year, which may differ from the selected
+  // date's year (29 Feb → 28 Feb in a common year).
+  const selDay = Math.min(days - 1, Math.max(0, dayOfYear(sameDayIn(heatmap.year, date)) - 1));
   const selRow = Math.floor(Math.min(minutes, 1439.99) / heatmap.slotMinutes) - range.first;
   const selVisible = selRow >= 0 && selRow < rows;
   const selIndex = selDay * rows + Math.min(rows - 1, Math.max(0, selRow));
@@ -269,6 +262,16 @@ function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: Int
     if (e.key === 'Enter' || e.key === ' ') {
       e.preventDefault();
       select(current);
+      return;
+    }
+    // Escape hides the cursor and tooltip (WCAG 1.4.13); the next arrow key starts again at the selection.
+    if (e.key === 'Escape') {
+      if (cursor !== null || pointer.hover !== null) {
+        e.preventDefault();
+        setCursor(null);
+        setAnnouncement('');
+        pointer.clear();
+      }
       return;
     }
     let day = Math.floor(current / rows);
@@ -353,7 +356,7 @@ function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: Int
         </div>
       )}
       <div
-        className={`${chart.overlay} ${styles.overlay}`}
+        className={chart.overlay}
         style={{ left: plot.x, top: plot.y, width: plot.w, height: plot.h }}
         role="application"
         tabIndex={0}
@@ -535,7 +538,9 @@ export function ShadeHeatmap() {
       }
       toolbar={toolbar}
       exportName={`heatmap-${floorName.replace(/\./g, '')}`}
-      footer={<ChartDataTable caption={t.tableCaption(floorName, heatmap.year)} {...table} />}
+      footer={
+        <ChartDataTable caption={t.tableCaption(floorName, heatmap.year)} context={t.title} {...table} />
+      }
     >
       <ChartStats
         items={[

@@ -57,25 +57,35 @@ describe('MonthlyTable', () => {
     ).toBeInTheDocument();
   });
 
-  it('exports the table as CSV', () => {
+  it('names the scroll region by the table caption, not by the card title', () => {
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    render(<MonthlyTable />);
+    const region = screen.getByRole('region', { name: 'Monatswerte 2025' });
+    expect(region.tagName).toBe('DIV');
+    expect(within(region).getByRole('table', { name: 'Monatswerte 2025' })).toBeInTheDocument();
+    // Only the card itself is called "Monatstabelle".
+    expect(screen.getAllByRole('region', { name: 'Monatstabelle' })).toHaveLength(1);
+  });
+
+  it('exports the table as CSV (German: semicolons, as the export menu)', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
     render(<MonthlyTable />);
     fireEvent.click(screen.getByRole('button', { name: 'Monatstabelle als CSV herunterladen' }));
     expect(downloadText).toHaveBeenCalledTimes(1);
     const [csv, filename, mime, opts] = vi.mocked(downloadText).mock.calls[0];
-    expect(filename).toBe('monatstabelle-47.100-N-7.450-E-2025.csv');
+    expect(filename).toBe('verschattung-monatsertrag-tabelle-47.100-N-7.450-E-2025-klarer-himmel.csv');
     expect(mime).toBe('text/csv;charset=utf-8');
     expect(opts).toEqual({ bom: true });
     const lines = csv.trimEnd().split('\r\n');
     expect(lines).toHaveLength(14);
     expect(lines[0]).toBe(
-      'Monat,1. OG (kWh),2. OG (kWh),Total (kWh),Verlust (kWh),Verlust (%),Verschattete Stunden 1. OG (h)',
+      'Monat;1. OG (kWh);2. OG (kWh);Total (kWh);Verlust (kWh);Verlust (%);Verschattete Stunden 1. OG (h)',
     );
-    expect(lines[1]).toMatch(/^Januar,\d+(\.\d)?,\d+(\.\d)?,\d+(\.\d)?,\d+(\.\d)?,\d+(\.\d)?,\d+(\.\d)?$/);
-    // Year row: total = sum of the floors (rounded to 0.1 kWh).
-    const year = lines[13].split(',');
+    expect(lines[1]).toMatch(/^Januar(;\d+(\.\d{1,2})?){6}$/);
+    // Year row: total = sum of the floors (rounded to 0.01 kWh).
+    const year = lines[13].split(';');
     expect(year[0]).toBe('Jahr');
-    expect(Number(year[3])).toBeCloseTo(Number(year[1]) + Number(year[2]), 0);
+    expect(Number(year[3])).toBeCloseTo(Number(year[1]) + Number(year[2]), 1);
   });
 
   it('English CSV headers; a single floor has no loss columns', () => {
@@ -88,7 +98,7 @@ describe('MonthlyTable', () => {
     expect(screen.getByText(/Single floor: no shading by panels\./)).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Download the monthly table as CSV' }));
     const [csv, filename] = vi.mocked(downloadText).mock.calls[0];
-    expect(filename).toBe('monthly-table-47.100-N-7.450-E-2025.csv');
+    expect(filename).toBe('shading-monthly-yield-table-47.100-N-7.450-E-2025-clear-sky.csv');
     expect(csv.split('\r\n')[0]).toBe('Month,Floor 1 (kWh)');
   });
 });

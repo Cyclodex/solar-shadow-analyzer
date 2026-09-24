@@ -4,14 +4,17 @@
 
 const r1 = (v: number): number => Math.round(v * 10) / 10;
 
-/** Polyline "M x y L x y …" through the points (coordinates rounded to 0.1 px). Empty string for none. */
-export function linePath(points: readonly (readonly [number, number])[]): string {
+/**
+ * Polyline "M x y L x y …" through the points (coordinates rounded to 0.1 px), closed with "Z" when `close`
+ * (an area). Empty string for none.
+ */
+export function linePath(points: readonly (readonly [number, number])[], close = false): string {
   let d = '';
   for (let i = 0; i < points.length; i++) {
     const [x, y] = points[i];
     d += `${i === 0 ? 'M' : 'L'}${r1(x)} ${r1(y)}`;
   }
-  return d;
+  return close && d ? `${d}Z` : d;
 }
 
 /**

@@ -10,10 +10,10 @@ import { useTimeStore } from '../state/timeStore';
 import { AxisX, AxisY, type AxisTick } from './lib/Axes';
 import { ChartDataTable } from './lib/DataTable';
 import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
-import { SvgLegend } from './lib/SvgLegend';
+import { ChartLegend } from './lib/ChartLegend';
 import { SHADE_STEP_TOKENS, floorColor } from './lib/colors';
 import { topDown, useFloorLabels } from './lib/floors';
-import { LEGEND_TOP, layoutLegend, type LegendItem, type LegendLayout } from './lib/legend';
+import { LEGEND_TOP, layoutChartLegend, type ChartLegendItem, type ChartLegendLayout } from './lib/legend';
 import { linePath } from './lib/paths';
 import {
   nearestIndex,
@@ -34,6 +34,9 @@ import {
   type TimeWindow,
 } from './lib/timeAxis';
 import { useElementWidth } from './lib/useElementWidth';
+import { isFocusVisible } from './lib/focus';
+import { HoverMarks, PlotSlider } from './lib/PlotSlider';
+import { stepValue } from './lib/sliderKeys';
 import { usePlotPointer } from './lib/usePlotPointer';
 import { useSvgId } from './lib/useSvgId';
 import chart from './lib/chart.module.css';
@@ -88,11 +91,19 @@ const messages: Messages<Texts> = {
   },
 };
 
-/** Margins around the plot, px. */
-const M = { left: 48, right: 14, band: 22, bottom: 30 };
+/**
+ * Margins around the plot, px. `right` holds half an "HH:MM" tick label, so a tick at the window end is not
+ * clipped by the viewBox (PNG export).
+ */
+const M = { left: 48, right: Math.ceil(estimateTextWidth('24:00', 11) / 2) + 2, band: 22, bottom: 30 };
 /** Minutes of the time grid the pointer and keyboard snap to. */
 const SNAP = 5;
 const TOP_GAP = 6;
+/**
+ * Shaded periods (any floor above SHADED_THRESHOLD) as one class, drawn exactly like the legend swatch; the
+ * shaded share itself is in the tooltip, the summary and the table.
+ */
+const SHADE_BAND = { color: `var(${SHADE_STEP_TOKENS[2]})`, opacity: 0.3 } as const;
 
 interface Plot {
   left: number;
@@ -108,11 +119,11 @@ interface Geometry {
   x: LinearScale;
   y: LinearScale;
   win: TimeWindow;
-  legend: LegendLayout;
+  legend: ChartLegendLayout;
   xTicks: AxisTick[];
   yTicks: AxisTick[];
   lines: { floor: number; d: string }[];
-  bands: { key: string; x: number; w: number; color: string }[];
+  bands: { key: string; x: number; w: number }[];
   limit: { y: number; label: string } | null;
   events: { key: string; x: number; label: string; anchor: 'start' | 'end' }[];
   maxW: number;
@@ -125,11 +136,11 @@ function buildGeometry(
   win: TimeWindow,
   sun: { sunrise: number | null; sunset: number | null },
   limitW: number,
-  legendItems: readonly LegendItem[],
+  legendItems: readonly ChartLegendItem[],
   f: Format,
   t: Texts,
 ): Geometry {
-  const legend = layoutLegend(legendItems, width - M.left);
+  const legend = layoutChartLegend(legendItems, width - M.left);
   const plotH = width < 420 ? 170 : width < 640 ? 200 : 220;
   const top = LEGEND_TOP + (legend.height > 0 ? legend.height + TOP_GAP : 0) + M.band;
   const plot: Plot = { left: M.left, right: width - M.right, top, bottom: top + plotH };
@@ -153,10 +164,12 @@ function buildGeometry(
   }));
 
   const pointStep = points.length > 1 ? points[1].minutes - points[0].minutes : 10;
-  const bands = shadeRuns(visible, maxShadePerPoint(visible)).map((r) => {
+  // One rect per contiguous shaded period (no seams between semi-transparent neighbours).
+  const shaded = maxShadePerPoint(visible).map((v) => (v > SHADED_THRESHOLD ? 1 : 0));
+  const bands = shadeRuns(visible, shaded).map((r) => {
     const x0 = x(Math.max(win.start, r.from - pointStep / 2));
     const x1 = x(Math.min(win.end, r.to + pointStep / 2));
-    return { key: `${r.from}`, x: x0, w: Math.max(1, x1 - x0), color: `var(${SHADE_STEP_TOKENS[r.step]})` };
+    return { key: `${r.from}`, x: x0, w: Math.max(1, x1 - x0) };
   });
 
   const events: Geometry['events'] = [];
@@ -310,15 +323,17 @@ function ProfileInteraction({ geom, points, labels, numFloors, f, t, keysId }: I
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    // Escape hides the crosshair and tooltip (WCAG 1.4.13); the selected time stays.
+    if (e.key === 'Escape') {
+      if (keyboard || pointer.hover !== null) {
+        e.preventDefault();
+        pointer.clear();
+        setKeyboard(false);
+      }
+      return;
+    }
     const step = e.shiftKey ? 60 : 10;
-    let next: number | null = null;
-    if (e.key === 'ArrowRight' || e.key === 'ArrowUp') next = (Math.floor(minutes / step + 1e-9) + 1) * step;
-    else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown')
-      next = (Math.ceil(minutes / step - 1e-9) - 1) * step;
-    else if (e.key === 'PageUp') next = minutes + 60;
-    else if (e.key === 'PageDown') next = minutes - 60;
-    else if (e.key === 'Home') next = win.start;
-    else if (e.key === 'End') next = win.end;
+    const next = stepValue(e.key, minutes, { step, page: 60, min: win.start, max: win.end });
     if (next === null) return;
     e.preventDefault();
     pointer.clear();
@@ -345,37 +360,31 @@ function ProfileInteraction({ geom, points, labels, numFloors, f, t, keysId }: I
   return (
     <>
       {point && (
-        <svg className={styles.hoverLayer} width={geom.width} height={geom.height} aria-hidden="true">
-          <line className={chart.crosshair} x1={px} x2={px} y1={plot.top} y2={plot.bottom} />
-          {topDown(numFloors).map((k) => (
-            <circle
-              key={k}
-              className={chart.dot}
-              cx={px}
-              cy={geom.y(point.floorsW[k] ?? 0)}
-              r={4}
-              fill={floorColor(k)}
-            />
-          ))}
-        </svg>
+        <HoverMarks
+          width={geom.width}
+          height={geom.height}
+          x={px}
+          plot={plot}
+          dots={topDown(numFloors).map((k) => ({
+            key: String(k),
+            y: geom.y(point.floorsW[k] ?? 0),
+            color: floorColor(k),
+          }))}
+        />
       )}
-      <div
-        className={`${chart.overlay} ${styles.overlay}`}
-        style={{
-          left: plot.left,
-          top: plot.top,
-          width: plot.right - plot.left,
-          height: plot.bottom - plot.top,
-        }}
-        role="slider"
-        tabIndex={0}
-        aria-label={t.slider}
-        aria-describedby={keysId}
-        aria-valuemin={win.start}
-        aria-valuemax={win.end}
-        aria-valuenow={Math.round(clampToWindow(minutes))}
-        aria-valuetext={readout(nowPoint, minutes)}
+      <PlotSlider
+        plot={plot}
+        label={t.slider}
+        describedBy={keysId}
+        min={win.start}
+        max={win.end}
+        value={Math.round(clampToWindow(minutes))}
+        valueText={readout(nowPoint, minutes)}
         onKeyDown={onKeyDown}
+        // Keyboard focus shows the readout of the selected time without changing it.
+        onFocus={(e) => {
+          if (isFocusVisible(e.currentTarget)) setKeyboard(true);
+        }}
         onBlur={() => setKeyboard(false)}
         {...pointer.handlers}
         onPointerDown={(e) => {
@@ -415,15 +424,21 @@ export function DailyProfileChart() {
   const keysId = useSvgId('dp-keys');
 
   const win = useMemo(() => daylightWindow(sunTimes), [sunTimes]);
-  const legendItems = useMemo<LegendItem[]>(() => {
+  const legendItems = useMemo<ChartLegendItem[]>(() => {
     if (numFloors <= 1) return [];
-    const items: LegendItem[] = Array.from({ length: numFloors }, (_, k) => ({
+    const items: ChartLegendItem[] = Array.from({ length: numFloors }, (_, k) => ({
       key: `f${k}`,
       label: labels[k] ?? String(k),
       swatch: 'line',
       color: floorColor(k),
     }));
-    items.push({ key: 'shade', label: t.shadeBand, swatch: 'band', color: `var(${SHADE_STEP_TOKENS[2]})` });
+    items.push({
+      key: 'shade',
+      label: t.shadeBand,
+      swatch: 'band',
+      color: SHADE_BAND.color,
+      opacity: SHADE_BAND.opacity,
+    });
     return items;
   }, [numFloors, labels, t]);
 
@@ -479,7 +494,14 @@ export function DailyProfileChart() {
       title={t.title}
       subtitle={t.subtitle(dateText)}
       exportName="tagesverlauf"
-      footer={<ChartDataTable caption={t.tableCaption(dateText)} columns={table.columns} rows={table.rows} />}
+      footer={
+        <ChartDataTable
+          caption={t.tableCaption(dateText)}
+          context={t.title}
+          columns={table.columns}
+          rows={table.rows}
+        />
+      }
     >
       <div ref={rootRef} className={chart.root}>
         <svg
@@ -493,7 +515,7 @@ export function DailyProfileChart() {
         >
           <title id={titleId}>{t.title}</title>
           <desc id={descId}>{summary}</desc>
-          {geom.legend.height > 0 && <SvgLegend layout={geom.legend} x={plot.left} y={LEGEND_TOP} />}
+          {geom.legend.height > 0 && <ChartLegend layout={geom.legend} x={plot.left} y={LEGEND_TOP} />}
           <g aria-hidden="true">
             {geom.bands.map((b) => (
               <rect
@@ -502,8 +524,8 @@ export function DailyProfileChart() {
                 y={plot.top}
                 width={b.w}
                 height={plot.bottom - plot.top}
-                fill={b.color}
-                fillOpacity={0.3}
+                fill={SHADE_BAND.color}
+                fillOpacity={SHADE_BAND.opacity}
               />
             ))}
           </g>
@@ -552,7 +574,7 @@ export function DailyProfileChart() {
             )}
             {geom.maxW <= 0 && (
               <text
-                className={chart.note}
+                className={`${chart.note} ${chart.halo}`}
                 x={(plot.left + plot.right) / 2}
                 y={(plot.top + plot.bottom) / 2}
                 textAnchor="middle"

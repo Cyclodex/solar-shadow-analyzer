@@ -2,10 +2,6 @@
   display: block;
 }
 
-.overlay {
-  z-index: 1;
-}
-
 .select {
   min-width: 9rem;
 }

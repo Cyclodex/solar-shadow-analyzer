@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, type PointerEvent } from 'react';
 // POINTER TRACKING FOR CHART OVERLAYS
 // Hover index for tooltips/crosshairs (mouse, pen and touch) plus selection by click/tap or press-and-drag.
 // Touch: the tooltip stays after lifting the finger and closes on the next tap outside the chart.
+// Escape closes the hover state from anywhere on the page.
 // ─────────────────────────────────────────────
 
 export interface PlotPointerOptions {
@@ -66,6 +67,20 @@ export function usePlotPointer({ locate, onSelect, drag = false }: PlotPointerOp
     document.addEventListener('pointerdown', onDown);
     return () => document.removeEventListener('pointerdown', onDown);
   }, [touchHold]);
+
+  // Escape dismisses a hover tooltip wherever the focus is (WCAG 1.4.13); the next pointer move shows it
+  // again. The overlays' own keydown handlers take care of the keyboard cursor.
+  const hovering = hover !== null;
+  useEffect(() => {
+    if (!hovering) return;
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape') return;
+      setHover(null);
+      setTouchHold(false);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [hovering]);
 
   const handlers: PlotPointerHandlers = {
     onPointerDown: (e) => {

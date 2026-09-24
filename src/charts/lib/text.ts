@@ -1,7 +1,9 @@
+import { cssVar } from './canvasTheme';
+
 // ─────────────────────────────────────────────
 // TEXT LAYOUT HELPERS
-// SVG charts are laid out in JS before render (no DOM measuring pass), so label widths are estimated.
-// The canvas heatmap passes the exact ctx.measureText instead.
+// SVG charts are laid out in JS before render (no DOM measuring pass), so label widths are estimated, or
+// measured with a canvas (measureTextWidth) where a collision check needs the real width.
 // ─────────────────────────────────────────────
 
 /** Width of a text in px, measured or estimated. */
@@ -13,6 +15,22 @@ const EM_PER_CHAR = 0.56;
 /** Estimated rendered width of `text` at `fontSize` px in the system sans-serif stack. */
 export function estimateTextWidth(text: string, fontSize: number): number {
   return Math.ceil(text.length * fontSize * EM_PER_CHAR);
+}
+
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+
+/**
+ * Rendered width of `text` in the UI font (--font-sans) at `fontSize` px and font `weight`, measured with
+ * canvas measureText; estimated (estimateTextWidth) without a canvas, e.g. in jsdom.
+ */
+export function measureTextWidth(text: string, fontSize: number, weight = 400): number {
+  if (measureCtx === undefined) {
+    measureCtx = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+  }
+  if (!measureCtx) return estimateTextWidth(text, fontSize);
+  const family = cssVar(document.documentElement, '--font-sans') || 'sans-serif';
+  measureCtx.font = `${weight} ${fontSize}px ${family}`;
+  return Math.ceil(measureCtx.measureText(text).width);
 }
 
 export interface FlowPosition {

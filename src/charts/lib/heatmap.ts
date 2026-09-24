@@ -1,4 +1,5 @@
 import { HEATMAP_NIGHT } from '../../model/analysis';
+import { daysInYear } from '../../model/time';
 import type { HeatmapData } from '../../model/types';
 import { CELL, CELL_CLASS_COUNT, SHADE_STEP_BOUNDS_PCT, cellClass } from './colors';
 import type { Rgba } from './canvasTheme';
@@ -59,6 +60,15 @@ export function monthStartDays(year: number): number[] {
   const start = Date.UTC(year, 0, 1);
   for (let m = 0; m <= 12; m++) out.push(Math.round((Date.UTC(year, m, 1) - start) / 86_400_000));
   return out;
+}
+
+/**
+ * "YYYY-MM-DD" of the calendar day of `date` in `year` (29 Feb becomes 28 Feb in a common year). Maps the
+ * selected date onto a heatmap of another year by month and day, not by day of the year.
+ */
+export function sameDayIn(year: number, date: string): string {
+  const md = date.slice(5);
+  return `${year}-${md === '02-29' && daysInYear(year) === 365 ? '02-28' : md}`;
 }
 
 export interface Rect {

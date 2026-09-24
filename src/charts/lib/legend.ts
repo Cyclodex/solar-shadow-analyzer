@@ -1,15 +1,16 @@
 import { estimateTextWidth, flowLayout, type FlowLayout } from './text';
 
 // ─────────────────────────────────────────────
-// LEGEND LAYOUT (SVG legends, see SvgLegend.tsx)
+// LEGEND LAYOUT (SVG legends of the charts, see ChartLegend.tsx)
+// Named Chart… so they are not mixed up with the legend of the 2D views (views/svg), which has another API.
 // ─────────────────────────────────────────────
 
-export type LegendSwatch = 'line' | 'rect' | 'band';
+export type ChartLegendSwatch = 'line' | 'rect' | 'band';
 
-export interface LegendItem {
+export interface ChartLegendItem {
   key: string;
   label: string;
-  swatch: LegendSwatch;
+  swatch: ChartLegendSwatch;
   /** Stroke/fill colour (usually a var(--…) token). */
   color: string;
   /** Fill override, e.g. url(#hatch) for a hatched rect. */
@@ -26,14 +27,14 @@ export const LEGEND_ROW_HEIGHT = 18;
 /** Space above an SVG legend (keeps exported PNGs from starting flush with the text). */
 export const LEGEND_TOP = 4;
 
-export interface LegendLayout extends FlowLayout {
-  items: readonly LegendItem[];
+export interface ChartLegendLayout extends FlowLayout {
+  items: readonly ChartLegendItem[];
   /** Total height in px (0 without items). */
   height: number;
 }
 
 /** Wraps legend items into rows of at most `width` px (label widths estimated). */
-export function layoutLegend(items: readonly LegendItem[], width: number): LegendLayout {
+export function layoutChartLegend(items: readonly ChartLegendItem[], width: number): ChartLegendLayout {
   const widths = items.map(
     (it) => LEGEND_SWATCH_W + LEGEND_SWATCH_GAP + estimateTextWidth(it.label, LEGEND_FONT_SIZE),
   );
