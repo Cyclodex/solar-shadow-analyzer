@@ -21,6 +21,10 @@
 
 .table {
   width: 100%;
+  /* Separate borders (not the global collapse): collapsed borders are painted by the table, under the
+     sticky first column, so the row lines went missing below the month names on phones. */
+  border-collapse: separate;
+  border-spacing: 0;
   font-size: var(--fs-xs);
   line-height: 1.35;
 }
@@ -81,6 +85,21 @@
   height: 10px;
   border-radius: 2px;
   background: var(--c);
+}
+
+/* Body row lines are the top border of the row below: a later (sticky) cell is painted over the one above,
+   so its own line cannot be covered when phones round the sticky cells to whole CSS pixels. */
+.table tbody > tr > * {
+  border-bottom: 0;
+}
+
+.table tbody > tr + tr > * {
+  border-top: 1px solid var(--border);
+}
+
+/* Tables without a footer keep the line under their last row. */
+.table tbody:last-child > tr:last-child > * {
+  border-bottom: 1px solid var(--border);
 }
 
 .table tbody th,

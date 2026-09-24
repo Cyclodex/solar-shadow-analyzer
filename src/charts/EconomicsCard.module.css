@@ -55,6 +55,14 @@
   color: var(--text-muted);
 }
 
+/* Very narrow cards (≤ 300 px, i.e. phones up to about 344 px wide): room for long single-word labels such
+   as "Amortisationsdauer", which otherwise run into the padding up to the border. */
+@container (max-width: 300px) {
+  .figure {
+    padding-inline: var(--space-2);
+  }
+}
+
 /* ── Chart + table ── */
 
 .details {

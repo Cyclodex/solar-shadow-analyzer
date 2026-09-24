@@ -1,4 +1,13 @@
-import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  memo,
+  useCallback,
+  useDeferredValue,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+} from 'react';
 import { Skeleton } from '../components/Skeleton';
 import { ViewCard } from '../components/ViewCard';
 import { Segmented } from '../components/Segmented';
@@ -51,6 +60,7 @@ import { measureTextWidth } from '../components/svg/text';
 import { useElementWidth } from '../components/svg/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { usePlotPointer } from './lib/usePlotPointer';
+import { useNearViewport } from './lib/useNearViewport';
 import { useSvgId } from '../components/svg/useSvgId';
 import chart from './lib/chart.module.css';
 import styles from './ShadeHeatmap.module.css';
@@ -72,6 +82,7 @@ const de = {
   shadedHours: 'davon verschattet',
   hours: (h: string) => `${h} h`,
   clickHint: 'Klicken übernimmt Datum und Uhrzeit',
+  tapHint: 'Tippen oder seitwärts ziehen übernimmt Datum und Uhrzeit',
   keyHint: 'Eingabe übernimmt Datum und Uhrzeit',
   widget: (floor: string) => `Heatmap ${floor}: Tag und Uhrzeit wählen`,
   keys: 'Pfeiltasten links/rechts: Tag, auf/ab: 10 Minuten; mit Umschalt: Woche bzw. Stunde. Bild auf/ab: Monat. Eingabe: Datum und Uhrzeit übernehmen.',
@@ -108,6 +119,7 @@ const messages: Messages<Texts> = {
     shadedHours: 'of which shaded',
     hours: (h) => `${h} h`,
     clickHint: 'Click to use this date and time',
+    tapHint: 'Tap or drag sideways to use this date and time',
     keyHint: 'Enter uses this date and time',
     widget: (floor) => `Heatmap ${floor}: choose day and time`,
     keys: 'Left/right arrow: day, up/down arrow: 10 minutes; with Shift: week or hour. Page up/down: month. Enter: use this date and time.',
@@ -210,7 +222,10 @@ interface InteractionProps {
   f: Format;
 }
 
-/** Hover/keyboard cursor, tooltip, selected-time marker; click/Enter sets the date and time. */
+/**
+ * Hover/keyboard cursor, tooltip, selected-time marker; click/Enter sets the date and time. Touch: a tap or
+ * the end of a sideways scrub (the cell in the tooltip) sets them.
+ */
 function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: InteractionProps) {
   const date = useTimeStore((s) => s.date);
   const minutes = useTimeStore((s) => s.minutes);
@@ -243,6 +258,8 @@ function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: Int
       return cell ? cell.day * rows + cell.row : null;
     },
     onSelect: select,
+    // A fingertip covers a week of days: scrub sideways to the cell in the tooltip, lift to take it.
+    touchScrubSelects: true,
   });
 
   // Selected date/time: the same calendar day in the heatmap's year, which may differ from the selected
@@ -396,7 +413,7 @@ function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: Int
               mark: 'rect',
             },
           ]}
-          note={pointer.hover !== null ? t.clickHint : t.keyHint}
+          note={pointer.hover === null ? t.keyHint : pointer.touch ? t.tapHint : t.clickHint}
         />
       )}
     </>
@@ -408,36 +425,54 @@ function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: Int
 /**
  * Day × local time heatmap (canvas) of the shade on the analysed floor (useShadedFloor), with floor
  * selector and statistics. The card sits far below the fold: its year of shade is computed after the
- * first paint, with a placeholder of about the same size until then.
+ * first paint, with a placeholder of about the same size until then, and only near the screen
+ * (useNearViewport): far from it, e.g. while the tilt slider is dragged at the top of a phone, the card
+ * keeps its last result (no recomputing, no redrawing) and catches up when it comes near or is printed.
  */
 export function ShadeHeatmap() {
   const floor = useShadedFloor();
   const ready = useDeferredValue(true, false);
-  const heatmap = useHeatmap(floor, ready);
-  const stats = useHeatmapStats(floor, ready);
-  if (!heatmap || !stats) return <HeatmapPlaceholder />;
-  return <HeatmapCard floor={floor} heatmap={heatmap} stats={stats} />;
+  const [nearRef, near] = useNearViewport<HTMLElement>();
+  const heatmap = useHeatmap(floor, ready && near);
+  const stats = useHeatmapStats(floor, ready && near);
+  const [kept, setKept] = useState<CardData | null>(null);
+  if (heatmap && stats && (kept?.heatmap !== heatmap || kept.stats !== stats || kept.floor !== floor)) {
+    setKept({ floor, heatmap, stats });
+  }
+  const shown = heatmap && stats ? { floor, heatmap, stats } : kept;
+  if (!shown) return <HeatmapPlaceholder nearRef={nearRef} />;
+  return <HeatmapCard floor={shown.floor} heatmap={shown.heatmap} stats={shown.stats} nearRef={nearRef} />;
 }
 
 /** Height of the statistics row and the canvas (plot, axis, legend and ramp) on a wide screen, px. */
 const PLACEHOLDER_HEIGHT = 404;
 
-function HeatmapPlaceholder() {
+type NearRef = (el: HTMLElement | null) => (() => void) | undefined;
+
+function HeatmapPlaceholder({ nearRef }: { nearRef: NearRef }) {
   const t = useMessages(messages);
   return (
     <ViewCard title={t.title} busy>
-      <Skeleton height={`${PLACEHOLDER_HEIGHT}px`} />
+      <div ref={nearRef}>
+        <Skeleton height={`${PLACEHOLDER_HEIGHT}px`} />
+      </div>
     </ViewCard>
   );
 }
 
-interface CardProps {
+interface CardData {
   floor: number;
   heatmap: HeatmapData;
   stats: HeatmapStats;
 }
 
-function HeatmapCard({ floor, heatmap, stats }: CardProps) {
+interface CardProps extends CardData {
+  /** Observed by ShadeHeatmap (useNearViewport); attached to an element inside the card. */
+  nearRef: NearRef;
+}
+
+/** Memoized: while the card is far from the screen its props stay the same, so it neither renders nor draws. */
+const HeatmapCard = memo(function HeatmapCard({ floor, heatmap, stats, nearRef }: CardProps) {
   const t = useMessages(messages);
   const c = useCommon();
   const f = useFormat();
@@ -447,7 +482,18 @@ function HeatmapCard({ floor, heatmap, stats }: CardProps) {
   const labels = useFloorLabels();
   const setFocusFloor = useUiStore((s) => s.setFocusFloor);
   const themeKey = useThemeKey();
-  const [rootRef, width] = useElementWidth<HTMLDivElement>();
+  const [widthRef, width] = useElementWidth<HTMLDivElement>();
+  const rootRef = useCallback(
+    (el: HTMLDivElement | null) => {
+      const unWidth = widthRef(el);
+      const unNear = nearRef(el);
+      return () => {
+        unWidth?.();
+        unNear?.();
+      };
+    },
+    [widthRef, nearRef],
+  );
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const hasAbove = floor < numFloors - 1;
@@ -611,4 +657,4 @@ function HeatmapCard({ floor, heatmap, stats }: CardProps) {
       </div>
     </ViewCard>
   );
-}
+});
