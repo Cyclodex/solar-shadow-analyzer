@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { renderToString } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { dayOfYear } from '../model/time';
 import { useConfigStore } from '../state/configStore';
@@ -28,6 +29,16 @@ describe('ShadeHeatmap', () => {
     expect(screen.getByText('davon verschattet')).toBeInTheDocument();
     // Two floors: only the lower one can be shaded → no floor selector.
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+  });
+
+  it('keeps the year of shade out of the first render (placeholder until the deferred render)', () => {
+    // The initial render (as on the server) uses the deferred value's initial value: no heatmap yet.
+    const html = renderToString(<ShadeHeatmap />);
+    expect(html).toContain('aria-busy="true"');
+    expect(html).not.toContain('<canvas');
+    // The deferred render that follows computes it.
+    render(<ShadeHeatmap />);
+    expect(screen.getByRole('img').tagName).toBe('CANVAS');
   });
 
   it('clicking a cell selects its date and time', () => {

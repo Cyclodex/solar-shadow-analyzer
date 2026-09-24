@@ -15,8 +15,13 @@ import { Button } from '../components/Button';
 import { DownloadIcon } from '../components/icons';
 import { floorLabel, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
-import { useShadedFloor } from '../charts/lib/floors';
-import { useFloorPlacements, useHeatmap, useSimulation, useTiltSweep } from '../hooks/useModel';
+import {
+  useFloorPlacements,
+  useHeatmap,
+  useResultsReady,
+  useSimulation,
+  useTiltSweep,
+} from '../hooks/useModel';
 import type { Config } from '../model/types';
 import {
   CONFIG_FILE_ACCEPT,
@@ -34,8 +39,7 @@ import {
 } from '../export/resultsCsv';
 import { PrintRoot } from '../export/PrintRoot';
 import { printReport } from '../export/print';
-import { useConfig, useConfigSection, useConfigStore } from '../state/configStore';
-import { useDataStore } from '../state/dataStore';
+import { useConfig, useConfigStore } from '../state/configStore';
 import styles from './ExportMenu.module.css';
 
 const de = {
@@ -118,8 +122,6 @@ type Notice =
 const EDGE = 8;
 /** Success notices disappear after this time (unless focus is inside). */
 const NOTICE_MS = 8000;
-/** Weather series coordinates are rounded to 0.01° (model/weather.ts). */
-const SERIES_COORD_TOLERANCE = 0.01;
 
 /** Shifts an absolutely positioned popover horizontally so it stays inside the viewport. */
 function useKeepInViewport(ref: RefObject<HTMLElement | null>, active: boolean): void {
@@ -136,40 +138,23 @@ function useKeepInViewport(ref: RefObject<HTMLElement | null>, active: boolean):
   }, [ref, active]);
 }
 
-/**
- * True while the weather series does not belong to the configured year and location: a new series is
- * loading (the previous one is kept meanwhile, see useWeatherLoader) or the config has just changed.
- * Yield results then still come from the old series and must not be exported under the new labels.
- */
-function useWeatherStale(): boolean {
-  const { year } = useConfigSection('weather');
-  const { latitude, longitude } = useConfigSection('location');
-  return useDataStore(({ weather: { status, series } }) => {
-    if (status === 'loading') return true;
-    if (!series) return false;
-    return (
-      series.year !== year ||
-      Math.abs(series.latitude - latitude) > SERIES_COORD_TOLERANCE ||
-      Math.abs(series.longitude - longitude) > SERIES_COORD_TOLERANCE
-    );
-  });
-}
-
 /** Menu entries; data-dependent entries are disabled until their results exist. */
 function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
   const c = useCommon();
   const lang = useLang();
   const config = useConfig();
-  // Yield results of a stale weather series are not offered (see useWeatherStale).
-  const stale = useWeatherStale();
+  // Provisional yield results are not offered (inputs still loading, weather of another site or year,
+  // a tilt sweep being updated): they would be exported under the current labels.
+  const resultsReady = useResultsReady();
   const simulation = useSimulation();
-  // The tilt sweep may not be cached yet: compute it after the menu has painted.
+  // The tilt sweep may not be cached yet: compute it after the menu has painted (and not at all while
+  // it could not be exported anyway).
   const ready = useDeferredValue(true, false);
-  const sweep = useTiltSweep(ready);
-  // The series the sweep was computed on (useTiltSweep defers it the same way): names the file.
-  const sweepSeries = useDeferredValue(useDataStore((s) => s.weather.series));
-  // Same floor as the heatmap card: never the top floor (no panels above it, so never shaded).
-  const heatmap = useHeatmap(useShadedFloor());
+  const sweep = useTiltSweep(ready && resultsReady);
+  const monthlyReady = resultsReady && simulation !== null;
+  const tiltReady = resultsReady && sweep !== null && !sweep.updating;
+  // Same floor as the heatmap card (useShadedFloor): never the top floor, which is never shaded.
+  const heatmap = useHeatmap();
   const placements = useFloorPlacements();
   const name = config.location.name;
   const heatmapFloor = floorLabel(placements[heatmap.floor]?.storey ?? heatmap.floor, lang);
@@ -196,10 +181,10 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
           id: 'csv-monthly',
           label: t.monthly,
           format: c.exportCsv,
-          disabled: stale || !simulation,
-          detail: stale || !simulation ? t.computing : undefined,
+          disabled: !monthlyReady,
+          detail: monthlyReady ? undefined : t.computing,
           onSelect: () => {
-            if (stale || !simulation) return;
+            if (!monthlyReady) return;
             const parts = [
               name,
               simulation.year,
@@ -215,16 +200,12 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
           id: 'csv-tilt',
           label: t.tiltSweep,
           format: c.exportCsv,
-          disabled: stale || !sweep || !sweepSeries,
-          detail: stale || !sweep || !sweepSeries ? t.computing : undefined,
+          disabled: !tiltReady,
+          detail: tiltReady ? undefined : t.computing,
           onSelect: () => {
-            if (stale || !sweep || !sweepSeries) return;
+            if (!tiltReady) return;
             const storeys = placements.map((p) => p.storey);
-            const parts = [
-              name,
-              sweepSeries.year,
-              ...(sweepSeries.source === 'clear-sky' ? [t.clearSkyTag] : []),
-            ];
+            const parts = [name, sweep.year, ...(sweep.source === 'clear-sky' ? [t.clearSkyTag] : [])];
             downloadCsv(
               tiltSweepCsv(sweep.points, storeys, lang, userCsvFormat(lang)),
               exportFilename('tiltSweep', lang, parts, 'csv'),

@@ -3,7 +3,7 @@ import { ViewCard } from '../components/ViewCard';
 import { Button } from '../components/Button';
 import { useFormat, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
-import { useTiltSweep, type TiltSweepResult } from '../hooks/useModel';
+import { useAnnualInputsPending, useTiltSweep, type TiltSweepResult } from '../hooks/useModel';
 import { LIMITS } from '../model/defaults';
 import { useConfigSection, usePatch } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
@@ -41,7 +41,6 @@ const de = {
   keys: 'Pfeiltasten: Neigung in 5°-Schritten ändern.',
   clickHint: 'Klicken übernimmt diese Neigung',
   steps: 'Gerechnet in 5°-Schritten.',
-  obstacles: 'Hindernis-Horizonte für alle Neigungen bei θ = 45° berechnet.',
   summary: (opt: string, kwh: string, current: string) =>
     `Jahresertrag je Neigung von 0° bis 90°. Optimum aller Stockwerke bei ${opt} mit ${kwh}. Aktuelle Neigung ${current}.`,
   summaryFloor: (floor: string, deg: string, kwh: string) => `${floor}: Optimum ${deg} (${kwh})`,
@@ -67,7 +66,6 @@ const messages: Messages<Texts> = {
     keys: 'Arrow keys: change the tilt in 5° steps.',
     clickHint: 'Click to use this tilt',
     steps: 'Computed in 5° steps.',
-    obstacles: 'Obstacle horizons evaluated at θ = 45° for all tilts.',
     summary: (opt, kwh, current) =>
       `Annual yield per tilt from 0° to 90°. Optimum for all floors at ${opt} with ${kwh}. Current tilt ${current}.`,
     summaryFloor: (floor, deg, kwh) => `${floor}: optimum ${deg} (${kwh})`,
@@ -378,9 +376,9 @@ export function TiltSweepChart() {
   const f = useFormat();
   const sweep = useTiltSweep();
   const theta = useConfigSection('panels').tiltFromVertical;
-  const hasObstacles = useConfigSection('horizon').obstacles.length > 0;
   const patch = usePatch();
   const weather = useDataStore((s) => s.weather);
+  const pending = useAnnualInputsPending();
   const labels = useFloorLabels();
   const source = useSourceLabel(weather.series);
   // Default: total shown for up to 3 floors; with more floors it would squash the floor lines.
@@ -453,7 +451,8 @@ export function TiltSweepChart() {
   }, [sweep, n, labels, theta, f, t, c]);
 
   const setTilt = (tilt: number): void => patch('panels', { tiltFromVertical: tilt });
-  const busy = !sweep || weather.status === 'loading';
+  // Provisional while inputs load, and while the sweep is recomputed after another input changed.
+  const busy = !sweep || pending || sweep.updating === true;
 
   return (
     <ViewCard
@@ -535,9 +534,7 @@ export function TiltSweepChart() {
           <div className={chart.empty}>{t.waiting}</div>
         )}
       </div>
-      <p className={chart.caption}>
-        {[source, t.steps, hasObstacles ? t.obstacles : null].filter(Boolean).join(' ')}
-      </p>
+      <p className={chart.caption}>{[source, t.steps].filter(Boolean).join(' ')}</p>
     </ViewCard>
   );
 }

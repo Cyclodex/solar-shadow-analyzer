@@ -8,6 +8,7 @@ import {
   fetchOpenMeteoYear,
   openMeteoUrl,
   parseOpenMeteo,
+  sameWeatherSite,
 } from './weather';
 import { clearSkyIrradiance } from './irradiance';
 import { sunPosition } from './sun';
@@ -115,6 +116,22 @@ describe('parseOpenMeteo', () => {
     const irregular = payload(3) as { hourly: { time: number[] } };
     irregular.hourly.time[2] += 60;
     expect(() => parseOpenMeteo(irregular, 0, 0, 2023)).toThrow(/irregular/);
+  });
+});
+
+describe('sameWeatherSite', () => {
+  const series = { year: 2023, latitude: 47.1, longitude: 7.45 };
+
+  it('compares the year and the coordinates at the request precision (0.01°)', () => {
+    expect(sameWeatherSite(series, 47.1004, 7.4496, 2023)).toBe(true);
+    expect(sameWeatherSite(series, 47.1, 7.45, 2024)).toBe(false);
+    expect(sameWeatherSite(series, 47.11, 7.45, 2023)).toBe(false);
+    expect(sameWeatherSite(series, 47.1, 7.46, 2023)).toBe(false);
+  });
+
+  it('accepts exact (clear-sky) coordinates and the sign of zero', () => {
+    expect(sameWeatherSite(clearSkyYear(46.0043, 8.9511, 2025), 46.0, 8.95, 2025)).toBe(true);
+    expect(sameWeatherSite({ year: 2023, latitude: 0, longitude: -0 }, -0.001, 0.004, 2023)).toBe(true);
   });
 });
 

@@ -100,6 +100,31 @@ describe('EconomicsCard', () => {
     expect(cursor).toHaveAttribute('aria-valuenow', '25');
   });
 
+  it('computes the balance chart from the simulated floors while a floor change is still deferred', () => {
+    act(() => useDataStore.getState().setWeather({ status: 'ready', series }));
+    const before = simulatedKwh();
+    const e = DEFAULT_CONFIG.economics;
+    render(<EconomicsCard />);
+    const cursor = screen.getByRole('slider', { name: /Kumulierte Bilanz/ });
+    // Every value the cursor shows, including the render before the deferred simulation catches up.
+    const shown: string[] = [];
+    const observer = new MutationObserver((records) => records.forEach((r) => shown.push(r.oldValue ?? '')));
+    observer.observe(cursor, { attributeFilter: ['aria-valuetext'], attributeOldValue: true });
+    act(() => useConfigStore.getState().patch('building', { numFloors: 3 }));
+    shown.push(
+      ...observer.takeRecords().map((r) => r.oldValue ?? ''),
+      cursor.getAttribute('aria-valuetext')!,
+    );
+    observer.disconnect();
+
+    const text = (kwh: number, floors: number): string =>
+      `Jahr 25: ${f.currency(economics(kwh, floors, e).lifetimeNet, 'CHF', 0)}`;
+    const after = simulatedKwh();
+    expect(shown.at(-1)).toBe(text(after.total, 3));
+    // Never the old yield with the new floors' investment.
+    expect(shown).not.toContain(text(before.total, 3));
+  });
+
   it('handles payback beyond the evaluation period and never', () => {
     act(() => useDataStore.getState().setWeather({ status: 'ready', series }));
     useConfigStore.getState().patch('economics', { investmentPerFloor: 20000, lifetimeYears: 10 });

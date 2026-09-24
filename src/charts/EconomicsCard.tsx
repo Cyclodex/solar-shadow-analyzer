@@ -4,12 +4,11 @@ import { ViewCard } from '../components/ViewCard';
 import { cssVars } from '../components/cssVars';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
-import { useEconomics, useSimulation } from '../hooks/useModel';
+import { useAnnualInputsPending, useEconomics, useSimulation } from '../hooks/useModel';
 import { economics } from '../model/economics';
 import type { EconomicsConfig, EconomicsResult } from '../model/types';
 import { EXPORT_IGNORE } from '../export/png';
 import { useConfigSection } from '../state/configStore';
-import { useDataStore } from '../state/dataStore';
 import { isFocusVisible } from './lib/focus';
 import { linePath } from './lib/paths';
 import { stepValue } from './lib/sliderKeys';
@@ -404,10 +403,9 @@ export function EconomicsCard() {
   const c = useCommon();
   const f = useFormat();
   const e = useConfigSection('economics');
-  const numFloors = useConfigSection('building').numFloors;
   const simulation = useSimulation();
   const total = useEconomics();
-  const weatherLoading = useDataStore((s) => s.weather.status === 'loading');
+  const pending = useAnnualInputsPending();
 
   const rows = useMemo<FloorRow[]>(
     () =>
@@ -420,15 +418,17 @@ export function EconomicsCard() {
     [simulation, e],
   );
 
-  // Cumulative balance after 0 … lifetime years: the model's lifetimeNet for each horizon.
+  // Cumulative balance after 0 … lifetime years: the model's lifetimeNet for each horizon. The investment
+  // follows the simulated floors (same snapshot as the yield, as in useEconomics), not the live config.
   const cashFlow = useMemo(() => {
     if (!simulation) return null;
     const kwh = simulation.totalAnnualKwh;
+    const floors = simulation.floors.length;
     return Array.from(
       { length: e.lifetimeYears + 1 },
-      (_, n) => economics(kwh, numFloors, { ...e, lifetimeYears: n }).lifetimeNet,
+      (_, n) => economics(kwh, floors, { ...e, lifetimeYears: n }).lifetimeNet,
     );
-  }, [simulation, e, numFloors]);
+  }, [simulation, e]);
 
   const ready = simulation !== null && total !== null && cashFlow !== null;
   const money = (v: number): string => f.currency(v, e.currency, 0);
@@ -455,7 +455,7 @@ export function EconomicsCard() {
       subtitle={t.subtitle(e.lifetimeYears)}
       exportName={t.exportName}
       minHeight={200}
-      busy={!ready || weatherLoading}
+      busy={!ready || pending}
       footer={<p>{t.assumptions(assumptionList, simulation ? basis : c.loading)}</p>}
     >
       <div className={styles.layout}>

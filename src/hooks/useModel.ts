@@ -11,6 +11,7 @@ import type {
   SimulationResult,
   TiltSweepPoint,
   WeatherSeries,
+  WeatherSource,
 } from '../model/types';
 import { floorPlacements, instantStateFromSun, panelLayout } from '../model/geometry';
 import { sunPosition, sunTimes, solarPath, type SolarPathPoint, type SunTimes } from '../model/sun';
@@ -36,7 +37,7 @@ import {
 } from '../model/analysis';
 import { economics } from '../model/economics';
 import { clearSkyIrradiance } from '../model/irradiance';
-import { CLEAR_SKY_TEMPERATURE_C } from '../model/weather';
+import { CLEAR_SKY_TEMPERATURE_C, sameWeatherSite } from '../model/weather';
 import { clamp } from '../model/units';
 import { useConfig, useConfigSection } from '../state/configStore';
 import { useDataStore, type DataState } from '../state/dataStore';
@@ -49,7 +50,7 @@ import {
   terrainProfileAt,
   type TerrainSource,
 } from './useTerrain';
-import { weatherMatches } from './useWeather';
+import { useWeatherBusy } from './useWeather';
 
 // ─────────────────────────────────────────────
 // MODEL HOOKS
@@ -288,8 +289,8 @@ function useAnnualWeather(config: Config): WeatherSeries | null {
   if (!weather) return null;
   const { latitude, longitude } = config.location;
   const matches =
-    weatherMatches(weather, latitude, longitude, config.weather.year) &&
-    weatherMatches(weather, live.latitude, live.longitude, liveYear);
+    sameWeatherSite(weather, latitude, longitude, config.weather.year) &&
+    sameWeatherSite(weather, live.latitude, live.longitude, liveYear);
   return matches ? weather : null;
 }
 
@@ -309,6 +310,17 @@ export function useAnnualInputsPending(): boolean {
   const deferredWeather = useDeferredValue(weather);
   const deferredTerrain = useDeferredValue(terrain);
   return loading || deferredWeather !== weather || (terrainEnabled && deferredTerrain !== terrain);
+}
+
+/**
+ * True when the annual results (useSimulation, useEconomics, useTiltSweep) are final for the current
+ * inputs: no input is pending (useAnnualInputsPending) and the weather belongs to the configured site and
+ * year (useWeatherBusy). Offer exports and derived actions (apply the optimum tilt) only then.
+ */
+export function useResultsReady(): boolean {
+  const pending = useAnnualInputsPending();
+  const weatherBusy = useWeatherBusy();
+  return !pending && !weatherBusy;
 }
 
 /**
@@ -348,6 +360,9 @@ export interface TiltSweepResult {
   points: TiltSweepPoint[];
   /** Point with the highest total annual yield (first one on ties). */
   optimum: TiltSweepPoint;
+  /** Year and source of the weather series the sweep was computed from (e.g. to name an export). */
+  year: number;
+  source: WeatherSource;
   /**
    * True while inputs other than the tilt are being changed: the result is the previous one (the sweep
    * is recomputed once the inputs have settled). Mark it as updating; do not export it.
@@ -431,9 +446,9 @@ function createSweep(req: SweepRequest): { points: TiltSweepPoint[]; done: () =>
   };
 }
 
-function sweepResult(points: TiltSweepPoint[]): TiltSweepResult {
+function sweepResult(points: TiltSweepPoint[], weather: WeatherSeries): TiltSweepResult {
   const optimum = points.reduce((best, p) => (p.totalKwh > best.totalKwh ? p : best), points[0]);
-  return { points, optimum };
+  return { points, optimum, year: weather.year, source: weather.source };
 }
 
 /** The updating variant of each sweep result (stable identity for consumers' memos). */
@@ -471,7 +486,7 @@ function subscribeSweeps(listener: () => void): () => void {
 const getSweepVersion = (): number => sweepVersion;
 
 function finishSweep(req: SweepRequest, points: TiltSweepPoint[]): TiltSweepResult {
-  const result = sweepCache.get(req.deps, () => sweepResult(points));
+  const result = sweepCache.get(req.deps, () => sweepResult(points, req.weather));
   lastSweep = { req, result };
   return result;
 }

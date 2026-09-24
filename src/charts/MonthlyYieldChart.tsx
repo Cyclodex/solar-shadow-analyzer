@@ -3,9 +3,8 @@ import { ViewCard } from '../components/ViewCard';
 import { Segmented } from '../components/Segmented';
 import { monthNames, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
-import { useSimulation } from '../hooks/useModel';
+import { useAnnualInputsPending, useSimulation } from '../hooks/useModel';
 import type { SimulationResult } from '../model/types';
-import { useDataStore } from '../state/dataStore';
 import { AxisX, AxisY, type AxisTick } from './lib/Axes';
 import { ChartStats } from './lib/ChartStats';
 import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
@@ -16,6 +15,7 @@ import { topDown, useFloorLabels } from './lib/floors';
 import { LEGEND_TOP, layoutChartLegend, type ChartLegendItem, type ChartLegendLayout } from './lib/legend';
 import { roundedTopBar } from './lib/paths';
 import { niceTicks, scaleBand, scaleLinear, stepDigits, type BandScale, type LinearScale } from './lib/scale';
+import { shadingTotals } from './lib/shadingTotals';
 import { useSourceLabel } from './lib/sourceLabel';
 import { useElementWidth } from './lib/useElementWidth';
 import { isFocusVisible } from './lib/focus';
@@ -211,8 +211,7 @@ function summarize(
   f: Format,
   t: Texts,
 ): string {
-  const unshaded = sim.floors.reduce((s, fl) => s + fl.annualUnshadedKwh, 0);
-  const pct = unshaded > 0 ? (sim.totalShadingLossKwh / unshaded) * 100 : 0;
+  const loss = shadingTotals(sim);
   const totals = sim.totalMonthlyKwh;
   const best = totals.indexOf(Math.max(...totals));
   const worst = totals.indexOf(Math.min(...totals));
@@ -222,7 +221,7 @@ function summarize(
     )
     .join('; ');
   return [
-    t.summary(sim.year, f.kwh(sim.totalAnnualKwh), f.kwh(sim.totalShadingLossKwh), f.pct(pct, 1)),
+    t.summary(sim.year, f.kwh(sim.totalAnnualKwh), f.kwh(loss.lossKwh), f.pct(loss.lossPct, 1)),
     t.summaryRange(months[best], f.kwh(totals[best]), months[worst], f.kwh(totals[worst])),
     sim.floors.length > 1 ? `${floors}.` : '',
   ]
@@ -372,7 +371,7 @@ export function MonthlyYieldChart() {
   const f = useFormat();
   const lang = useLang();
   const simulation = useSimulation();
-  const weatherStatus = useDataStore((s) => s.weather.status);
+  const pending = useAnnualInputsPending();
   const labels = useFloorLabels();
   const source = useSourceLabel(simulation);
   const numFloors = simulation?.floors.length ?? 0;
@@ -420,9 +419,8 @@ export function MonthlyYieldChart() {
     [simulation, labels, months, f, t],
   );
 
-  const busy = !simulation || weatherStatus === 'loading';
-  const unshaded = simulation?.floors.reduce((s, fl) => s + fl.annualUnshadedKwh, 0) ?? 0;
-  const lossPct = simulation && unshaded > 0 ? (simulation.totalShadingLossKwh / unshaded) * 100 : 0;
+  const busy = !simulation || pending;
+  const loss = simulation ? shadingTotals(simulation) : null;
 
   const toolbar =
     numFloors > 1 ? (
@@ -440,14 +438,14 @@ export function MonthlyYieldChart() {
 
   return (
     <ViewCard title={t.title} subtitle={t.subtitle} toolbar={toolbar} exportName="monatsertrag" busy={busy}>
-      {simulation && (
+      {simulation && loss && (
         <ChartStats
           items={[
             { key: 'year', label: t.year(simulation.year), value: f.kwh(simulation.totalAnnualKwh) },
             {
               key: 'loss',
               label: t.loss,
-              value: `${f.kwh(simulation.totalShadingLossKwh)} (${f.pct(lossPct, 1)})`,
+              value: `${f.kwh(loss.lossKwh)} (${f.pct(loss.lossPct, 1)})`,
             },
           ]}
         />

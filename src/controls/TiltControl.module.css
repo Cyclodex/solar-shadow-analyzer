@@ -70,3 +70,9 @@
   font-size: var(--fs-xs);
   font-weight: 600;
 }
+
+/* Previous optimum while the sweep is recomputed for changed inputs (dimmed only if that takes a while). */
+.updating {
+  opacity: 0.6;
+  transition: opacity 0.2s 0.2s linear;
+}

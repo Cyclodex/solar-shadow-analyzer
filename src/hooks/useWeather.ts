@@ -1,7 +1,6 @@
 import { useEffect, useRef } from 'react';
-import type { WeatherSeries } from '../model/types';
-import { clearSkyYear, fetchOpenMeteoYear } from '../model/weather';
-import { useConfig } from '../state/configStore';
+import { clearSkyYear, fetchOpenMeteoYear, sameWeatherSite } from '../model/weather';
+import { useConfig, useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 
 // ─────────────────────────────────────────────
@@ -14,26 +13,18 @@ import { useDataStore } from '../state/dataStore';
 /** Delay after the last location/year change before requesting Open-Meteo. */
 export const WEATHER_DEBOUNCE_MS = 800;
 
-/** Coordinate decimals of an Open-Meteo request (≈ 1 km, model/weather.ts openMeteoUrl). */
-const WEATHER_COORD_DECIMALS = 2;
-
-const roundCoord = (x: number): number => Number(x.toFixed(WEATHER_COORD_DECIMALS));
-
 /**
- * True if `series` is the weather of this site and year: coordinates compared at the request precision
- * (Open-Meteo series store rounded coordinates, clear-sky series the exact ones). The source is not
- * compared: the clear-sky fallback after an Open-Meteo error belongs to the site as well.
+ * True while the weather of the configured site and year is not in the store yet: a series is loading
+ * (the previous one, possibly of another site or year, is kept meanwhile) or the stored series still
+ * belongs to another site or year (right after a location or year change). Yield results must not be
+ * presented as final (or exported) meanwhile; see also useResultsReady (hooks/useModel.ts).
  */
-export function weatherMatches(
-  series: WeatherSeries,
-  latitude: number,
-  longitude: number,
-  year: number,
-): boolean {
-  return (
-    series.year === year &&
-    roundCoord(series.latitude) === roundCoord(latitude) &&
-    roundCoord(series.longitude) === roundCoord(longitude)
+export function useWeatherBusy(): boolean {
+  const { year } = useConfigSection('weather');
+  const { latitude, longitude } = useConfigSection('location');
+  return useDataStore(
+    ({ weather: { status, series } }) =>
+      status === 'loading' || (series !== null && !sameWeatherSite(series, latitude, longitude, year)),
   );
 }
 

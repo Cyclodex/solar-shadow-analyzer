@@ -3,6 +3,7 @@ import { Skeleton } from '../components/Skeleton';
 import { cssVars } from '../components/cssVars';
 import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
+import { shadingTotals } from '../charts/lib/shadingTotals';
 import { panelsOverlap, substringBeamLoss } from '../model/geometry';
 import {
   useAnnualInputsPending,
@@ -167,8 +168,7 @@ export function KpiBar() {
   // ── Annual (one snapshot: simulation + simConfig) ──
   const simFloors = simulation?.floors.length ?? numFloors;
   const ratedKwp = (simFloors * simConfig.panels.count * simConfig.panels.powerWp) / 1000;
-  const unshadedKwh = simulation?.floors.reduce((s, fl) => s + fl.annualUnshadedKwh, 0) ?? 0;
-  const lossPct = simulation && unshadedKwh > 0 ? (simulation.totalShadingLossKwh / unshadedKwh) * 100 : 0;
+  const loss = simulation ? shadingTotals(simulation) : null;
   const sourceText = simulation?.source === 'open-meteo' ? t.source(simulation.year) : c.clearSkyHint;
   const payback = econ?.paybackYears ?? NaN;
 
@@ -239,10 +239,10 @@ export function KpiBar() {
           <Kpi
             label={t.shadingLoss}
             value={
-              ready ? (
+              ready && loss ? (
                 <>
-                  <Num value={f.num(simulation.totalShadingLossKwh)} unit="kWh" />{' '}
-                  <span className={styles.secondary}>({f.pct(lossPct, 1)})</span>
+                  <Num value={f.num(loss.lossKwh)} unit="kWh" />{' '}
+                  <span className={styles.secondary}>({f.pct(loss.lossPct, 1)})</span>
                 </>
               ) : (
                 skeleton

@@ -1,11 +1,12 @@
-import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useDeferredValue, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { Skeleton } from '../components/Skeleton';
 import { ViewCard } from '../components/ViewCard';
 import { Segmented } from '../components/Segmented';
 import { SelectField } from '../components/SelectField';
 import { cssVars } from '../components/cssVars';
 import { monthNames, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
-import { useHeatmap, useHeatmapStats } from '../hooks/useModel';
+import { useHeatmap, useHeatmapStats, useShadedFloor } from '../hooks/useModel';
 import {
   HEATMAP_BEHIND,
   HEATMAP_HORIZON,
@@ -30,7 +31,7 @@ import {
   cellClass,
   cellCssColor,
 } from './lib/colors';
-import { useFloorLabels, useShadedFloor } from './lib/floors';
+import { useFloorLabels } from './lib/floors';
 import {
   cellAt,
   classifyCells,
@@ -403,16 +404,44 @@ function HeatmapInteraction({ layout, heatmap, range, floorLabel, t, c, f }: Int
 
 // ── Component ─────────────────────────────────
 
-/** Day × local time heatmap (canvas) of the shade on the analysed floor, with floor selector and statistics. */
+/**
+ * Day × local time heatmap (canvas) of the shade on the analysed floor (useShadedFloor), with floor
+ * selector and statistics. The card sits far below the fold: its year of shade is computed after the
+ * first paint, with a placeholder of about the same size until then.
+ */
 export function ShadeHeatmap() {
+  const floor = useShadedFloor();
+  const ready = useDeferredValue(true, false);
+  const heatmap = useHeatmap(floor, ready);
+  const stats = useHeatmapStats(floor, ready);
+  if (!heatmap || !stats) return <HeatmapPlaceholder />;
+  return <HeatmapCard floor={floor} heatmap={heatmap} stats={stats} />;
+}
+
+/** Height of the statistics row and the canvas (plot, axis, legend and ramp), px. */
+const PLACEHOLDER_HEIGHT = 380;
+
+function HeatmapPlaceholder() {
+  const t = useMessages(messages);
+  return (
+    <ViewCard title={t.title} busy>
+      <Skeleton height={`${PLACEHOLDER_HEIGHT}px`} />
+    </ViewCard>
+  );
+}
+
+interface CardProps {
+  floor: number;
+  heatmap: HeatmapData;
+  stats: HeatmapStats;
+}
+
+function HeatmapCard({ floor, heatmap, stats }: CardProps) {
   const t = useMessages(messages);
   const c = useCommon();
   const f = useFormat();
   const lang = useLang();
   const { numFloors } = useConfigSection('building');
-  const floor = useShadedFloor();
-  const heatmap = useHeatmap(floor);
-  const stats = useHeatmapStats(floor);
   const labels = useFloorLabels();
   const setFocusFloor = useUiStore((s) => s.setFocusFloor);
   const themeKey = useThemeKey();

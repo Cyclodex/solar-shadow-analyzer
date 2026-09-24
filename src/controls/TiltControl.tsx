@@ -1,13 +1,12 @@
-import { useDeferredValue, useId } from 'react';
+import { useId } from 'react';
 import { Button } from '../components/Button';
 import { NumberField } from '../components/NumberField';
 import { Spinner } from '../components/Spinner';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { LIMITS } from '../model/defaults';
-import { useTiltSweep } from '../hooks/useModel';
+import { useResultsReady, useTiltSweep } from '../hooks/useModel';
 import { useConfigSection, usePatch } from '../state/configStore';
-import { useDataStore } from '../state/dataStore';
 import styles from './TiltControl.module.css';
 
 const de = {
@@ -42,7 +41,9 @@ const messages: Messages<typeof de> = {
 
 /**
  * Prominent tilt control (θ from vertical, β = 90° − θ as secondary hint) with the optimum tilt of the
- * tilt sweep (annual total of all floors) as slider mark and apply button.
+ * tilt sweep (annual total of all floors) as slider mark and apply button. While the annual inputs are
+ * still arriving (weather of a new site or year, terrain) a spinner replaces the optimum; while the sweep
+ * is being updated after another input changed, the previous optimum is shown dimmed.
  */
 export function TiltControl() {
   const t = useMessages(messages);
@@ -51,14 +52,14 @@ export function TiltControl() {
   const id = useId();
   const panels = useConfigSection('panels');
   const patch = usePatch();
-  const weatherLoading = useDataStore((s) => s.weather.status === 'loading');
-  // While a new series loads, the store still holds the previous one (possibly another site or year), and
-  // the sweep runs on deferred inputs that lag one render behind a finished load: skip it until both are done.
-  const sweepWeatherLoading = useDeferredValue(weatherLoading);
-  const sweep = useTiltSweep(!weatherLoading && !sweepWeatherLoading);
-  const weatherSource = useDataStore((s) => s.weather.series?.source);
+  // While a new weather series loads, the store still holds the previous one (possibly of another site or
+  // year), and a newly arrived series or terrain horizon reaches the deferred sweep one render later: no
+  // optimum until the inputs are final (useResultsReady).
+  const ready = useResultsReady();
+  const sweep = useTiltSweep(ready);
   const theta = panels.tiltFromVertical;
   const optimum = sweep?.optimum;
+  const updating = sweep?.updating === true;
   const setTilt = (v: number): void => patch('panels', { tiltFromVertical: v });
 
   return (
@@ -91,13 +92,13 @@ export function TiltControl() {
             : undefined
         }
       />
-      <div className={styles.optimum} aria-live="polite">
-        {optimum ? (
+      <div className={styles.optimum} aria-live="polite" aria-busy={updating || undefined}>
+        {sweep && optimum ? (
           <>
-            <div className={styles.optimumText}>
+            <div className={updating ? `${styles.optimumText} ${styles.updating}` : styles.optimumText}>
               <strong>{t.optimum(f.deg(optimum.tiltFromVertical))}</strong>
               <span className={styles.sub}>
-                {t.optimumSub(f.kwh(optimum.totalKwh))} {weatherSource === 'clear-sky' ? t.clearSky : ''}
+                {t.optimumSub(f.kwh(optimum.totalKwh))} {sweep.source === 'clear-sky' ? t.clearSky : ''}
               </span>
               <span className={styles.sub}>{t.sweepNote}</span>
             </div>

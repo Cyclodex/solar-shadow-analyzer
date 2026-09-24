@@ -89,6 +89,27 @@ export interface OpenMeteoOptions {
 /** Coordinates are rounded to this many decimals (≈ 1 km) for the request and the cache key. */
 const COORD_DECIMALS = 2;
 
+/** `x` rounded to the request precision (−0.001 and 0.001 both give 0). */
+const roundCoord = (x: number): number => Number(x.toFixed(COORD_DECIMALS));
+
+/**
+ * True if `series` is the weather of this site and year: coordinates compared at the request precision
+ * (Open-Meteo series store the rounded coordinates, clear-sky series the exact ones). The source is not
+ * compared: the clear-sky fallback after an Open-Meteo error belongs to the site as well.
+ */
+export function sameWeatherSite(
+  series: Pick<WeatherSeries, 'latitude' | 'longitude' | 'year'>,
+  latitude: number,
+  longitude: number,
+  year: number,
+): boolean {
+  return (
+    series.year === year &&
+    roundCoord(series.latitude) === roundCoord(latitude) &&
+    roundCoord(series.longitude) === roundCoord(longitude)
+  );
+}
+
 /** Request URL for one calendar year (UTC timestamps as Unix seconds). */
 export function openMeteoUrl(latitude: number, longitude: number, year: number, model?: string): string {
   const q = new URLSearchParams({
@@ -271,8 +292,8 @@ export async function fetchOpenMeteoYear(
   year: number,
   opts: OpenMeteoOptions = {},
 ): Promise<WeatherSeries> {
-  const lat = Number(latitude.toFixed(COORD_DECIMALS));
-  const lon = Number(longitude.toFixed(COORD_DECIMALS));
+  const lat = roundCoord(latitude);
+  const lon = roundCoord(longitude);
   const useCache = opts.cache ?? true;
   const key = cacheKey(lat, lon, year, opts.model);
   if (useCache) {

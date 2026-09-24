@@ -5,15 +5,14 @@ import { DownloadIcon } from '../components/icons';
 import { cssVars } from '../components/cssVars';
 import { monthNames, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
-import { useHeatmapStats, useSimulation } from '../hooks/useModel';
+import { useAnnualInputsPending, useHeatmapStats, useShadedFloor, useSimulation } from '../hooks/useModel';
 import { exportFilename } from '../export/filenames';
 import { downloadCsv, userCsvFormat } from '../export/resultsCsv';
 import { useConfigSection } from '../state/configStore';
-import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { DataTable, type DataTableColumn, type DataTableRow } from './lib/DataTable';
 import { floorColor } from './lib/colors';
-import { useFloorLabels, useShadedFloor } from './lib/floors';
+import { useFloorLabels } from './lib/floors';
 import { monthlyCsv, monthlyRows, type MonthlyRow } from './lib/monthlyTable';
 import { useSourceLabel } from './lib/sourceLabel';
 import chart from './lib/chart.module.css';
@@ -27,7 +26,6 @@ const de = {
   caption: (year: number) => `Monatswerte ${year}`,
   month: 'Monat',
   loss: 'Verlust',
-  lossPct: 'Verlust in %',
   shaded: (floor: string) => `Verschattet ${floor}`,
   year: 'Jahr',
   kwh: 'kWh',
@@ -57,7 +55,6 @@ const messages: Messages<Texts> = {
     caption: (year) => `Monthly values ${year}`,
     month: 'Month',
     loss: 'Loss',
-    lossPct: 'Loss in %',
     shaded: (floor) => `Shaded ${floor}`,
     year: 'Year',
     kwh: 'kWh',
@@ -99,12 +96,13 @@ export function MonthlyTable() {
   const f = useFormat();
   const lang = useLang();
   const simulation = useSimulation();
-  const weatherStatus = useDataStore((s) => s.weather.status);
+  const pending = useAnnualInputsPending();
   const locationName = useConfigSection('location').name;
   const { numFloors } = useConfigSection('building');
   const heatmapYear = useConfigSection('weather').year;
   const shadedFloor = useShadedFloor();
-  const stats = useHeatmapStats(shadedFloor);
+  // The shaded-hours column is shown with the simulation only: no heatmap before that.
+  const stats = useHeatmapStats(shadedFloor, simulation !== null);
   const labels = useFloorLabels();
   const date = useTimeStore((s) => s.date);
   const source = useSourceLabel(simulation);
@@ -149,8 +147,11 @@ export function MonthlyTable() {
     ],
   });
 
+  const busy = !simulation || pending;
+
   const exportCsv = (): void => {
-    if (!data || !simulation) return;
+    // Provisional values (inputs still loading) are not exported, as in the export menu.
+    if (!data || !simulation || busy) return;
     const csv = monthlyCsv(
       data,
       {
@@ -178,14 +179,14 @@ export function MonthlyTable() {
       title={t.title}
       subtitle={t.subtitle}
       minHeight={160}
-      busy={!simulation || weatherStatus === 'loading'}
+      busy={busy}
       toolbar={
         <Button
           size="sm"
           variant="ghost"
           icon={<DownloadIcon />}
           onClick={exportCsv}
-          disabled={!data}
+          disabled={!data || busy}
           aria-label={t.csvLabel}
         >
           {t.csv}
