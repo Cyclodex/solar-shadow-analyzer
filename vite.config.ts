@@ -22,10 +22,14 @@ export default defineConfig({
       },
       {
         extends: true,
+        // Vitest resolves with `mainFields: []` (Node-like). @react-three/fiber has no "exports" map, only
+        // main (CJS) and module (ESM), so it would load its CJS build, which require()s three and logs
+        // THREE_CJS_DEPRECATED. Prefer the "module" entry instead.
+        resolve: { mainFields: ['module', 'main'] },
         test: {
           name: 'ui',
           environment: 'jsdom',
-          // Load R3F as ESM (its CJS build logs a THREE_CJS_DEPRECATED warning in Node).
+          // Inline R3F so Vite (not Node) transforms and loads its ESM entry.
           server: { deps: { inline: ['@react-three/fiber'] } },
           setupFiles: './src/setupTests.ts',
           include: ['src/**/*.{test,spec}.{ts,tsx}'],

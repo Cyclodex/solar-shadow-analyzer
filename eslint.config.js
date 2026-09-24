@@ -24,6 +24,59 @@ export default defineConfig([
         'warn',
         { allowConstantExport: true, allowCompoundComponents: true },
       ],
+      // `import type` for type-only imports; `typeof import('…')` in vi.mock factories stays allowed.
+      '@typescript-eslint/consistent-type-imports': ['error', { disallowTypeAnnotations: false }],
+    },
+  },
+  {
+    // App code: type-aware checks for promise handling, no stray console output.
+    files: ['src/**/*.{ts,tsx}'],
+    languageOptions: {
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-floating-promises': 'error',
+      // `attributes: false` allows async functions as JSX event handlers (they catch their own errors).
+      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
+      'no-console': ['error', { allow: ['warn', 'error'] }],
+    },
+  },
+  {
+    // The model layer stays UI-free (docs/ARCHITECTURE.md): no React, state, hooks, i18n or three.js.
+    files: ['src/model/**/*.ts'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                'react',
+                'react-dom',
+                'react-dom/*',
+                'zustand',
+                'zustand/*',
+                'three',
+                'three/*',
+                '@react-three/*',
+                '**/state/**',
+                '**/hooks/**',
+                '**/i18n/**',
+                '**/components/**',
+                '**/views/**',
+                '**/controls/**',
+                '**/charts/**',
+                '**/app/**',
+                '**/export/**',
+              ],
+              message: 'src/model must stay UI-free (see docs/ARCHITECTURE.md).',
+            },
+          ],
+        },
+      ],
     },
   },
   {

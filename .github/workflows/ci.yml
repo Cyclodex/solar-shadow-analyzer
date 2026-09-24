@@ -13,20 +13,23 @@ concurrency:
 
 jobs:
   check:
-    name: Lint, typecheck, test, build
+    name: Lint, format, typecheck, test, build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version-file: .nvmrc
           cache: npm
 
       - run: npm ci
 
       - name: Lint
         run: npm run lint
+
+      - name: Format
+        run: npm run format:check
 
       - name: Typecheck
         run: npm run typecheck
@@ -36,3 +39,33 @@ jobs:
 
       - name: Build
         run: npm run build
+
+  e2e:
+    name: E2E (Playwright, Chromium)
+    runs-on: ubuntu-latest
+    needs: check
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # Browsers are only downloaded in CI; locally see README (Tests).
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      # Builds the app and serves it with `vite preview`; external APIs are blocked inside the specs.
+      - name: E2E
+        run: npm run e2e
+
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: test-results
+          retention-days: 7
