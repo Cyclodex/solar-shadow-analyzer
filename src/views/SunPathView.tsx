@@ -10,6 +10,7 @@ import {
   type Messages,
 } from '../i18n';
 import { useCommon } from '../i18n/common';
+import { instantParts } from '../export/filenames';
 import {
   useFloorPlacements,
   useFocusFloor,
@@ -290,7 +291,13 @@ export function SunPathView() {
     .join(' ');
 
   return (
-    <ViewCard title={t.title} subtitle={t.subtitle} exportName="sonnenbahn" minHeight={280}>
+    <ViewCard
+      title={t.title}
+      subtitle={t.subtitle}
+      exportKind="sunPath"
+      exportParts={[location.name, ...instantParts(date, minutes)]}
+      minHeight={280}
+    >
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(f.date(date))} desc={desc}>
           <defs>

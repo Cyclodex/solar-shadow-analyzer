@@ -12,6 +12,7 @@ import {
   type Messages,
 } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
+import { instantParts } from '../export/filenames';
 import {
   useFloorPlacements,
   useHorizons,
@@ -386,7 +387,13 @@ export function FrontalView() {
   ].join(' ');
 
   return (
-    <ViewCard title={t.title} subtitle={t.subtitle(facadeText)} exportName="frontalansicht" minHeight={280}>
+    <ViewCard
+      title={t.title}
+      subtitle={t.subtitle(facadeText)}
+      exportKind="frontal"
+      exportParts={[location.name, ...instantParts(date, minutes)]}
+      minHeight={280}
+    >
       <GeometryNotices />
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(f.date(date), time)} desc={desc}>

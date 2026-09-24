@@ -441,6 +441,7 @@ function HeatmapCard({ floor, heatmap, stats }: CardProps) {
   const c = useCommon();
   const f = useFormat();
   const lang = useLang();
+  const locationName = useConfigSection('location').name;
   const { numFloors } = useConfigSection('building');
   const labels = useFloorLabels();
   const setFocusFloor = useUiStore((s) => s.setFocusFloor);
@@ -566,7 +567,8 @@ function HeatmapCard({ floor, heatmap, stats }: CardProps) {
         aboveName ? t.subtitle(floorName, aboveName, heatmap.year) : t.subtitleTop(floorName, heatmap.year)
       }
       toolbar={toolbar}
-      exportName={`heatmap-${floorName.replace(/\./g, '')}`}
+      exportKind="heatmap"
+      exportParts={[locationName, floorName, heatmap.year]}
       footer={
         <ChartDataTable caption={t.tableCaption(floorName, heatmap.year)} context={t.title} {...table} />
       }

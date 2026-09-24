@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '../components/Button';
 import { CheckIcon, ShareIcon } from '../components/icons';
+import { useDismissOnOutsidePointer, useKeepInViewport } from '../components/usePopover';
 import { useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { copyText } from '../export/clipboard';
@@ -14,7 +15,6 @@ const de = {
   shareLabel: 'Link zu dieser Konfiguration teilen',
   copied: 'Link kopiert',
   manual: 'Kopieren nicht möglich – bitte den Link manuell kopieren:',
-  linkLabel: 'Link zu dieser Konfiguration',
   shareText: (name: string) => `Verschattungsanalyse für Balkon-Solarpanels – ${name}`,
 };
 const messages: Messages<typeof de> = {
@@ -25,15 +25,12 @@ const messages: Messages<typeof de> = {
     shareLabel: 'Share link to this configuration',
     copied: 'Link copied',
     manual: 'Copying failed – please copy the link manually:',
-    linkLabel: 'Link to this configuration',
     shareText: (name) => `Shading analysis for balcony solar panels – ${name}`,
   },
 };
 
 /** How long the "copied" confirmation stays visible. */
 const COPIED_MS = 2500;
-/** Viewport margin kept free by the popover, px. */
-const EDGE = 8;
 
 /**
  * Native share sheet on touch devices (phones, tablets); desktop browsers copy the link instead,
@@ -73,31 +70,17 @@ export function ShareButton() {
     return () => clearTimeout(timer);
   }, [copied]);
 
-  const closeManual = useCallback((focusButton: boolean): void => {
+  const closeManual = (focusButton: boolean): void => {
     setManualUrl(null);
     if (focusButton) buttonRef.current?.focus();
-  }, []);
+  };
 
   // Manual-copy popover: select the link, keep the popover inside the viewport, close on outside clicks.
   useLayoutEffect(() => {
-    const el = popoverRef.current;
-    if (!manualUrl || !el) return;
-    inputRef.current?.select();
-    el.style.setProperty('--shift', '0px');
-    const r = el.getBoundingClientRect();
-    const vw = document.documentElement.clientWidth || window.innerWidth;
-    const shift = r.left < EDGE ? EDGE - r.left : r.right > vw - EDGE ? vw - EDGE - r.right : 0;
-    el.style.setProperty('--shift', `${Math.round(shift)}px`);
+    if (manualUrl) inputRef.current?.select();
   }, [manualUrl]);
-
-  useEffect(() => {
-    if (!manualUrl) return;
-    const onPointerDown = (e: PointerEvent): void => {
-      if (!rootRef.current?.contains(e.target as Node)) closeManual(false);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [manualUrl, closeManual]);
+  useKeepInViewport(popoverRef, manualUrl !== null);
+  useDismissOnOutsidePointer(rootRef, manualUrl !== null, () => closeManual(false));
 
   const onClick = async (): Promise<void> => {
     const url = shareUrl();
@@ -132,12 +115,12 @@ export function ShareButton() {
       <Button
         ref={buttonRef}
         icon={copied ? <CheckIcon /> : <ShareIcon />}
-        onClick={onClick}
+        onClick={() => void onClick()}
         title={touchShare ? t.shareLabel : t.copyLabel}
         data-state={copied ? 'copied' : undefined}
         className={styles.button}
       >
-        <span className={styles.text}>{copied ? t.copied : t.share}</span>
+        <span className="sr-only-narrow">{copied ? t.copied : t.share}</span>
       </Button>
       <span className="sr-only" role="status">
         {copied ? t.copied : ''}

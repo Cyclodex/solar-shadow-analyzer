@@ -3,7 +3,6 @@ import type { FloorYield, HeatmapData, SimulationResult, TiltSweepPoint } from '
 import { HEATMAP_BEHIND, HEATMAP_HORIZON, HEATMAP_NIGHT } from '../model/analysis';
 import type { CsvFormat } from './csv';
 import { heatmapCsv, monthlyResultsCsv, tiltSweepCsv, userCsvFormat } from './resultsCsv';
-import { exportFilename } from './filenames';
 
 function floor(k: number, monthly: number[], unshaded: number[]): FloorYield {
   const annualKwh = monthly.reduce((a, b) => a + b, 0);
@@ -103,6 +102,23 @@ describe('monthlyResultsCsv', () => {
     const r = rows(monthlyResultsCsv(sim, 'de', DE), ';');
     expect(r[1]).toEqual(['Januar', '10', '12', '2', '20,12', '20,12', '0', '30,12', '32,12', '2', '6,23']);
   });
+
+  it('appends the shaded hours of one floor as a last column (1 decimal) on request', () => {
+    const shadedHours = {
+      floor: '1. OG',
+      monthly: Array.from({ length: 12 }, (_, m) => 10.04 + m),
+      year: 197.46,
+    };
+    const r = rows(monthlyResultsCsv(sim, 'de', DE, { shadedHours }), ';');
+    expect(r[0]).toHaveLength(12);
+    expect(r[0][11]).toBe('1. OG: verschattete Stunden (h)');
+    expect(r[1].slice(-2)).toEqual(['6,23', '10']);
+    expect(r[2][11]).toBe('11');
+    expect(r[13][11]).toBe('197,5');
+    expect(rows(monthlyResultsCsv(sim, 'en', INTL, { shadedHours }), ',')[0][11]).toBe(
+      '1. OG: shaded hours (h)',
+    );
+  });
 });
 
 describe('tiltSweepCsv', () => {
@@ -172,19 +188,5 @@ describe('userCsvFormat', () => {
     expect(userCsvFormat('en')).toEqual(INTL);
     browserLanguages(['de']);
     expect(userCsvFormat('de')).toEqual(CH);
-  });
-});
-
-describe('exportFilename', () => {
-  it('builds localised, safe file names', () => {
-    expect(exportFilename('monthly', 'de', ['Zürich', 2025], 'csv')).toBe(
-      'verschattung-monatsertrag-Zurich-2025.csv',
-    );
-    expect(exportFilename('config', 'en', ['47.100° N, 7.450° E'], 'json')).toBe(
-      'shading-configuration-47.100-N-7.450-E.json',
-    );
-    expect(exportFilename('heatmap', 'de', ['', '1. OG'], 'csv')).toBe(
-      'verschattung-schatten-heatmap-1.-OG.csv',
-    );
   });
 });

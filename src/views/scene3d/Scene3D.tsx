@@ -4,8 +4,8 @@ import { Spinner } from '../../components/Spinner';
 import { ViewCard } from '../../components/ViewCard';
 import { useFormat, useMessages } from '../../i18n';
 import { useCommon } from '../../i18n/common';
+import { instantParts } from '../../export/filenames';
 import { useSelectedUtc } from '../../hooks/useModel';
-import { formatMinutes } from '../../model/time';
 import { useConfigSection } from '../../state/configStore';
 import { useTimeStore } from '../../state/timeStore';
 import { sceneMessages } from './messages';
@@ -30,15 +30,15 @@ export default function Scene3D() {
   const minutes = useTimeStore((s) => s.minutes);
   const utc = useSelectedUtc();
   const when = `${f.date(date)}, ${f.time(Math.round(minutes))} ${f.tzName(location.timezone, utc)}`;
-  // PNG file name: view, site and instant (e.g. "3d-view-Bern-2025-06-21-1230").
-  const exportName = [t.exportName, location.name, date, formatMinutes(minutes).replace(':', '')].join('-');
 
   return (
     <ViewCard
       title={t.title}
       // The drag hint only where there is something to drag.
       subtitle={webgl ? t.subtitle(when) : when}
-      exportName={webgl ? exportName : undefined}
+      // PNG file name: site and instant, e.g. "shading-3d-view-Bern-2025-06-21-1230.png".
+      exportKind={webgl ? 'scene3d' : undefined}
+      exportParts={[location.name, ...instantParts(date, minutes)]}
       minHeight={320}
     >
       {webgl ? (

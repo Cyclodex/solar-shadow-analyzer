@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 
 // External data is blocked: results come from the clear-sky fallback, terrain is skipped.
 test.beforeEach(async ({ page }) => {
@@ -30,6 +30,72 @@ test('3D view renders a WebGL canvas with content', async ({ page }) => {
       { timeout: 20_000 },
     )
     .toBeGreaterThan(20);
+});
+
+/** The WebGL canvas scaled down to 48 × 32 px, RGB values (the scene preserves its drawing buffer). */
+function sample(canvas: Locator): Promise<number[]> {
+  return canvas.evaluate((el: HTMLCanvasElement) => {
+    const probe = document.createElement('canvas');
+    probe.width = 48;
+    probe.height = 32;
+    const ctx = probe.getContext('2d');
+    if (!ctx) return [];
+    ctx.drawImage(el, 0, 0, 48, 32);
+    return Array.from(ctx.getImageData(0, 0, 48, 32).data).filter((_, i) => i % 4 !== 3);
+  });
+}
+
+/** Mean absolute difference of two samples per colour channel (0…255). */
+function difference(a: number[], b: number[]): number {
+  return a.reduce((sum, v, i) => sum + Math.abs(v - (b[i] ?? 0)), 0) / Math.max(1, a.length);
+}
+
+/** Waits until the scene has stopped changing (camera moves are animated) and returns it. */
+async function settled(canvas: Locator): Promise<number[]> {
+  let last = await sample(canvas);
+  let still = 0;
+  await expect
+    .poll(
+      async () => {
+        const next = await sample(canvas);
+        still = difference(last, next) === 0 ? still + 1 : 0;
+        last = next;
+        return still;
+      },
+      { intervals: [250], timeout: 20_000 },
+    )
+    .toBeGreaterThanOrEqual(2);
+  return last;
+}
+
+test('"Aus Sonnenrichtung" survives a click on the scene and follows the time', async ({ page }) => {
+  await page.goto('/');
+  await page.getByTitle('Juni-Sonnenwende').click();
+  const time = page.getByRole('slider', { name: 'Uhrzeit (Ortszeit)' });
+  await time.fill('780'); // 13:00
+  const view = page.getByRole('region', { name: '3D-Ansicht', exact: true });
+  const canvas = view.locator('canvas');
+  await canvas.scrollIntoViewIfNeeded();
+  const sun = view.getByRole('button', { name: 'Aus Sonnenrichtung', exact: true });
+  await expect(sun).toBeEnabled({ timeout: 20_000 });
+  await sun.click();
+  await expect(sun).toHaveAttribute('aria-pressed', 'true');
+  const at13 = await settled(canvas);
+
+  // A click without moving is no camera move: the preset stays.
+  await canvas.click();
+  await expect(sun).toHaveAttribute('aria-pressed', 'true');
+  expect(difference(await settled(canvas), at13)).toBeLessThan(1);
+
+  // The view follows the sun to 15:00, to the same pose as choosing the preset anew at 15:00.
+  await time.fill('900');
+  await expect(sun).toHaveAttribute('aria-pressed', 'true');
+  const followed = await settled(canvas);
+  expect(difference(followed, at13)).toBeGreaterThan(5);
+  await view.getByRole('button', { name: 'Front', exact: true }).click();
+  await settled(canvas);
+  await sun.click();
+  expect(difference(await settled(canvas), followed)).toBeLessThan(1);
 });
 
 test('share link restores the configuration', async ({ page, context }) => {

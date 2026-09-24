@@ -39,8 +39,7 @@ export default defineConfig([
     },
     rules: {
       '@typescript-eslint/no-floating-promises': 'error',
-      // `attributes: false` allows async functions as JSX event handlers (they catch their own errors).
-      '@typescript-eslint/no-misused-promises': ['error', { checksVoidReturn: { attributes: false } }],
+      '@typescript-eslint/no-misused-promises': 'error',
       'no-console': ['error', { allow: ['warn', 'error'] }],
     },
   },

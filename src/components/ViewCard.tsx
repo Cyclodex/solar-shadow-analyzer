@@ -1,8 +1,8 @@
 import { useId, useRef, useState, type ReactNode } from 'react';
+import { exportFilename, type ExportKind } from '../export/filenames';
 import { exportViewPng } from '../export/png';
-import { safeFilename } from '../export/download';
 import { useCommon } from '../i18n/common';
-import { useMessages, type Messages } from '../i18n';
+import { useLang, useMessages, type Messages } from '../i18n';
 import { Button } from './Button';
 import { Spinner } from './Spinner';
 import { cssVars } from './cssVars';
@@ -14,12 +14,12 @@ export interface ViewCardProps {
   /** Extra controls in the header, before the PNG button (e.g. a floor selector). */
   toolbar?: ReactNode;
   /**
-   * File name of the PNG export incl. ".png" (build it with useExportFilename, app/useExportFilename.ts:
-   * localised, with location and year); omit (and exportName) to hide the PNG button.
+   * What the PNG export shows: names the file like the Export menu's files (export/filenames.ts,
+   * localised); omit to hide the PNG button.
    */
-  exportFilename?: string;
-  /** @deprecated Base file name (sanitised, ".png" appended); use exportFilename. */
-  exportName?: string;
+  exportKind?: ExportKind;
+  /** File name parts after the kind, in order: location, then e.g. date and time, floor, year. */
+  exportParts?: readonly (string | number)[];
   /** Minimum height of the body in px (reserves space, avoids layout shifts). Default 240. */
   minHeight?: number;
   /** Shows a spinner overlay and sets aria-busy on the body. */
@@ -44,8 +44,8 @@ export function ViewCard({
   title,
   subtitle,
   toolbar,
-  exportFilename,
-  exportName,
+  exportKind,
+  exportParts = [],
   minHeight = 240,
   busy = false,
   footer,
@@ -55,12 +55,13 @@ export function ViewCard({
 }: ViewCardProps) {
   const c = useCommon();
   const t = useMessages(messages);
+  const lang = useLang();
   const titleId = useId();
   const bodyRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState(false);
 
-  const filename = exportFilename ?? (exportName ? `${safeFilename(exportName)}.png` : undefined);
+  const filename = exportKind ? exportFilename(exportKind, lang, exportParts, 'png') : undefined;
 
   const onExport = async (): Promise<void> => {
     if (!bodyRef.current || !filename) return;
@@ -91,7 +92,7 @@ export function ViewCard({
               <Button
                 size="sm"
                 variant="ghost"
-                onClick={onExport}
+                onClick={() => void onExport()}
                 disabled={exporting}
                 aria-label={c.exportPngLabel(title)}
               >

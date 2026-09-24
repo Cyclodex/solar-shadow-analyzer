@@ -1,8 +1,9 @@
 import { useMemo, useState, type KeyboardEvent } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { Button } from '../components/Button';
-import { useFormat, useMessages, type Format, type Messages } from '../i18n';
+import { useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
+import { clearSkyParts } from '../export/filenames';
 import { useAnnualInputsPending, useTiltSweep, type TiltSweepResult } from '../hooks/useModel';
 import { LIMITS } from '../model/defaults';
 import { useConfigSection, usePatch } from '../state/configStore';
@@ -374,6 +375,8 @@ export function TiltSweepChart() {
   const t = useMessages(messages);
   const c = useCommon();
   const f = useFormat();
+  const lang = useLang();
+  const locationName = useConfigSection('location').name;
   const sweep = useTiltSweep();
   const theta = useConfigSection('panels').tiltFromVertical;
   const patch = usePatch();
@@ -465,7 +468,8 @@ export function TiltSweepChart() {
           </Button>
         ) : undefined
       }
-      exportName="neigungsvergleich"
+      exportKind="tiltSweep"
+      exportParts={sweep ? [locationName, sweep.year, ...clearSkyParts(sweep.source, lang)] : [locationName]}
       busy={busy}
       footer={
         table ? (

@@ -318,3 +318,20 @@ th {
     outline: 2px solid CanvasText;
   }
 }
+
+/* Visually hidden on narrow screens only (≤ 480 px), like .sr-only: e.g. the text of a header button
+   that keeps its icon there. */
+@media (max-width: 480px) {
+  .sr-only-narrow {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}

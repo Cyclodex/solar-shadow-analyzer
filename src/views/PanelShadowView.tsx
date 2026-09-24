@@ -3,6 +3,7 @@ import { Segmented } from '../components/Segmented';
 import { ViewCard } from '../components/ViewCard';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
+import { instantParts } from '../export/filenames';
 import { useFloorPlacements, useFocusFloor, useInstant, useLayout, useSelectedUtc } from '../hooks/useModel';
 import { SUBSTRINGS_PER_MODULE, substringBeamLoss } from '../model/geometry';
 import type { FacadeVector, InstantState } from '../model/types';
@@ -258,6 +259,7 @@ export function PanelShadowView() {
   const focus = useFocusFloor();
   const instant = useInstant();
   const utcMs = useSelectedUtc();
+  const date = useTimeStore((st) => st.date);
   const minutes = useTimeStore((st) => st.minutes);
   const [frameRef, width] = useElementWidth<HTMLDivElement>();
   const hatchId = `${useSvgId()}-hatch`;
@@ -364,7 +366,8 @@ export function PanelShadowView() {
       title={t.title}
       subtitle={t.subtitle(floorName)}
       toolbar={<FloorSelector />}
-      exportName="panel-schatten"
+      exportKind="panelShadow"
+      exportParts={[location.name, floorName, ...instantParts(date, minutes)]}
       minHeight={260}
     >
       <GeometryNotices />

@@ -3,6 +3,7 @@ import { ViewCard } from '../components/ViewCard';
 import { cssVars } from '../components/cssVars';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Lang, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
+import { instantParts } from '../export/filenames';
 import { useFloorPlacements, useFocusFloor, useInstant, useLayout, useSelectedUtc } from '../hooks/useModel';
 import { panelsOverlap } from '../model/geometry';
 import type { InstantState, PanelLayout } from '../model/types';
@@ -358,12 +359,13 @@ export function ProfileView() {
   const c = useCommon();
   const f = useFormat();
   const lang = useLang();
-  const tz = useConfig().location.timezone;
+  const { timezone: tz, name: locationName } = useConfig().location;
   const layout = useLayout();
   const placements = useFloorPlacements();
   const instant = useInstant();
   const focus = useFocusFloor();
   const utcMs = useSelectedUtc();
+  const date = useTimeStore((st) => st.date);
   const minutes = useTimeStore((st) => st.minutes);
   const [frameRef, width] = useElementWidth<HTMLDivElement>();
   const hatchId = `${useSvgId()}-hatch`;
@@ -427,7 +429,13 @@ export function ProfileView() {
     .join(' ');
 
   return (
-    <ViewCard title={t.title} subtitle={t.subtitle} exportName="seitenansicht" minHeight={280}>
+    <ViewCard
+      title={t.title}
+      subtitle={t.subtitle}
+      exportKind="profile"
+      exportParts={[locationName, ...instantParts(date, minutes)]}
+      minHeight={280}
+    >
       <GeometryNotices />
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(time)} desc={desc}>

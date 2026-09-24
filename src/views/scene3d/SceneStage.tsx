@@ -1,13 +1,25 @@
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
-import { Canvas, type RootState } from '@react-three/fiber';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useReducer,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
+import { flushSync } from 'react-dom';
+import { Canvas, flushSync as flushSceneSync, type RootState } from '@react-three/fiber';
 import { PCFShadowMap } from 'three';
 import { Button } from '../../components/Button';
 import { Placeholder } from '../../components/Placeholder';
 import { cssVars } from '../../components/cssVars';
 import { ResetIcon } from '../../components/icons';
+import { CANVAS_RENDER_EVENT, type CanvasRenderDetail } from '../../export/canvasRender';
 import { useFormat, useLang, useMessages } from '../../i18n';
 import { useCommon } from '../../i18n/common';
 import type { ActivePreset, CameraApi } from './CameraRig';
+import { renderForCapture } from './captureRender';
 import { sceneMessages } from './messages';
 import { floorToken, useScenePalette } from './palette';
 import { SceneContent } from './SceneContent';
@@ -77,6 +89,8 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
   const f = useFormat();
   const lang = useLang();
   const palette = useScenePalette();
+  // Re-renders this component, so the palette re-reads <html data-theme> (see the capture listener below).
+  const [, refreshPalette] = useReducer((n: number) => n + 1, 0);
   const helpId = useId();
   const apiRef = useRef<CameraApi | null>(null);
   const [preset, setPreset] = useState<ActivePreset>('default');
@@ -118,9 +132,19 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
 
   const onCreated = useCallback((state: RootState) => {
     rootRef.current = state;
-    state.gl.domElement.addEventListener('webglcontextlost', (event) => {
+    const canvas = state.gl.domElement;
+    canvas.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       setLost(true);
+    });
+    // PNG export and print copy the canvas right after this event: draw the current state now.
+    canvas.addEventListener(CANVAS_RENDER_EVENT, (event) => {
+      const detail = (event as CustomEvent<CanvasRenderDetail>).detail;
+      // Print has just switched <html data-theme> to light; the palette's observer would only fire after
+      // the capture. Commit the scene with the new palette first, synchronously in both React roots (the
+      // page and the canvas). Nothing here may be deferred or awaited.
+      if (detail.reason === 'print') flushSceneSync(() => flushSync(refreshPalette));
+      renderForCapture(state.get(), detail);
     });
   }, []);
 
