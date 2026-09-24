@@ -9,6 +9,9 @@ import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { HorizonSection } from './HorizonSection';
 
+/** A failing tile download is retried TILE_RETRIES times with backoff before the loader reports the error. */
+const RETRY_WAIT = { timeout: 5000 };
+
 /** Section plus the terrain loader, which performs the retries. */
 function WithLoader() {
   useTerrainLoader();
@@ -75,8 +78,8 @@ describe('HorizonSection', () => {
 
     it('retries a failed download (here served from the result cache)', async () => {
       render(<WithLoader />);
-      // fetch is disabled in tests: the first download fails.
-      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));
+      // fetch is disabled in tests: the first download fails (after the tile retries).
+      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'), RETRY_WAIT);
       expect(screen.getByText(/konnte nicht geladen werden/)).toBeInTheDocument();
       expect(screen.getByText(/network disabled/)).toBeInTheDocument();
       // Default config: 47.1 / 7.45, observer height 4 m (railing top of the 1st floor, rounded).
@@ -92,10 +95,10 @@ describe('HorizonSection', () => {
 
     it('keeps the error when the retry fails again', async () => {
       render(<WithLoader />);
-      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));
+      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'), RETRY_WAIT);
       fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
       expect(useDataStore.getState().terrain.status).toBe('loading');
-      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));
+      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'), RETRY_WAIT);
       expect(useDataStore.getState().terrain.error).toMatch(/network disabled/);
     });
 
