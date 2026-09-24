@@ -68,7 +68,7 @@ async function settled(canvas: Locator): Promise<number[]> {
   return last;
 }
 
-test('"Aus Sonnenrichtung" survives a click on the scene and follows the time', async ({ page }) => {
+test('"Aus Sonnenrichtung" survives a click, follows the time, gives way at night', async ({ page }) => {
   await page.goto('/');
   await page.getByTitle('Juni-Sonnenwende').click();
   const time = page.getByRole('slider', { name: 'Uhrzeit (Ortszeit)' });
@@ -96,6 +96,14 @@ test('"Aus Sonnenrichtung" survives a click on the scene and follows the time', 
   await settled(canvas);
   await sun.click();
   expect(difference(await settled(canvas), followed)).toBeLessThan(1);
+
+  // Sun below the horizon: the overview (the same view as "reset"), not the narrow view from the sun.
+  await time.fill('1380'); // 23:00
+  await expect(sun).toBeDisabled();
+  await expect(sun).toHaveAttribute('aria-pressed', 'false');
+  const night = await settled(canvas);
+  await view.getByRole('button', { name: 'Ansicht zurücksetzen', exact: true }).click();
+  expect(difference(await settled(canvas), night)).toBeLessThan(1);
 });
 
 test('share link restores the configuration', async ({ page, context }) => {
@@ -119,6 +127,6 @@ test('share link restores the configuration', async ({ page, context }) => {
 
 test('language toggle switches to English', async ({ page }) => {
   await page.goto('/');
-  await page.getByRole('radio', { name: 'EN' }).click();
+  await page.getByRole('radio', { name: 'English', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Shading analysis/i);
 });

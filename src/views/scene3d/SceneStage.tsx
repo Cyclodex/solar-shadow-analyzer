@@ -110,8 +110,13 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
   const { instant, dims, labels } = data;
   const { sun } = instant;
   const sunAvailable = sun.altitude >= SUN_VIEW_MIN_ALTITUDE;
-  // While the sun is down, "from the sun" behaves like a free camera (it resumes when the sun is up).
-  const activePreset: ActivePreset = preset === 'sun' && !sunAvailable ? 'custom' : preset;
+  // While the sun is down, "from the sun" shows the overview: its narrow view from beyond the sun path would
+  // be filled with the path's hour labels. It returns to the sun when the sun is up again.
+  const sunDown = preset === 'sun' && !sunAvailable;
+  const activePreset: ActivePreset = sunDown ? 'default' : preset;
+  useEffect(() => {
+    if (sunDown) apiRef.current?.apply('default', true);
+  }, [sunDown]);
 
   const select = (p: CameraPreset): void => {
     if (apiRef.current?.apply(p, true)) setPreset(p);
