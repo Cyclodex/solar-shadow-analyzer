@@ -17,13 +17,21 @@ export interface BeforeInstallPromptEvent extends Event {
 }
 
 interface InstallState {
-  /** The kept install event; null until the browser offers installation, and after it was used. */
+  /**
+   * The kept install event; null until the browser offers installation, and after it was used (kept while
+   * its dialog is open, so that the button that opened it stays in place).
+   */
   deferred: BeforeInstallPromptEvent | null;
-  /** The app was installed from this page (`appinstalled`, or the install dialog was accepted). */
+  /** The browser's install dialog is open. */
+  prompting: boolean;
+  /**
+   * The app was installed from this page (`appinstalled`, or the install dialog was accepted): no button,
+   * even if the browser fires `beforeinstallprompt` again.
+   */
   installed: boolean;
 }
 
-export const INITIAL_INSTALL: InstallState = { deferred: null, installed: false };
+export const INITIAL_INSTALL: InstallState = { deferred: null, prompting: false, installed: false };
 
 export const useInstallStore = create<InstallState>(() => INITIAL_INSTALL);
 
@@ -47,21 +55,27 @@ export function initInstallPrompt(target: Window = window): () => void {
 }
 
 /**
- * Opens the browser's install dialog. An event can prompt only once, so it is dropped either way; the
- * browser fires a new one if installation is offered again later.
+ * Opens the browser's install dialog (once at a time). An event can prompt only once, so it is dropped
+ * when the dialog closes, whatever the outcome; the browser fires a new one if installation is offered
+ * again later (possibly while the dialog is still closing: that one is kept).
  */
 export async function promptInstall(): Promise<'accepted' | 'dismissed' | 'unavailable'> {
-  const event = useInstallStore.getState().deferred;
-  if (!event) return 'unavailable';
-  useInstallStore.setState({ deferred: null });
+  const { deferred: event, prompting } = useInstallStore.getState();
+  if (!event || prompting) return 'unavailable';
+  useInstallStore.setState({ prompting: true });
+  let outcome: 'accepted' | 'dismissed' | 'unavailable' = 'unavailable';
   try {
     await event.prompt();
-    const { outcome } = await event.userChoice;
-    if (outcome === 'accepted') useInstallStore.setState({ installed: true });
-    return outcome;
+    outcome = (await event.userChoice).outcome;
   } catch {
-    return 'unavailable';
+    // The event was used already, or the browser refused to show the dialog.
   }
+  useInstallStore.setState((s) => ({
+    deferred: s.deferred === event ? null : s.deferred,
+    prompting: false,
+    installed: s.installed || outcome === 'accepted',
+  }));
+  return outcome;
 }
 
 /** iPhone, iPod or iPad, including iPadOS, whose Safari reports a Mac (touch points tell them apart). */

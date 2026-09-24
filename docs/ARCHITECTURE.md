@@ -267,7 +267,9 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   Fehlergrenze (`SceneErrorBoundary` in `App.tsx`) nur die 3D-Ansicht durch einen Hinweis mit «Neu laden».
 - **Installieren:** `initInstallPrompt()` (vor dem ersten Render) hält `beforeinstallprompt` fest (ohne Chromes
   Mini-Infoleiste) und merkt sich `appinstalled`. `InstallButton` im Header: mit Event öffnet es den Installdialog
-  (`prompt()`, das Event ist danach verbraucht), auf iOS/iPadOS (User-Agent, iPadOS über Touchpunkte) ein Popover
+  (`prompt()`; solange er offen ist, bleibt der Knopf mit `aria-disabled` stehen, danach ist das Event verbraucht;
+  nach einer Installation bleibt der Knopf weg, auch wenn der Browser das Event erneut sendet; verschwindet der Knopf
+  mit dem Fokus, geht dieser an das vorherige Bedienelement im Header), auf iOS/iPadOS (User-Agent, iPadOS über Touchpunkte) ein Popover
   mit den Schritten «Teilen → Zu Home-Bildschirm hinzufügen → Als Web-App öffnen → Hinzufügen» (Beschriftungen
   wie in Apples deutscher iPhone-Anleitung für iOS 26/27; `usePopover`-Helfer, Escape und Klick ausserhalb
   schliessen). Ausgeblendet als installierte App (`display-mode: standalone`, `navigator.standalone`) und in

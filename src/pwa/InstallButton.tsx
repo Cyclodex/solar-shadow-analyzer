@@ -40,6 +40,36 @@ const messages: Messages<typeof de> = {
 
 type InstallMode = 'hidden' | 'prompt' | 'ios';
 
+/** Controls that take keyboard focus (not hidden, disabled or skipped by Tab). */
+const FOCUSABLE = ['button', '[href]', 'input', 'select', 'textarea', '[tabindex]']
+  .map((s) => `${s}:not([disabled]):not([hidden]):not([tabindex="-1"]):not([type="hidden"])`)
+  .join(', ');
+
+/**
+ * Ref callback of the install button: if it disappears while it has focus (the app was installed, or the
+ * used install event was dropped), focus moves to the nearest control before it in the header (else
+ * after it) instead of falling back to <body>. React runs the ref cleanup before it removes the element.
+ */
+function keepFocusNearby(button: HTMLButtonElement | null): (() => void) | undefined {
+  if (!button) return undefined;
+  return () => {
+    const container = button.parentElement;
+    if (document.activeElement !== button || !container) return;
+    const others = [...container.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
+      (el) => el !== button && !el.closest('[hidden], [inert]'),
+    );
+    const before = others.filter(
+      (el) => el.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+    const after = others.filter((el) => !before.includes(el));
+    // The first one that actually takes focus (not e.g. invisible).
+    for (const el of [...before.reverse(), ...after]) {
+      el.focus();
+      if (document.activeElement === el) return;
+    }
+  };
+}
+
 /**
  * What the device offers: the browser's install dialog (Chromium, after `beforeinstallprompt`), the
  * manual way on iOS/iPadOS, or nothing (already installed, running as the app, or a browser that
@@ -63,6 +93,7 @@ export function InstallButton() {
   const t = useMessages(messages);
   const c = useCommon();
   const mode = useInstallMode();
+  const prompting = useInstallStore((s) => s.prompting);
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -82,7 +113,14 @@ export function InstallButton() {
 
   if (mode === 'prompt') {
     return (
-      <Button icon={<InstallIcon />} title={t.installTitle} onClick={() => void promptInstall()}>
+      <Button
+        ref={keepFocusNearby}
+        icon={<InstallIcon />}
+        title={t.installTitle}
+        // Stays in place (with focus) while the browser's dialog is open; a second press does nothing.
+        aria-disabled={prompting || undefined}
+        onClick={() => void promptInstall()}
+      >
         <span className="sr-only-narrow">{t.install}</span>
       </Button>
     );

@@ -1,5 +1,12 @@
-import { describe, expect, it } from 'vitest';
-import { isIos, isStandaloneNavigator, promptInstall } from './install';
+import { beforeEach, describe, expect, it } from 'vitest';
+import {
+  INITIAL_INSTALL,
+  isIos,
+  isStandaloneNavigator,
+  promptInstall,
+  useInstallStore,
+  type BeforeInstallPromptEvent,
+} from './install';
 
 describe('isIos', () => {
   const nav = (userAgent: string, maxTouchPoints = 0) => ({ userAgent, maxTouchPoints });
@@ -36,7 +43,22 @@ describe('isStandaloneNavigator', () => {
 });
 
 describe('promptInstall', () => {
+  beforeEach(() => {
+    useInstallStore.setState(INITIAL_INSTALL);
+  });
+
   it('reports "unavailable" without a kept install event', async () => {
     await expect(promptInstall()).resolves.toBe('unavailable');
+  });
+
+  it('drops an event whose dialog cannot be shown', async () => {
+    const event = Object.assign(new Event('beforeinstallprompt'), {
+      platforms: ['web'],
+      prompt: () => Promise.reject(new DOMException('used', 'InvalidStateError')),
+      userChoice: new Promise(() => {}),
+    }) as unknown as BeforeInstallPromptEvent;
+    useInstallStore.setState({ deferred: event });
+    await expect(promptInstall()).resolves.toBe('unavailable');
+    expect(useInstallStore.getState()).toEqual(INITIAL_INSTALL);
   });
 });

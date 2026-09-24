@@ -23,13 +23,34 @@ function restoreNavigator(): void {
   for (const key of overridden.splice(0)) Reflect.deleteProperty(navigator, key);
 }
 
-/** A beforeinstallprompt event whose dialog ends with `outcome`. */
-function installEvent(outcome: 'accepted' | 'dismissed'): BeforeInstallPromptEvent {
+type Outcome = 'accepted' | 'dismissed';
+
+/** A beforeinstallprompt event whose dialog ends with `outcome`, or when the test calls `close`. */
+function installEvent(outcome?: Outcome): BeforeInstallPromptEvent & { close: (o: Outcome) => void } {
+  let close: (o: Outcome) => void = () => {};
+  const userChoice = outcome
+    ? Promise.resolve({ outcome, platform: 'web' })
+    : new Promise<{ outcome: Outcome; platform: string }>((resolve) => {
+        close = (o) => resolve({ outcome: o, platform: 'web' });
+      });
   return Object.assign(new Event('beforeinstallprompt', { cancelable: true }), {
     platforms: ['web'],
     prompt: vi.fn(() => Promise.resolve()),
-    userChoice: Promise.resolve({ outcome, platform: 'web' }),
+    userChoice,
+    close: (o: Outcome) => close(o),
   });
+}
+
+/** The header's other controls: focus goes to the previous one when the install button disappears. */
+function InHeader() {
+  return (
+    <div>
+      <button type="button">Export</button>
+      {/* Like the export menu's file input: never focused. */}
+      <input type="file" hidden aria-label="Datei" />
+      <InstallButton />
+    </div>
+  );
 }
 
 function matchStandalone(): void {
@@ -67,7 +88,7 @@ describe('InstallButton', () => {
   });
 
   it('opens the browser’s install dialog after beforeinstallprompt and hides once installed', async () => {
-    render(<InstallButton />);
+    render(<InHeader />);
     const event = installEvent('accepted');
     act(() => {
       window.dispatchEvent(event);
@@ -77,12 +98,78 @@ describe('InstallButton', () => {
     const button = screen.getByRole('button', { name: 'Installieren' });
     expect(button).toHaveAttribute('title', 'Als App auf diesem Gerät installieren');
 
+    button.focus();
     await act(async () => {
       fireEvent.click(button);
       await event.userChoice;
     });
     expect(event.prompt).toHaveBeenCalledTimes(1);
     expect(screen.queryByRole('button', { name: 'Installieren' })).not.toBeInTheDocument();
+    // Focus stays in the header instead of falling back to <body>.
+    expect(screen.getByRole('button', { name: 'Export' })).toHaveFocus();
+    // Installed: a later event does not bring the button back.
+    act(() => {
+      window.dispatchEvent(installEvent('accepted'));
+    });
+    expect(screen.queryByRole('button', { name: 'Installieren' })).not.toBeInTheDocument();
+  });
+
+  it('keeps the focused button in place while the install dialog is open', async () => {
+    render(<InHeader />);
+    const event = installEvent();
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    const button = screen.getByRole('button', { name: 'Installieren' });
+    button.focus();
+    await act(async () => {
+      fireEvent.click(button);
+      await Promise.resolve();
+    });
+    expect(event.prompt).toHaveBeenCalledTimes(1);
+    expect(button).toBeInTheDocument();
+    expect(button).toHaveFocus();
+    expect(button).toHaveAttribute('aria-disabled', 'true');
+    // A second press while the dialog is open does not prompt again.
+    await act(async () => {
+      fireEvent.click(button);
+      await Promise.resolve();
+    });
+    expect(event.prompt).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      event.close('dismissed');
+      await event.userChoice;
+    });
+    expect(button).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Export' })).toHaveFocus();
+  });
+
+  it('keeps an event the browser fires while the dialog closes', async () => {
+    render(<InstallButton />);
+    const event = installEvent();
+    act(() => {
+      window.dispatchEvent(event);
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Installieren' }));
+      await Promise.resolve();
+    });
+    const next = installEvent('accepted');
+    act(() => {
+      window.dispatchEvent(next);
+    });
+    await act(async () => {
+      event.close('dismissed');
+      await event.userChoice;
+    });
+    const button = screen.getByRole('button', { name: 'Installieren' });
+    expect(button).not.toHaveAttribute('aria-disabled');
+    await act(async () => {
+      fireEvent.click(button);
+      await next.userChoice;
+    });
+    expect(next.prompt).toHaveBeenCalledTimes(1);
   });
 
   it('drops the used event when the install dialog is dismissed', async () => {
@@ -111,6 +198,10 @@ describe('InstallButton', () => {
     expect(screen.getByRole('button', { name: 'Installieren' })).toBeInTheDocument();
     act(() => {
       window.dispatchEvent(new Event('appinstalled'));
+    });
+    expect(screen.queryByRole('button', { name: 'Installieren' })).not.toBeInTheDocument();
+    act(() => {
+      window.dispatchEvent(installEvent('accepted'));
     });
     expect(screen.queryByRole('button', { name: 'Installieren' })).not.toBeInTheDocument();
   });
