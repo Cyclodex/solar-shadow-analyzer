@@ -1,0 +1,65 @@
+/* ─────────────────────────────────────────────
+   PRINT REPORT (global; imported by export/print.ts)
+   Applies to "Bericht drucken" and to the browser's own print command. The width of a printed page
+   puts the app into its one-column layout; usePrintMode() switches to the light theme, so all colours
+   still come from the tokens in styles/global.css.
+   Controls are not part of the report: the sidebar, buttons, button groups, radio groups, sliders,
+   menus, dialogs and closed <details> are hidden. Mark anything else with data-print="hide".
+   Page breaks: no `break-inside: avoid` on flex/grid items — Chromium then pushes the item to the
+   next page without growing its container, and the following content overlaps it. Cards may
+   therefore continue on the next page; charts (<svg>, <canvas>) are never split.
+   ───────────────────────────────────────────── */
+
+@media print {
+  @page {
+    margin: 12mm 12mm 14mm;
+  }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: var(--surface);
+  }
+
+  aside,
+  button,
+  input[type='range'],
+  input[type='file'],
+  [role='radiogroup'],
+  [role='group']:has(> button),
+  [role='menu'],
+  [role='dialog'],
+  details:not([open]),
+  [data-print='hide'],
+  a[href='#results'] {
+    display: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-shadow: none !important;
+    animation: none !important;
+    transition: none !important;
+  }
+
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  /* External links (sources in the footer) with their address. */
+  footer a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    word-break: break-all;
+    color: var(--text-muted);
+  }
+}
