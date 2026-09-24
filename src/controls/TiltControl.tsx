@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { useDeferredValue, useId } from 'react';
 import { Button } from '../components/Button';
 import { NumberField } from '../components/NumberField';
 import { Spinner } from '../components/Spinner';
@@ -51,7 +51,11 @@ export function TiltControl() {
   const id = useId();
   const panels = useConfigSection('panels');
   const patch = usePatch();
-  const sweep = useTiltSweep();
+  const weatherLoading = useDataStore((s) => s.weather.status === 'loading');
+  // While a new series loads, the store still holds the previous one (possibly another site or year), and
+  // the sweep runs on deferred inputs that lag one render behind a finished load: skip it until both are done.
+  const sweepWeatherLoading = useDeferredValue(weatherLoading);
+  const sweep = useTiltSweep(!weatherLoading && !sweepWeatherLoading);
   const weatherSource = useDataStore((s) => s.weather.series?.source);
   const theta = panels.tiltFromVertical;
   const optimum = sweep?.optimum;

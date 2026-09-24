@@ -4,6 +4,7 @@ import { cssVars } from '../../components/cssVars';
 import { ResetIcon } from '../../components/icons';
 import { compassPoint, useFormat, useLang, useMessages, type Messages } from '../../i18n';
 import { useDataStore } from '../../state/dataStore';
+import { LoadErrorDetails } from '../LoadErrorDetails';
 import { profilePeak } from './horizonData';
 import styles from './TerrainStatus.module.css';
 
@@ -65,7 +66,7 @@ export function TerrainStatus() {
     return (
       <div className={styles.error}>
         <p>{t.error}</p>
-        {terrain.error && <p className={styles.detail}>{terrain.error}</p>}
+        <LoadErrorDetails error={terrain.error} />
         <div>
           <Button size="sm" icon={<ResetIcon />} onClick={retry}>
             {t.retry}

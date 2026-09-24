@@ -8,7 +8,7 @@ import { obstacleHorizon } from '../../model/horizon';
 import { MAX_TEXT_LENGTH } from '../../model/share';
 import type { FacadeVector, Obstacle } from '../../model/types';
 import { obstacleName, profilePeak } from './horizonData';
-import { TrashIcon } from './icons';
+import { TrashIcon } from '../icons';
 import styles from './ObstacleItem.module.css';
 
 const de = {

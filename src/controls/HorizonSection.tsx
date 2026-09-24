@@ -48,7 +48,7 @@ export function HorizonSection() {
       .join(' · ') || t.summaryFree;
 
   return (
-    <Section id="horizon" title={t.title} summary={summary}>
+    <Section level={3} id="horizon" title={t.title} summary={summary}>
       <div className={sections.group}>
         <Toggle
           label={t.terrain}

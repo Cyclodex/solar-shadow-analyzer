@@ -3,7 +3,7 @@ import { Button } from '../../components/Button';
 import { useFormat, useMessages, type Messages } from '../../i18n';
 import { formatCoordinateName } from '../../model/share';
 import type { LocationConfig } from '../../model/types';
-import { LocateIcon } from './icons';
+import { LocateIcon } from '../icons';
 import { deviceTimeZone } from './timeZones';
 import styles from './MyLocationButton.module.css';
 

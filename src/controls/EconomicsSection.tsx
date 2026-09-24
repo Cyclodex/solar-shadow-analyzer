@@ -9,7 +9,7 @@ import { useCommon } from '../i18n/common';
 import { DEFAULT_CONFIG, LIMITS } from '../model/defaults';
 import { economics } from '../model/economics';
 import { useConfigSection, usePatch } from '../state/configStore';
-import styles from './sections.module.css';
+import sections from './sections.module.css';
 
 /** Currencies offered in the select (a config may still carry another label, e.g. from an import). */
 const CURRENCIES = ['CHF', 'EUR', 'USD', 'GBP'] as const;
@@ -99,8 +99,13 @@ export function EconomicsSection() {
   const isDefault = JSON.stringify(e) === JSON.stringify(DEFAULT_CONFIG.economics);
 
   return (
-    <Section id="economics" title={t.title} summary={`${f.currency(e.electricityPrice, e.currency)}/kWh`}>
-      <p className={styles.hint}>{t.examples}</p>
+    <Section
+      level={3}
+      id="economics"
+      title={t.title}
+      summary={`${f.currency(e.electricityPrice, e.currency)}/kWh`}
+    >
+      <p className={sections.hint}>{t.examples}</p>
       <SelectField
         label={t.currency}
         value={e.currency}
@@ -159,7 +164,7 @@ export function EconomicsSection() {
         limit={L.lifetimeYears}
         unit={t.years}
       />
-      <div className={styles.actions}>
+      <div className={sections.actions}>
         <Button
           size="sm"
           variant="ghost"

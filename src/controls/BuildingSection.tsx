@@ -73,12 +73,13 @@ export function BuildingSection() {
 
   return (
     <Section
+      level={3}
       id="building"
       title={t.title}
       summary={`${f.deg(facadeAzimuth)} ${dir} · ${c.floorsCount(numFloors)}`}
     >
       <div className={sections.group}>
-        <h3 className={sections.subheading}>{t.orientation}</h3>
+        <h4 className={sections.subheading}>{t.orientation}</h4>
         <div className={styles.orientation}>
           <CompassDial
             className={styles.dial}
@@ -107,7 +108,7 @@ export function BuildingSection() {
       </div>
 
       <div className={sections.group}>
-        <h3 className={sections.subheading}>{t.floorsHeading}</h3>
+        <h4 className={sections.subheading}>{t.floorsHeading}</h4>
         <NumberField
           label={t.numFloors}
           value={numFloors}
@@ -136,7 +137,7 @@ export function BuildingSection() {
       </div>
 
       <div className={sections.group}>
-        <h3 className={sections.subheading}>{t.balconyHeading}</h3>
+        <h4 className={sections.subheading}>{t.balconyHeading}</h4>
         <NumberField
           label={t.railingHeight}
           value={building.railingHeight}

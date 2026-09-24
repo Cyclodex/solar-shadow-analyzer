@@ -156,9 +156,9 @@ export function TimeControls() {
         <label htmlFor={`${id}-time`} className={styles.label}>
           {t.time}
         </label>
-        <output htmlFor={`${id}-time`} className={styles.clock}>
-          {f.time(minutes)}
-        </output>
+        {/* Not <output>: its implicit role=status would announce every animation step (the slider's
+            aria-valuetext already gives screen readers the time). */}
+        <span className={styles.clock}>{f.time(minutes)}</span>
         <Button size="sm" variant="ghost" onClick={setNow} title={t.nowTitle}>
           {t.now}
         </Button>

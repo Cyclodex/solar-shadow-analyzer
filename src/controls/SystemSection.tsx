@@ -5,7 +5,7 @@ import { useFormat, useMessages, type Messages } from '../i18n';
 import { LIMITS } from '../model/defaults';
 import type { ShadingModel } from '../model/types';
 import { useConfigSection, usePatch } from '../state/configStore';
-import styles from './sections.module.css';
+import sections from './sections.module.css';
 
 const de = {
   title: 'System',
@@ -66,7 +66,7 @@ export function SystemSection() {
   const summary = `${f.unit(system.inverterLimitW, 'W')} · ${f.pct(system.lossesPct, 1)}`;
 
   return (
-    <Section id="system" title={t.title} summary={summary}>
+    <Section level={3} id="system" title={t.title} summary={summary}>
       <NumberField
         label={t.inverter}
         value={system.inverterLimitW}
@@ -106,7 +106,7 @@ export function SystemSection() {
         limit={L.albedo}
         info={t.albedoInfo}
       />
-      <div className={styles.group}>
+      <div className={sections.group}>
         <Segmented<ShadingModel>
           label={t.shadingModel}
           showLabel
@@ -118,7 +118,9 @@ export function SystemSection() {
             { value: 'linear', label: t.linear },
           ]}
         />
-        <p className={styles.hint}>{system.shadingModel === 'substring' ? t.substringHint : t.linearHint}</p>
+        <p className={sections.hint}>
+          {system.shadingModel === 'substring' ? t.substringHint : t.linearHint}
+        </p>
       </div>
     </Section>
   );

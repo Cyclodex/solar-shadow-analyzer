@@ -1,0 +1,18 @@
+.cause {
+  color: var(--text-muted);
+}
+
+.details {
+  color: var(--text-muted);
+}
+
+.details summary {
+  cursor: pointer;
+}
+
+.details code {
+  display: block;
+  margin-top: var(--space-1);
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}

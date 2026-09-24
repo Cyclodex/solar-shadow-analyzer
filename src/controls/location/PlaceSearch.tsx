@@ -3,7 +3,7 @@ import { useFormat, useLang, useMessages, type Messages } from '../../i18n';
 import { searchLocations } from '../../model/presets';
 import { formatCoordinateName } from '../../model/share';
 import type { LocationConfig } from '../../model/types';
-import { SearchIcon } from './icons';
+import { SearchIcon } from '../icons';
 import styles from './PlaceSearch.module.css';
 
 /** Delay after the last keystroke before the geocoding request, ms. */

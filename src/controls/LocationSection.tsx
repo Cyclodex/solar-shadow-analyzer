@@ -81,9 +81,9 @@ export function LocationSection() {
   };
 
   return (
-    <Section id="location" title={t.title} summary={location.name}>
+    <Section level={3} id="location" title={t.title} summary={location.name}>
       <div className={sections.group}>
-        <h3 className={sections.subheading}>{t.find}</h3>
+        <h4 className={sections.subheading}>{t.find}</h4>
         <PlaceSearch onSelect={(loc) => patch('location', loc)} />
         <MyLocationButton onLocate={(loc) => patch('location', loc)} />
         <PresetSelect
@@ -95,7 +95,7 @@ export function LocationSection() {
       </div>
 
       <div className={sections.group}>
-        <h3 className={sections.subheading}>{t.details}</h3>
+        <h4 className={sections.subheading}>{t.details}</h4>
         <TextField
           label={t.name}
           value={location.name}

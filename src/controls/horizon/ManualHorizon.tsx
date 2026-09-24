@@ -11,7 +11,7 @@ import {
   readFileText,
   type HorizonFormat,
 } from './horizonData';
-import { TrashIcon, UploadIcon } from './icons';
+import { TrashIcon, UploadIcon } from '../icons';
 import styles from './ManualHorizon.module.css';
 
 type Result = { kind: 'ok' | 'error'; text: string };
@@ -129,7 +129,7 @@ export function ManualHorizon() {
 
   return (
     <div className={styles.root}>
-      <h3 className={styles.heading}>{t.heading}</h3>
+      <h4 className={styles.heading}>{t.heading}</h4>
       <div className={styles.current}>
         <p className={styles.summary}>
           {peak ? t.current(manual.length, f.deg(peak.elevation, 1), azText(peak.azimuth)) : t.none}

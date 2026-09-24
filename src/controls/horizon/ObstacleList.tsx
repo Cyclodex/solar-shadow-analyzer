@@ -7,7 +7,7 @@ import { MAX_OBSTACLES } from '../../model/share';
 import type { Obstacle } from '../../model/types';
 import { useConfigSection, usePatch } from '../../state/configStore';
 import { obstacleName } from './horizonData';
-import { PlusIcon } from './icons';
+import { PlusIcon } from '../icons';
 import { ObstacleItem } from './ObstacleItem';
 import styles from './ObstacleList.module.css';
 
@@ -90,7 +90,7 @@ export function ObstacleList() {
 
   return (
     <div className={styles.root}>
-      <h3 className={styles.heading}>{t.heading}</h3>
+      <h4 className={styles.heading}>{t.heading}</h4>
       <p className={styles.hint}>{t.intro}</p>
       {obstacles.length > 0 ? (
         <ul className={styles.list}>
