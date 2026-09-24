@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { Button } from '../components/Button';
 import { DownloadIcon } from '../components/icons';
@@ -14,6 +14,7 @@ import { ColumnHeader, DataTable, type DataTableColumn, type DataTableRow } from
 import { useFloorLabels } from './lib/floors';
 import { monthlyRows, type MonthlyRow } from './lib/monthlyTable';
 import { useSourceLabel } from './lib/sourceLabel';
+import { useNearViewport } from './lib/useNearViewport';
 import chart from './lib/chart.module.css';
 
 const de = {
@@ -69,8 +70,14 @@ export function MonthlyTable() {
   const { numFloors } = useConfigSection('building');
   const heatmapYear = useConfigSection('weather').year;
   const shadedFloor = useShadedFloor();
-  // The shaded-hours column is shown with the simulation only: no heatmap before that.
-  const stats = useHeatmapStats(shadedFloor, simulation !== null);
+  // The shaded-hours column is shown with the simulation only: no heatmap before that. It needs the year
+  // of shade behind the heatmap: computed only near the screen (useNearViewport), else the last result is
+  // kept (e.g. while the tilt slider is dragged at the top of a phone, the card is far below).
+  const [nearRef, near] = useNearViewport<HTMLElement>();
+  const fresh = useHeatmapStats(shadedFloor, simulation !== null && near);
+  const [kept, setKept] = useState(fresh);
+  if (fresh && fresh !== kept) setKept(fresh);
+  const stats = fresh ?? (near ? null : kept);
   const labels = useFloorLabels();
   const date = useTimeStore((s) => s.date);
   const source = useSourceLabel(simulation);
@@ -160,7 +167,7 @@ export function MonthlyTable() {
             rows={data.months.map(toRow)}
             footer={[toRow(data.year)]}
           />
-          <p className={chart.caption}>
+          <p ref={nearRef} className={chart.caption}>
             {[
               source,
               multi ? t.lossNote : t.single,
@@ -171,7 +178,9 @@ export function MonthlyTable() {
           </p>
         </>
       ) : (
-        <div className={chart.empty}>{t.waiting}</div>
+        <div ref={nearRef} className={chart.empty}>
+          {t.waiting}
+        </div>
       )}
     </ViewCard>
   );

@@ -36,6 +36,16 @@ function lowestY(d: string, x0: number, x1: number): number {
   return Math.max(at(x0), at(x1), ...pts.filter(([x]) => x > x0 && x < x1).map(([, y]) => y));
 }
 
+/**
+ * Renders the chart and waits for the sweep: without an earlier result for the site it may be computed in
+ * background slices (null until then), so the tests do not rely on a synchronous first result.
+ */
+async function renderSweep(): Promise<ReturnType<typeof render>> {
+  const utils = render(<TiltSweepChart />);
+  await screen.findByRole('img', { name: 'Neigungsvergleich' }, { timeout: 10_000 });
+  return utils;
+}
+
 describe('TiltSweepChart', () => {
   beforeEach(() => {
     resetStores();
@@ -47,9 +57,9 @@ describe('TiltSweepChart', () => {
     expect(screen.getByText('Der Neigungsvergleich wird berechnet …')).toBeInTheDocument();
   });
 
-  it('draws floors, total, current tilt and optimum', () => {
+  it('draws floors, total, current tilt and optimum', async () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    const { container } = render(<TiltSweepChart />);
+    const { container } = await renderSweep();
     const img = screen.getByRole('img', { name: 'Neigungsvergleich' });
     expect(img).toHaveAccessibleDescription(
       /^Jahresertrag je Neigung von 0° bis 90°\. Optimum aller Stockwerke bei \d+° mit [\d’']+\skWh\. Aktuelle Neigung 45°\. 2\. OG: Optimum \d+°/,
@@ -61,9 +71,9 @@ describe('TiltSweepChart', () => {
     expect(screen.getByText(/Gerechnet in 5°-Schritten\./)).toBeInTheDocument();
   });
 
-  it('lists θ, β = 90° − θ and the yields per row in the data table (units in the headers)', () => {
+  it('lists θ, β = 90° − θ and the yields per row in the data table (units in the headers)', async () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    await renderSweep();
     const details = screen.getByText('Werte als Tabelle').closest('details');
     if (!details) throw new Error('disclosure expected');
     act(() => {
@@ -98,6 +108,7 @@ describe('TiltSweepChart', () => {
           vi.runAllTimers();
         });
     };
+    settle(); // a first sweep may be computed in the background
     expect(busy()).toBe(false);
 
     // Another input changed: the previous sweep is shown until the new one is computed.
@@ -116,19 +127,19 @@ describe('TiltSweepChart', () => {
     expect(busy()).toBe(false);
   });
 
-  it('computes obstacle horizons per tilt (no approximation caption)', () => {
+  it('computes obstacle horizons per tilt (no approximation caption)', async () => {
     useConfigStore.getState().patch('horizon', {
       obstacles: [{ ...createObstacle('o1', 'Haus'), distance: 6, height: 10 }],
     });
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    await renderSweep();
     expect(screen.getByText(/Gerechnet in 5°-Schritten\./)).toBeInTheDocument();
     expect(screen.queryByText(/Hindernis-Horizonte/)).not.toBeInTheDocument();
   });
 
-  it('click on the chart sets the tilt (snapped to the 5° points)', () => {
+  it('click on the chart sets the tilt (snapped to the 5° points)', async () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    await renderSweep();
     const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
     const x = (26 / 90) * PLOT_W;
     fireEvent.pointerMove(slider, { clientX: x, clientY: 40, pointerId: 1, pointerType: 'mouse' });
@@ -139,10 +150,51 @@ describe('TiltSweepChart', () => {
     expect(slider).toHaveAttribute('aria-valuenow', '25');
   });
 
-  it('arrow keys step through the sweep points', () => {
+  it('touch: a tap only shows the values; the tooltip button applies the tilt', async () => {
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    await renderSweep();
+    const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
+    const x = (21 / 90) * PLOT_W;
+    const touch = { pointerId: 2, pointerType: 'touch' } as const;
+    fireEvent.pointerDown(slider, { ...touch, clientX: x, clientY: 40 });
+    fireEvent.pointerUp(slider, { ...touch, clientX: x, clientY: 40 });
+    fireEvent.click(slider, { clientX: x, clientY: 40 });
+    expect(tilt()).toBe(45);
+    expect(screen.getByText('θ 20° · β 70°')).toBeInTheDocument();
+    expect(screen.queryByText('Klicken übernimmt diese Neigung')).not.toBeInTheDocument();
+    // A second tap does not apply either.
+    fireEvent.pointerDown(slider, { ...touch, clientX: x, clientY: 40 });
+    fireEvent.pointerUp(slider, { ...touch, clientX: x, clientY: 40 });
+    fireEvent.click(slider, { clientX: x, clientY: 40 });
+    expect(tilt()).toBe(45);
+
+    const apply = screen.getByRole('button', { name: 'Neigung 20° übernehmen' });
+    // Tapping the button keeps the touch tooltip open until its click.
+    fireEvent.pointerDown(apply, { ...touch });
+    fireEvent.click(apply);
+    expect(tilt()).toBe(20);
+    expect(slider).toHaveAttribute('aria-valuenow', '20');
+    expect(slider).toHaveFocus();
+    expect(screen.queryByRole('button', { name: /übernehmen/ })).not.toBeInTheDocument();
+  });
+
+  it('touch: a tap outside closes the tooltip without applying', async () => {
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    await renderSweep();
+    const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
+    const x = (61 / 90) * PLOT_W;
+    fireEvent.pointerDown(slider, { pointerId: 2, pointerType: 'touch', clientX: x, clientY: 40 });
+    fireEvent.pointerUp(slider, { pointerId: 2, pointerType: 'touch', clientX: x, clientY: 40 });
+    expect(screen.getByRole('button', { name: 'Neigung 60° übernehmen' })).toBeInTheDocument();
+    fireEvent.pointerDown(document.body, { pointerId: 3, pointerType: 'touch' });
+    expect(screen.queryByRole('button', { name: /übernehmen/ })).not.toBeInTheDocument();
+    expect(tilt()).toBe(45);
+  });
+
+  it('arrow keys step through the sweep points', async () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
     useConfigStore.getState().patch('panels', { tiltFromVertical: 47 });
-    render(<TiltSweepChart />);
+    await renderSweep();
     const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
     expect(slider).toHaveAttribute('aria-valuetext', 'θ 47°, β 43°');
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
@@ -156,9 +208,9 @@ describe('TiltSweepChart', () => {
     expect(tilt()).toBe(0);
   });
 
-  it('places the optimum label where neither the θ marker nor a curve crosses it', () => {
+  it('places the optimum label where neither the θ marker nor a curve crosses it', async () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    const { container } = render(<TiltSweepChart />);
+    const { container } = await renderSweep();
     const label = screen.getByText(/^Optimum \d+°$/);
     const [x0, x1] = textSpan(label);
     const markerX = xOf(45);
@@ -178,9 +230,9 @@ describe('TiltSweepChart', () => {
     }
   });
 
-  it('keyboard focus shows the tooltip; Escape hides it without changing the tilt', () => {
+  it('keyboard focus shows the tooltip; Escape hides it without changing the tilt', async () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    await renderSweep();
     const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
     act(() => slider.focus());
     expect(screen.getByText('θ 45° · β 45°')).toBeInTheDocument();
@@ -192,9 +244,9 @@ describe('TiltSweepChart', () => {
     expect(screen.getByText('θ 50° · β 40°')).toBeInTheDocument();
   });
 
-  it('the total line can be hidden', () => {
+  it('the total line can be hidden', async () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    const { container } = render(<TiltSweepChart />);
+    const { container } = await renderSweep();
     const toggle = screen.getByRole('button', { name: 'Summe zeigen' });
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(toggle);

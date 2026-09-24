@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { Button } from '../components/Button';
 import { useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
@@ -41,6 +41,7 @@ const de = {
   slider: 'Neigung im Neigungsvergleich',
   keys: 'Pfeiltasten: Neigung in 5°-Schritten ändern.',
   clickHint: 'Klicken übernimmt diese Neigung',
+  apply: (deg: string) => `Neigung ${deg} übernehmen`,
   steps: 'Gerechnet in 5°-Schritten.',
   summary: (opt: string, kwh: string, current: string) =>
     `Jahresertrag je Neigung von 0° bis 90°. Optimum aller Stockwerke bei ${opt} mit ${kwh}. Aktuelle Neigung ${current}.`,
@@ -66,6 +67,7 @@ const messages: Messages<Texts> = {
     slider: 'Tilt in the tilt comparison',
     keys: 'Arrow keys: change the tilt in 5° steps.',
     clickHint: 'Click to use this tilt',
+    apply: (deg) => `Use tilt ${deg}`,
     steps: 'Computed in 5° steps.',
     summary: (opt, kwh, current) =>
       `Annual yield per tilt from 0° to 90°. Optimum for all floors at ${opt} with ${kwh}. Current tilt ${current}.`,
@@ -256,9 +258,14 @@ interface InteractionProps {
   onTilt: (tilt: number) => void;
 }
 
-/** Crosshair + tooltip on hover (snapped to the 5° points), click or arrow keys set the tilt (role="slider"). */
+/**
+ * Crosshair + tooltip on hover (snapped to the 5° points), click or arrow keys set the tilt (role="slider").
+ * Touch: a tap only shows a point's values; its tooltip has a button that applies the tilt (the setting is
+ * persisted and recomputes every result, so reading a value must not change it).
+ */
 function SweepInteraction({ geom, sweep, theta, labels, showTotal, f, t, keysId, onTilt }: InteractionProps) {
   const [keyboard, setKeyboard] = useState(false);
+  const sliderRef = useRef<HTMLDivElement>(null);
   const { plot } = geom;
   const tilts = useMemo(() => sweep.points.map((p) => p.tiltFromVertical), [sweep]);
   const n = sweep.points[0].floorsKwh.length;
@@ -270,6 +277,7 @@ function SweepInteraction({ geom, sweep, theta, labels, showTotal, f, t, keysId,
       return i < 0 ? null : i;
     },
     onSelect: (i) => onTilt(tilts[i]),
+    touchPreview: true,
   });
 
   const exact = tilts.indexOf(theta);
@@ -340,6 +348,7 @@ function SweepInteraction({ geom, sweep, theta, labels, showTotal, f, t, keysId,
         />
       )}
       <PlotSlider
+        ref={sliderRef}
         plot={plot}
         label={t.slider}
         describedBy={keysId}
@@ -363,7 +372,24 @@ function SweepInteraction({ geom, sweep, theta, labels, showTotal, f, t, keysId,
           boundsHeight={geom.height}
           title={`${t.current(f.deg(point.tiltFromVertical))} · ${t.beta(f.deg(90 - point.tiltFromVertical))}`}
           rows={rows(index)}
-          note={pointer.hover !== null && point.tiltFromVertical !== theta ? t.clickHint : undefined}
+          note={
+            pointer.hover !== null && !pointer.touch && point.tiltFromVertical !== theta
+              ? t.clickHint
+              : undefined
+          }
+          action={
+            pointer.hover !== null && pointer.touch && point.tiltFromVertical !== theta
+              ? {
+                  label: t.apply(f.deg(point.tiltFromVertical)),
+                  onClick: () => {
+                    onTilt(point.tiltFromVertical);
+                    pointer.clear();
+                    // The button goes away: keep the focus on the chart's slider.
+                    sliderRef.current?.focus({ preventScroll: true });
+                  },
+                }
+              : undefined
+          }
         />
       )}
     </>

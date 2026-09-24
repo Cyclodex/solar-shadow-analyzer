@@ -5,7 +5,7 @@ import {
   LEGEND_SWATCH_GAP,
   LEGEND_SWATCH_W,
 } from '../../components/svg/legend';
-import { estimateTextWidth, flowLayout, type FlowLayout } from '../../components/svg/text';
+import { estimateTextWidth, flowLayout, measureTextWidth, type FlowLayout } from '../../components/svg/text';
 
 // ─────────────────────────────────────────────
 // LEGEND LAYOUT (SVG legends of the charts, see ChartLegend.tsx)
@@ -43,4 +43,18 @@ export function layoutChartLegend(items: readonly ChartLegendItem[], width: numb
   );
   const flow = flowLayout(widths, Math.max(1, width), LEGEND_ITEM_GAP);
   return { ...flow, items, height: flow.rows * LEGEND_ROW_HEIGHT };
+}
+
+/**
+ * Left edge of a chart legend: `preferred` (e.g. the plot's left edge), moved left just as far as needed for
+ * the widest item (label measured) to end inside the SVG of `width` px, but not below 0. On a narrow phone
+ * a long label (e.g. "Verschattung durch oberes Stockwerk") would otherwise run past the SVG's right edge.
+ */
+export function chartLegendX(items: readonly ChartLegendItem[], width: number, preferred: number): number {
+  const widest = items.reduce(
+    (m, it) =>
+      Math.max(m, LEGEND_SWATCH_W + LEGEND_SWATCH_GAP + measureTextWidth(it.label, LEGEND_FONT_SIZE)),
+    0,
+  );
+  return Math.max(0, Math.min(preferred, width - widest));
 }

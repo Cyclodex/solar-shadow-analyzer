@@ -8,7 +8,8 @@ import { angleDiff, clamp, normalizeDeg } from '../../model/units';
 import { useConfigSection } from '../../state/configStore';
 import styles from './HorizonSparkline.module.css';
 
-// Geometry of the plot (viewBox units ≈ CSS px at the sidebar width).
+// Geometry of the plot (viewBox units ≈ CSS px at the sidebar width; narrower and wider layouts are capped
+// and get larger label fonts in HorizonSparkline.module.css).
 const W = 300;
 const H = 132;
 const PAD_L = 28;
@@ -20,6 +21,8 @@ const PLOT_H = H - PAD_T - PAD_B;
 /** Half of the plotted azimuth range around the facade normal (the sun can only reach the panels there). */
 const HALF_RANGE = 90;
 const Y_STEPS = [10, 15, 20, 30, 45, 60, 90] as const;
+/** Compass ticks closer than this to the facade (bold label) are hidden where the labels are larger (CSS). */
+const NEAR_FACADE = 22;
 /** Relative azimuths −90…90 in 1° steps. */
 const RELS = Array.from({ length: 2 * HALF_RANGE + 1 }, (_, i) => i - HALF_RANGE);
 
@@ -212,6 +215,10 @@ export function HorizonSparkline() {
           onPointerLeave={() => {
             if (!focused) setCursor(null);
           }}
+          // A vertical swipe scrolls the page (touch-action: pan-y): no crosshair stays behind.
+          onPointerCancel={() => {
+            if (!focused) setCursor(null);
+          }}
         >
           <rect x={PAD_L} y={PAD_T} width={PLOT_W} height={PLOT_H} className={styles.bg} />
           {[yMax / 2, yMax].map((v) => (
@@ -245,7 +252,7 @@ export function HorizonSparkline() {
             {f.deg(0)}
           </text>
           {ticks.map((rel) => (
-            <g key={rel}>
+            <g key={rel} className={Math.abs(rel) < NEAR_FACADE ? styles.xNear : undefined}>
               <line x1={x(rel)} x2={x(rel)} y1={y(0)} y2={y(0) + 3} className={styles.axis} />
               <text x={x(rel)} y={H - 6} className={styles.xLabel} textAnchor="middle">
                 {compassPoint(azOf(rel), lang)}

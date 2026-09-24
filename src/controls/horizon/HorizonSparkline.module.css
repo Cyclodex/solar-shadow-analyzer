@@ -171,6 +171,31 @@
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * Below the desktop sidebar layout (1100 px, App.module.css) the chart gets a full-width column: cap its
+ * scale so labels and lines do not grow with it (at the fixed 300 × 132 viewBox the 10 px labels became
+ * 22 px on an iPad mini and 24 px on a landscape phone). The larger labels there leave no room for a compass
+ * tick right next to the facade label.
+ */
+@media (max-width: 1099.98px) {
+  .plot {
+    max-width: 360px;
+  }
+
+  .xNear {
+    display: none;
+  }
+}
+
+/* Phones: the plot is scaled down to 0.76–1.06, so the labels are larger in viewBox units (9–13 px). */
+@media (max-width: 599.98px) {
+  .yLabel,
+  .xLabel,
+  .xFacade {
+    font-size: 12px;
+  }
+}
+
 @media (forced-colors: active) {
   .line {
     stroke: CanvasText;

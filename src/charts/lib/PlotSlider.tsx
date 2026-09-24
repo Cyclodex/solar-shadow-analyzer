@@ -1,4 +1,4 @@
-import type { HTMLAttributes } from 'react';
+import type { HTMLAttributes, Ref } from 'react';
 import chart from './chart.module.css';
 
 // ─────────────────────────────────────────────
@@ -28,6 +28,7 @@ export interface PlotSliderProps extends Omit<
   max: number;
   value: number;
   valueText: string;
+  ref?: Ref<HTMLDivElement>;
 }
 
 export function PlotSlider({

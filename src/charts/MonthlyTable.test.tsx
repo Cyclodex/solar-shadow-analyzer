@@ -75,6 +75,39 @@ describe('MonthlyTable', () => {
     ).toBeInTheDocument();
   });
 
+  it('does not recompute the shaded hours far from the screen', () => {
+    const callbacks: IntersectionObserverCallback[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        constructor(cb: IntersectionObserverCallback) {
+          callbacks.push(cb);
+        }
+        observe(): void {}
+        disconnect(): void {}
+      },
+    );
+    const report = (near: boolean): void =>
+      act(() => {
+        callbacks.at(-1)?.(
+          [{ isIntersecting: near } as IntersectionObserverEntry],
+          {} as IntersectionObserver,
+        );
+      });
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    render(<MonthlyTable />);
+    const yearHours = (): string =>
+      within(within(screen.getByRole('table')).getAllByRole('row').at(-1)!)
+        .getAllByRole('cell')
+        .at(-1)!.textContent;
+    const at45 = yearHours();
+    report(false);
+    act(() => useConfigStore.getState().patch('panels', { tiltFromVertical: 5 }));
+    expect(yearHours()).toBe(at45);
+    report(true);
+    expect(yearHours()).not.toBe(at45);
+  });
+
   it('names the scroll region by the table caption, not by the card title', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
     render(<MonthlyTable />);
