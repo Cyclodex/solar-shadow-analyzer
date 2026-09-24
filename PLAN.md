@@ -31,8 +31,8 @@ Die Phasen des alten Plans und ihre Umsetzung:
 - **5.1 Heatmap:** Jahres-Heatmap der Verschattung je Stockwerk.
 - **5.2 Animation:** Tagesanimation mit einstellbarer Geschwindigkeit, alle Ansichten synchron.
 - **6 3D-Visualisierung:** three.js-Ansicht mit Shadow Maps, exaktem Modellschatten als Overlay und Kamera-Presets.
-- **Deployment:** GitHub Pages unter <https://cyclodex.github.io/solar-shadow-analyzer/>, bei jedem Push auf `main`
-  (`.github/workflows/pages.yml`); Build unter einem Unterpfad über `BASE_PATH`.
+- **Deployment:** GitHub Pages unter <https://cyclodex.github.io/solar-shadow-analyzer/>, nach erfolgreicher CI für
+  jeden Push auf `main` (`.github/workflows/pages.yml`); Build unter einem Unterpfad über `BASE_PATH`.
 - **PWA / offline:** installierbar auf Android, iOS/iPadOS und am Computer (Knopf «Installieren», auf iOS mit
   Anleitung); ein Service Worker speichert alle App-Dateien, nach dem ersten Besuch startet die App offline, zuletzt
   geladene Wetter- und Geländedaten bleiben im `localStorage`. Neue Versionen erst nach «Neu laden».

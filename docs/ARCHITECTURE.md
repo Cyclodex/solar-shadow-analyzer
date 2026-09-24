@@ -102,8 +102,8 @@ scripts/validate-terrain.ts  Gelände-Horizont gegen PVGIS printhorizon prüfen 
 scripts/validate-yield.ts    Jahresertrag gegen PVGIS seriescalc/PVcalc prüfen (braucht Netzwerk)
 scripts/generate-icons.ts    App-Icons aus public/favicon.svg rendern (Playwright-Chromium, `npm run icons`)
 scripts/basePath.ts          BASE_PATH → Vite-`base` (für vite.config.ts und playwright.config.ts)
-.github/workflows/ci.yml     CI: Lint, Format, Typecheck, Tests, Build; danach E2E
-.github/workflows/pages.yml  Deployment auf GitHub Pages (Push auf main, manuell)
+.github/workflows/ci.yml     CI: Lint, Format, Typecheck, Tests, Build; danach E2E unter / und unter einem Unterpfad
+.github/workflows/pages.yml  Deployment auf GitHub Pages (nach erfolgreicher CI für einen Push auf main, manuell)
 ```
 
 ## Einheiten und Konventionen
@@ -227,9 +227,10 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
 ## PWA und Deployment
 
 - **Basis-Pfad:** `vite.config.ts` setzt `base` aus der Umgebungsvariable `BASE_PATH` (Standard `/`, normalisiert in
-  `scripts/basePath.ts`). GitHub Pages dient die App als Projektseite unter `/solar-shadow-analyzer/` aus
-  (`.github/workflows/pages.yml` baut mit `BASE_PATH=/solar-shadow-analyzer/`). Laufzeit-URLs hängen nicht vom Pfad ab:
-  `index.html` verweist auf `/favicon.svg` usw., Vite setzt beim Build den Basis-Pfad davor; das Manifest nutzt
+  `scripts/basePath.ts`). GitHub Pages dient die App als Projektseite unter `/solar-shadow-analyzer/` aus;
+  `.github/workflows/pages.yml` übernimmt den Pfad aus `actions/configure-pages` (`base_path`:
+  `/solar-shadow-analyzer`, mit eigener Domain leer, also `/`). Laufzeit-URLs hängen nicht vom Pfad ab: `index.html`
+  verweist auf `/favicon.svg` usw., Vite setzt beim Build den Basis-Pfad davor; das Manifest nutzt
   relative URLs (`start_url`, `scope`, Icons ohne Pfad), nur `id` ist der Basis-Pfad selbst (eine relative `id`
   löst der Browser gegen den Origin auf, nicht gegen `start_url`; `./` wäre `https://cyclodex.github.io/`). Die
   `id` ist die Identität der installierten App und darf sich nach der Veröffentlichung nicht mehr ändern. Der
@@ -274,10 +275,15 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   wie in Apples deutscher iPhone-Anleitung für iOS 26/27; `usePopover`-Helfer, Escape und Klick ausserhalb
   schliessen). Ausgeblendet als installierte App (`display-mode: standalone`, `navigator.standalone`) und in
   Browsern ohne Installationsweg (z. B. Firefox, Safari auf dem Mac).
-- **Deployment:** `.github/workflows/pages.yml` (Push auf `main` und manuell): Build-Job (Node aus `.nvmrc`,
-  `npm ci`, Build mit `BASE_PATH`, `configure-pages`, `upload-pages-artifact` mit `dist`) und Deploy-Job
-  (`deploy-pages`, Environment `github-pages`); Concurrency-Gruppe `pages` ohne Abbruch laufender Deployments.
-  Voraussetzung: Settings → Pages → Source «GitHub Actions».
+- **Deployment:** `.github/workflows/pages.yml` startet per `workflow_run`, wenn die CI abgeschlossen ist, und baut
+  nur nach einem Erfolg für einen Push auf `main` dieses Repositorys (nicht für Pull Requests, etwa aus einem Fork mit
+  einem Branch namens `main`), und zwar genau den geprüften Commit (`workflow_run.head_sha`). Manuell
+  (`workflow_dispatch`) nur von `main`, dann ohne CI. Build-Job (`contents: read`, `pages: read`): Checkout ohne
+  gespeicherte Zugangsdaten, zuerst `configure-pages` (bricht ohne eingerichtete Pages vor Installation und Build
+  ab, liefert `base_path`), Node aus `.nvmrc`, `npm ci`, Build mit `BASE_PATH`, `upload-pages-artifact` mit `dist`.
+  Deploy-Job (`deploy-pages`, Environment `github-pages`) als einziger mit `pages: write` und `id-token: write`.
+  Concurrency-Gruppe `pages` ohne Abbruch laufender Deployments. Voraussetzung: Settings → Pages → Source «GitHub
+  Actions».
 
 ## Tests
 
@@ -311,4 +317,6 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   sieht. Mit `BASE_PATH` laufen Build, `vite preview` und `baseURL` unter dem Pfad (die Specs navigieren relativ mit
   `page.goto('./')`).
 - **CI** (`.github/workflows/ci.yml`, Node aus `.nvmrc`): Lint, `format:check`, Typecheck, Tests und Build; danach
-  E2E mit dem von Playwright installierten Chromium.
+  E2E mit dem von Playwright installierten Chromium, als Matrix unter `/` und unter `/solar-shadow-analyzer/`
+  (`BASE_PATH`, Ergebnisse bei Fehlern als `playwright-results-<Index>`). Checkouts ohne gespeicherte Zugangsdaten
+  (`persist-credentials: false`). Ein Erfolg für einen Push auf `main` löst das Deployment aus.

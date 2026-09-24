@@ -9,7 +9,8 @@ import { basePath } from './scripts/basePath.ts';
 const DARK_BG = '#0b1120';
 
 export default defineConfig({
-  // '/' by default; the GitHub Pages build sets BASE_PATH=/solar-shadow-analyzer/ (.github/workflows/pages.yml).
+  // '/' by default; the GitHub Pages build sets BASE_PATH from configure-pages, i.e. /solar-shadow-analyzer
+  // for the project page (.github/workflows/pages.yml).
   base: basePath(),
   plugins: [
     react(),

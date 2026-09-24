@@ -61,9 +61,10 @@ veröffentlicht, meldet die App «Neue Version verfügbar»: «Neu laden» wechs
 Version, bis alle Fenster der App geschlossen sind oder in einem anderen Fenster «Neu laden» gewählt wird (dann laden
 alle Fenster neu).
 
-Veröffentlicht wird automatisch: Jeder Push auf `main` baut die App und stellt sie auf GitHub Pages
-(`.github/workflows/pages.yml`). Einmalig vor dem ersten Deployment im Repository unter **Settings → Pages** als
-**Source** «GitHub Actions» wählen.
+Veröffentlicht wird automatisch: Nach einem Push auf `main` baut `.github/workflows/pages.yml` die App und stellt sie
+auf GitHub Pages, sobald die CI (Lint, Tests, Build, E2E) für diesen Commit erfolgreich war; manuell gestartet
+veröffentlicht der Workflow den aktuellen Stand von `main` ohne CI. Einmalig vor dem ersten Deployment im Repository
+unter **Settings → Pages** als **Source** «GitHub Actions» wählen.
 
 ## Schnellstart
 
@@ -104,13 +105,14 @@ npm run dev   # http://localhost:5173
   den Teilen-Link, die Sprachumschaltung, das Layout bei 360 px, Manifest und Icons sowie den Offline-Start über den
   Service Worker.
 - Die App lässt sich unter einem Unterpfad bauen: `BASE_PATH=/solar-shadow-analyzer/ npm run build` wie für GitHub
-  Pages. Mit derselben Variable laufen auch die E2E-Tests unter diesem Pfad, z. B.
+  Pages (dort kommt der Pfad aus `actions/configure-pages`). Mit derselben Variable laufen auch die E2E-Tests unter diesem Pfad, z. B.
   `BASE_PATH=/solar-shadow-analyzer/ E2E_PORT=4811 npm run e2e`.
 - `npm run validate:terrain` lädt Höhenkacheln und PVGIS-Horizonte, `npm run validate:yield` Open-Meteo-Wetter und
   PVGIS-Ertragsreihen. Hinter einem HTTP-Proxy braucht Node `NODE_USE_ENV_PROXY=1`; die Optionen stehen im Kopf von
   `scripts/validate-terrain.ts` und `scripts/validate-yield.ts`.
 - Die CI (GitHub Actions, Node aus `.nvmrc`) führt Lint, `format:check`, Typecheck, Tests und Build aus und danach die
-  E2E-Tests. Auf `main` veröffentlicht `.github/workflows/pages.yml` die App auf GitHub Pages.
+  E2E-Tests, einmal unter `/` und einmal unter `/solar-shadow-analyzer/`. Nach einer erfolgreichen CI für einen Push
+  auf `main` veröffentlicht `.github/workflows/pages.yml` die App auf GitHub Pages.
 
 ## Standardwerte
 

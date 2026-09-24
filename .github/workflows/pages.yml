@@ -2,16 +2,19 @@ name: Pages
 
 # Publishes the app on GitHub Pages: https://cyclodex.github.io/solar-shadow-analyzer/
 # One-time repository setting before the first run: Settings → Pages → Source "GitHub Actions".
+#
+# Deploys a push to main only after CI (lint, format, typecheck, tests, build, e2e) passed for it, and
+# exactly the commit CI checked. A manual run deploys the current main without waiting for CI.
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 # One deployment at a time; a queued run waits instead of cancelling the one in progress.
 concurrency:
@@ -21,9 +24,31 @@ concurrency:
 jobs:
   build:
     name: Build
+    # A successful CI run for a push to main of this repository: not for a pull request, e.g. from a fork
+    # whose branch is also called main. Manual runs only from main (the github-pages environment would
+    # reject other branches after the build).
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_repository.full_name == github.repository)
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: read # configure-pages: GET /repos/{owner}/{repo}/pages
     steps:
       - uses: actions/checkout@v7
+        with:
+          # For workflow_run, github.sha is the latest commit on main, not necessarily the one CI checked.
+          ref: ${{ github.event.workflow_run.head_sha || github.sha }}
+          persist-credentials: false
+
+      # First, so that a repository without Pages (Source "GitHub Actions") fails before install and build.
+      # base_path: "/solar-shadow-analyzer" for the project page, "" with a custom domain.
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v6
 
       - uses: actions/setup-node@v7
         with:
@@ -32,14 +57,12 @@ jobs:
 
       - run: npm ci
 
-      # The site is served under /solar-shadow-analyzer/ (project page): asset URLs, manifest and service worker
-      # scope use this base path.
+      # Asset URLs, manifest and service worker scope use the site's base path (scripts/basePath.ts adds the
+      # slashes: "/solar-shadow-analyzer/", or "/" for "").
       - name: Build
         run: npm run build
         env:
-          BASE_PATH: /solar-shadow-analyzer/
-
-      - uses: actions/configure-pages@v6
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
 
       - uses: actions/upload-pages-artifact@v5
         with:
@@ -49,6 +72,9 @@ jobs:
     name: Deploy
     needs: build
     runs-on: ubuntu-latest
+    permissions:
+      pages: write # deploy to Pages
+      id-token: write # verify that the deployment comes from this workflow
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}

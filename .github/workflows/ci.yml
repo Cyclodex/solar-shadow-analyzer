@@ -17,6 +17,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false # no step pushes
 
       - uses: actions/setup-node@v7
         with:
@@ -41,11 +43,21 @@ jobs:
         run: npm run build
 
   e2e:
-    name: E2E (Playwright, Chromium)
+    name: E2E (Playwright, Chromium, base ${{ matrix.base }})
     runs-on: ubuntu-latest
     needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        # At the root as in development, and under a subpath like the GitHub Pages project page (manifest and
+        # service worker scope, share link keeping the path).
+        base: ['/', '/solar-shadow-analyzer/']
+    env:
+      BASE_PATH: ${{ matrix.base }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false # no step pushes
 
       - uses: actions/setup-node@v7
         with:
@@ -66,6 +78,7 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-results
+          # One artifact per matrix leg (names must be unique within a run; no "/" allowed).
+          name: playwright-results-${{ strategy.job-index }}
           path: test-results
           retention-days: 7
