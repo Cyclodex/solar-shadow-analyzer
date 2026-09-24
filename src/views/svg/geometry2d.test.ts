@@ -1,14 +1,20 @@
 import { describe, expect, it } from 'vitest';
 import {
+  boxDistance,
+  boxHitsCircle,
+  boxesOverlap,
   clampLabelX,
   clipPolyline,
   clipSegment,
   fitUniform,
+  labelBox,
   pathD,
   px,
   rayExit,
   raySegment,
   rectD,
+  segmentHitsBox,
+  shiftBox,
   textWidth,
   wrapText,
   type Box,
@@ -110,5 +116,35 @@ describe('geometry2d', () => {
     expect(clampLabelX(2, 40, 'middle', 0, 100)).toBe(20);
     expect(clampLabelX(99, 40, 'start', 0, 100)).toBe(60);
     expect(clampLabelX(50, 40, 'end', 0, 100)).toBe(50);
+  });
+
+  it('estimates label boxes and tests them against boxes, segments and circles', () => {
+    expect(labelBox(50, 20, 30, 'middle', 10)).toEqual({ x0: 35, y0: 11, x1: 65, y1: 22.5 });
+    expect(labelBox(50, 20, 30, 'end', 10).x0).toBe(20);
+    const a: Box = { x0: 0, y0: 0, x1: 10, y1: 10 };
+    expect(boxesOverlap(a, shiftBox(a, 9, 9))).toBe(true);
+    expect(boxesOverlap(a, shiftBox(a, 10, 0))).toBe(false); // touching edges
+    expect(boxDistance(a, shiftBox(a, 13, 14))).toBeCloseTo(5);
+    expect(boxDistance(a, shiftBox(a, 8, 0))).toBe(-2); // penetration depth
+    expect(
+      segmentHitsBox(
+        [
+          { x: -5, y: 5 },
+          { x: 15, y: 5 },
+        ],
+        a,
+      ),
+    ).toBe(true);
+    expect(
+      segmentHitsBox(
+        [
+          { x: -5, y: 15 },
+          { x: 15, y: 15 },
+        ],
+        a,
+      ),
+    ).toBe(false);
+    expect(boxHitsCircle(a, { x: 13, y: 5 }, 4)).toBe(true);
+    expect(boxHitsCircle(a, { x: 13, y: 13 }, 4)).toBe(false); // corner 4.24 px away
   });
 });

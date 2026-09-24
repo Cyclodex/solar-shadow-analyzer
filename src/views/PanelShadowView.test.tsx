@@ -10,6 +10,7 @@ import {
   expectSaneSvg,
   expectUniqueIds,
   figureOf,
+  pathPoints,
   setConfig,
   svgTexts,
 } from './svg/testUtils';
@@ -72,11 +73,18 @@ describe('PanelShadowView', () => {
     render(<PanelShadowView />);
     const group = screen.getByRole('radiogroup', { name: 'Stockwerk für die Detailansicht' });
     expect(group).toBeInTheDocument();
+    const middle = figureOf(document.body);
+    const middleHeight = Number(middle.getAttribute('viewBox')?.split(' ')[3]);
+    expect(svgTexts(middle).join(' ')).toMatch(/Verschatteter Bereich.*Schattenwurf.*Teilstrang/);
     fireEvent.click(screen.getByRole('radio', { name: '3. OG' }));
     expect(useUiStore.getState().focusFloor).toBe(2);
-    expect(screen.getByRole('img', { name: /3\. OG/ })).toHaveAccessibleDescription(
-      /Oberstes Stockwerk: keine Panels darüber/,
+    const top = screen.getByRole('img', { name: /3\. OG/ });
+    expect(top).toHaveAccessibleDescription(/Oberstes Stockwerk: keine Panels darüber/);
+    // Nothing can shade the top floor: no shadow legend, loss note or empty module-label band.
+    expect(svgTexts(figureOf(document.body)).join(' ')).not.toMatch(
+      /Verschatteter|Schattenwurf|Teilstrang|Verlust/,
     );
+    expect(Number(top.getAttribute('viewBox')?.split(' ')[3])).toBeLessThan(middleHeight);
   });
 
   it('uses a compact select for many floors', () => {
@@ -118,7 +126,34 @@ describe('PanelShadowView', () => {
     setConfig({ building: { numFloors: 1 } });
     const { container } = render(<PanelShadowView />);
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
-    expect(pctLabels(svgTexts(figureOf(container)))).toHaveLength(0);
+    const texts = svgTexts(figureOf(container));
+    expect(pctLabels(texts)).toHaveLength(0);
+    expect(texts.join(' ')).toContain('Modul mit Zellen');
+    expect(texts.join(' ')).not.toMatch(/Verschatteter|Schattenwurf|Teilstrang|Verlust/);
+  });
+
+  it('warns when ground-floor panels would reach into the ground', () => {
+    setConfig({ building: { lowestFloor: 0 }, panels: { tiltFromVertical: 20 } });
+    render(<PanelShadowView />);
+    expect(screen.getByRole('note')).toHaveTextContent(
+      /untersten Reihe \(EG\) reichen 7\scm unter das Terrain/,
+    );
+  });
+
+  it('keeps the railing label clear of the cast shadow', () => {
+    // Default config, 21 June 14:15: the whole shadow of the row above covers both upper corners.
+    useTimeStore.setState({ minutes: 14 * 60 + 15 });
+    const { container } = render(<PanelShadowView />);
+    const svg = figureOf(container);
+    const label = Array.from(svg.querySelectorAll('text')).find(
+      (t) => t.textContent === 'Oberkante am Geländer',
+    );
+    const cast = svg.querySelector('path[stroke-dasharray], path[class*="cast"]');
+    expect(label).toBeDefined();
+    expect(cast).not.toBeNull();
+    const top = Math.min(...pathPoints(cast?.getAttribute('d') ?? '').map(([, y]) => y));
+    // Lifted above the cast shadow's clip edge.
+    expect(Number(label?.getAttribute('y'))).toBeLessThan(top);
   });
 
   it('reports night, sun behind the facade and a blocked horizon', () => {

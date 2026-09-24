@@ -17,6 +17,9 @@ export interface Box {
   y1: number;
 }
 
+/** Straight line segment a→b. */
+export type Segment = readonly [Pt, Pt];
+
 /** Rounds a screen coordinate to 0.01 px (short, stable SVG attributes). */
 export const px = (v: number): number => Math.round(v * 100) / 100 + 0;
 
@@ -94,6 +97,36 @@ export function clipSegment(a: Pt, b: Pt, box: Box): [Pt, Pt] | null {
     { x: a.x + t0 * dx, y: a.y + t0 * dy },
     { x: a.x + t1 * dx, y: a.y + t1 * dy },
   ];
+}
+
+/** True if two boxes overlap (touching edges do not count). */
+export function boxesOverlap(a: Box, b: Box): boolean {
+  return a.x0 < b.x1 && b.x0 < a.x1 && a.y0 < b.y1 && b.y0 < a.y1;
+}
+
+/** The box moved by (dx, dy). */
+export function shiftBox(b: Box, dx: number, dy: number): Box {
+  return { x0: b.x0 + dx, y0: b.y0 + dy, x1: b.x1 + dx, y1: b.y1 + dy };
+}
+
+/** Clearance between two boxes in px: the gap if they are apart, minus the penetration depth if they overlap. */
+export function boxDistance(a: Box, b: Box): number {
+  const dx = Math.max(b.x0 - a.x1, a.x0 - b.x1);
+  const dy = Math.max(b.y0 - a.y1, a.y0 - b.y1);
+  if (dx < 0 && dy < 0) return Math.max(dx, dy);
+  return Math.hypot(Math.max(0, dx), Math.max(0, dy));
+}
+
+/** True if the segment a→b passes through `box`. */
+export function segmentHitsBox([a, b]: Segment, box: Box): boolean {
+  return clipSegment(a, b, box) !== null;
+}
+
+/** True if `box` and the circle around `c` with radius `r` overlap. */
+export function boxHitsCircle(box: Box, c: Pt, r: number): boolean {
+  const dx = c.x - within(c.x, box.x0, box.x1);
+  const dy = c.y - within(c.y, box.y0, box.y1);
+  return dx * dx + dy * dy < r * r;
 }
 
 /** Point where the ray from `origin` in direction `dir` leaves `box` (origin inside), else null. */
@@ -204,6 +237,23 @@ export function textWidth(text: string, fontSize: number): number {
 }
 
 export type Anchor = 'start' | 'middle' | 'end';
+
+/** A placed single-line label: baseline point, anchor and text. */
+export interface PlacedText {
+  x: number;
+  y: number;
+  anchor: Anchor;
+  text: string;
+}
+
+/**
+ * Estimated box of a single-line label (font size `fontSize`, baseline `y`): cap height above, a small
+ * descent below, horizontal extent from the anchor.
+ */
+export function labelBox(x: number, y: number, width: number, anchor: Anchor, fontSize: number): Box {
+  const left = anchor === 'start' ? x : anchor === 'middle' ? x - width / 2 : x - width;
+  return { x0: left, y0: y - fontSize * 0.9, x1: left + width, y1: y + fontSize * 0.25 };
+}
 
 /** Moves a label's anchor x so that a text of `width` px stays within [x0, x1]. */
 export function clampLabelX(x: number, width: number, anchor: Anchor, x0: number, x1: number): number {

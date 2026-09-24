@@ -105,6 +105,27 @@ describe('FrontalView', () => {
     expect(screen.getByRole('note')).toHaveTextContent(/überlappen sich um 35 cm/);
   });
 
+  it('warns when ground-floor panels would reach into the ground', () => {
+    setConfig({ building: { lowestFloor: 0 }, panels: { width: 113.4, length: 176.2 } });
+    render(<FrontalView />);
+    expect(screen.getByRole('note')).toHaveTextContent(
+      /untersten Reihe \(EG\) reichen 25\scm unter das Terrain/,
+    );
+  });
+
+  it('draws the hour labels over the current sun, clear of its glyph', () => {
+    const { container } = render(<FrontalView />);
+    const all = Array.from(figureOf(container).querySelectorAll('*'));
+    const twelve = all.find((e) => e.tagName === 'text' && e.textContent === '12');
+    const core = all.find(
+      (e) => e.tagName === 'circle' && /(^|\s)_sunCore_/.test(e.getAttribute('class') ?? ''),
+    );
+    if (!twelve || !core) throw new Error('12 label or sun missing');
+    expect(all.indexOf(twelve)).toBeGreaterThan(all.indexOf(core));
+    // Baseline above the glow (core radius 7 · 1.95).
+    expect(Number(twelve.getAttribute('y'))).toBeLessThan(Number(core.getAttribute('cy')) - 13.65);
+  });
+
   it('does not warn for a single floor', () => {
     setConfig({ building: { numFloors: 1, floorHeight: 200 }, panels: { length: 250, tiltFromVertical: 0 } });
     render(<FrontalView />);

@@ -5,8 +5,10 @@ import type { SolarPathPoint } from '../../model/sun';
 import type { FloorPlacement, HorizonProfile, InstantState, PanelLayout } from '../../model/types';
 import { angleDiff, normalizeDeg } from '../../model/units';
 import {
+  boxHitsCircle,
   clipPolyline,
   fitUniform,
+  labelBox,
   pathD,
   polylinesD,
   rectD,
@@ -100,7 +102,8 @@ export function buildSky(
   const hours: HourMark[] = [];
   let lastLabel: Pt | null = null;
   for (const p of selected) {
-    if (p.minutes % 60 !== 0 || p.sun.altitude <= 0) continue;
+    // The path's 24:00 point closes the curve but is the next day's 0:00 (polar day: same place as "0").
+    if (p.minutes % 60 !== 0 || p.minutes >= 1440 || p.sun.altitude <= 0) continue;
     const q = toScreen(p);
     if (q.x < x0 || q.x > x1) continue;
     const label =
@@ -155,6 +158,34 @@ export function buildSky(
     compass,
     bottom: y1 + AXIS_ROW + 8,
   };
+}
+
+/** A hour label's final position (baseline, centred). */
+export interface HourLabel {
+  x: number;
+  y: number;
+  label: string;
+}
+
+/** Font size of the hour labels (svg.module.css `.small`). */
+const HOUR_FONT = 10;
+
+/**
+ * Hour labels above their dots (below near the top edge). Where the current sun glyph (circle of radius
+ * `ext` around `sun`) would cover a label, it moves just above the glyph, or below it near the top edge.
+ */
+export function hourLabels(sky: Sky, sun: Pt | null, ext: number): HourLabel[] {
+  const top = sky.box.y0 + 4;
+  return sky.hours.flatMap((h) => {
+    if (!h.label) return [];
+    const w = textWidth(h.label, HOUR_FONT);
+    let y = h.y - 7 < top ? h.y + 15 : h.y - 7;
+    if (sun && boxHitsCircle(labelBox(h.x, y, w, 'middle', HOUR_FONT), sun, ext + 1)) {
+      const above = sun.y - ext - 4;
+      y = above >= top ? above : sun.y + ext + 11;
+    }
+    return [{ x: h.x, y, label: h.label }];
+  });
 }
 
 // ── Facade ───────────────────────────────────

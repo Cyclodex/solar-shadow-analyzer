@@ -22,14 +22,14 @@ import {
 } from '../hooks/useModel';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
-import { pathD, px, textWidth, wrapText } from './svg/geometry2d';
+import { pathD, px, wrapText } from './svg/geometry2d';
 import { useSvgId } from './svg/ids';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { useViewText } from './svg/messages';
-import { HatchPattern, SunGlyph, TextLines } from './svg/primitives';
+import { HatchPattern, SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
 import { FONT, LINE, PAD } from './svg/constants';
-import { RIM, buildDiagram, type Diagram } from './svg/sunPathLayout';
+import { RIM, RING_ALTITUDES, buildDiagram, hourLabels, type Diagram } from './svg/sunPathLayout';
 import { SvgFigure } from './svg/SvgFigure';
 import { useElementWidth } from './svg/useElementWidth';
 import s from './svg/svg.module.css';
@@ -59,6 +59,9 @@ const de = {
 };
 type SunPathText = typeof de;
 
+/** Core radius of the current sun's glyph, px. */
+const SUN_R = 7;
+
 const messages: Messages<SunPathText> = {
   de,
   en: {
@@ -79,22 +82,12 @@ const messages: Messages<SunPathText> = {
 
 interface PolarDiagramProps {
   diagram: Diagram;
-  facadeAz: number;
-  width: number;
   hatchId: string;
-  t: SunPathText;
   f: Format;
 }
 
 /** Static drawing: sky disc, behind-the-facade half, horizon, grid, compass, building plan, sun paths. */
-const PolarDiagram = memo(function PolarDiagram({
-  diagram,
-  facadeAz,
-  width,
-  hatchId,
-  t,
-  f,
-}: PolarDiagramProps) {
+const PolarDiagram = memo(function PolarDiagram({ diagram, hatchId, f }: PolarDiagramProps) {
   const { polar, footprint: fp } = diagram;
   const { cx, cy, R, pos } = polar;
   const spokes = Array.from({ length: 12 }, (_, i) => pathD([{ x: cx, y: cy }, pos(i * 30, 0)])).join('');
@@ -112,8 +105,8 @@ const PolarDiagram = memo(function PolarDiagram({
       ))}
       <path d={spokes} className={`${s.grid} ${s.gridDash}`} />
       <circle cx={px(cx)} cy={px(cy)} r={px(R)} className={s.axis} />
-      {[30, 60].map((alt) => {
-        const p = pos(facadeAz + 180 + 12, alt);
+      {RING_ALTITUDES.map((alt) => {
+        const p = pos(diagram.ringAz, alt);
         return (
           <text
             key={alt}
@@ -145,9 +138,9 @@ const PolarDiagram = memo(function PolarDiagram({
         x={px(diagram.facadeLabel.x)}
         y={px(diagram.facadeLabel.y)}
         textAnchor={diagram.facadeLabel.anchor}
-        className={`${s.label} ${s.strong} ${s.num}`}
+        className={`${s.label} ${s.strong} ${s.num} ${s.halo}`}
       >
-        {`${t.facade} ${f.deg(facadeAz)}`}
+        {diagram.facadeLabel.text}
       </text>
       <path d={fp.building} className={s.wall} />
       {fp.balcony && <path d={fp.balcony} className={s.slab} />}
@@ -158,38 +151,22 @@ const PolarDiagram = memo(function PolarDiagram({
         <path key={r.date} d={r.d} className={s.refPath} />
       ))}
       <path d={diagram.selected} className={s.sunPath} />
-      {diagram.refs.map((r) => {
-        if (!r.label) return null;
-        const text = f.dateShort(r.date);
-        const half = textWidth(text, 10) / 2;
-        return (
+      {diagram.refs.map((r) =>
+        r.label ? (
           <text
             key={r.date}
-            x={px(Math.min(width - PAD - half, Math.max(PAD + half, r.label.x)))}
+            x={px(r.label.x)}
             y={px(r.label.y)}
-            textAnchor="middle"
+            textAnchor={r.label.anchor}
             className={`${s.small} ${s.halo}`}
           >
-            {text}
-          </text>
-        );
-      })}
-      {diagram.hours.map((h, i) => (
-        <circle key={i} cx={px(h.x)} cy={px(h.y)} r={2.5} className={s.hourDot} />
-      ))}
-      {diagram.hours.map((h, i) =>
-        h.label ? (
-          <text
-            key={i}
-            x={px(h.lx)}
-            y={px(h.ly)}
-            textAnchor="middle"
-            className={`${s.small} ${s.num} ${s.halo}`}
-          >
-            {h.label}
+            {r.label.text}
           </text>
         ) : null,
       )}
+      {diagram.hours.map((h, i) => (
+        <circle key={i} cx={px(h.x)} cy={px(h.y)} r={2.5} className={s.hourDot} />
+      ))}
     </g>
   );
 });
@@ -226,6 +203,7 @@ export function SunPathView() {
     () =>
       buildDiagram({
         width,
+        latitude: location.latitude,
         facadeAz,
         selectedDate: date,
         refDates,
@@ -235,15 +213,42 @@ export function SunPathView() {
         layout,
         placement,
         lang,
+        facadeText: `${t.facade} ${f.deg(facadeAz)}`,
+        refLabels: refDates.map((d) => f.dateShort(d)),
       }),
-    [width, facadeAz, date, refDates, dec, mar, jun, selected, horizons, focus, layout, placement, lang],
+    [
+      width,
+      location.latitude,
+      facadeAz,
+      date,
+      refDates,
+      dec,
+      mar,
+      jun,
+      selected,
+      horizons,
+      focus,
+      layout,
+      placement,
+      lang,
+      t,
+      f,
+    ],
   );
   const { cx, cy, R, pos } = diagram.polar;
 
-  // Current sun (colour from the exact state of the analysed floor).
+  // Current sun (colour from the exact state of the analysed floor); hour labels step aside for it.
   const { sun } = instant;
   const sunUp = sun.altitude > 0;
   const lit = instant.floors[focus]?.state === 'lit';
+  const sunAt = sunUp ? pos(sun.azimuth, sun.altitude) : null;
+  const hours = hourLabels(
+    diagram.hours,
+    diagram.polar,
+    sunAt,
+    SUN_R * SUN_GLYPH_EXTENT,
+    diagram.fixedLabels,
+  );
 
   // Status (reserved line count so the figure keeps its height while the time animates).
   const tz = f.tzName(location.timezone, utcMs);
@@ -281,7 +286,7 @@ export function SunPathView() {
 
   const desc = [t.desc(`${f.deg(facadeAz)} ${compassPoint(facadeAz, lang)}`), statusA, statusB, statusC]
     .filter(Boolean)
-    .map((l) => `${l}.`)
+    .map((l) => (/[.!?]$/.test(l) ? l : `${l}.`))
     .join(' ');
 
   return (
@@ -291,13 +296,25 @@ export function SunPathView() {
           <defs>
             <HatchPattern id={hatchId} />
           </defs>
-          <PolarDiagram diagram={diagram} facadeAz={facadeAz} width={width} hatchId={hatchId} t={t} f={f} />
-          {sunUp && (
+          <PolarDiagram diagram={diagram} hatchId={hatchId} f={f} />
+          {sunAt && (
             <g>
               <path d={pathD([{ x: cx, y: cy }, pos(sun.azimuth, 0)])} className={styles.azimuthLine} />
-              <SunGlyph {...pos(sun.azimuth, sun.altitude)} r={7} dim={!lit} />
+              <SunGlyph {...sunAt} r={SUN_R} dim={!lit} />
             </g>
           )}
+          {/* Hour labels over the sun glyph and azimuth line (their halo keeps them legible) */}
+          {hours.map((h) => (
+            <text
+              key={h.label}
+              x={px(h.x)}
+              y={px(h.y)}
+              textAnchor="middle"
+              className={`${s.small} ${s.num} ${s.halo}`}
+            >
+              {h.label}
+            </text>
+          ))}
           <TextLines x={PAD} y={statusTop} lines={lines} className={`${s.label} ${s.num}`} />
           <SvgLegend layout={legend} />
         </SvgFigure>

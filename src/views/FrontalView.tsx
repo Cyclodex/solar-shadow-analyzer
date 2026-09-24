@@ -20,7 +20,6 @@ import {
   useSelectedUtc,
   useSolarPath,
 } from '../hooks/useModel';
-import { panelsOverlap } from '../model/geometry';
 import type { FloorPlacement, InstantState, PanelLayout } from '../model/types';
 import { angleDiff } from '../model/units';
 import { useConfig } from '../state/configStore';
@@ -32,6 +31,7 @@ import {
   buildFacade,
   buildSky,
   floorValue,
+  hourLabels,
   shadeRects,
   type Facade,
   type Sky,
@@ -41,10 +41,10 @@ import { useSvgId } from './svg/ids';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { relativeDirection, useViewText, type ViewText } from './svg/messages';
-import { HatchPattern, SunGlyph, TextLines } from './svg/primitives';
+import { HatchPattern, SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
 import { SvgFigure } from './svg/SvgFigure';
 import { useElementWidth } from './svg/useElementWidth';
-import { ViewNotice } from './svg/ViewNotice';
+import { GeometryNotices } from './svg/ViewNotice';
 import s from './svg/svg.module.css';
 import styles from './FrontalView.module.css';
 
@@ -135,19 +135,6 @@ const SkyWindow = memo(function SkyWindow({ sky, width, skyId, hatchId, f }: Sky
       {sky.hours.map((h, i) => (
         <circle key={i} cx={px(h.x)} cy={px(h.y)} r={2.5} className={s.hourDot} />
       ))}
-      {sky.hours.map((h, i) =>
-        h.label ? (
-          <text
-            key={i}
-            x={px(h.x)}
-            y={px(h.y - 7 < box.y0 + 4 ? h.y + 15 : h.y - 7)}
-            textAnchor="middle"
-            className={`${s.small} ${s.num} ${s.halo}`}
-          >
-            {h.label}
-          </text>
-        ) : null,
-      )}
       <path
         d={pathD([
           { x: box.x0, y: box.y1 },
@@ -388,6 +375,8 @@ export function FrontalView() {
   const lit = instant.floors.some((fl) => fl.state === 'lit');
   const sunX = inWindow ? sky.x(rel) : rel > 0 ? sky.box.x0 + SUN_R : sky.box.x1 - SUN_R;
   const sunY = Math.max(sky.box.y0, sky.y(sun.altitude));
+  const sunR = inWindow ? SUN_R : 5;
+  const hours = hourLabels(sky, sun.altitude > 0 ? { x: sunX, y: sunY } : null, sunR * SUN_GLYPH_EXTENT);
 
   const facadeText = `${f.deg(facadeAz)} ${compassPoint(facadeAz, lang)}`;
   const desc = [
@@ -395,13 +384,10 @@ export function FrontalView() {
     `${status}.`,
     t.floorStates(floorStatesText(instant, placements, vt, c, f, lang)),
   ].join(' ');
-  const overlap = n > 1 && panelsOverlap(layout);
 
   return (
     <ViewCard title={t.title} subtitle={t.subtitle(facadeText)} exportName="frontalansicht" minHeight={280}>
-      {overlap && (
-        <ViewNotice>{vt.overlap(f.unit((layout.drop - layout.floorHeight) * 100, 'cm'))}</ViewNotice>
-      )}
+      <GeometryNotices />
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(f.date(date), time)} desc={desc}>
           <defs>
@@ -413,9 +399,19 @@ export function FrontalView() {
             <HatchPattern id={shadeHatchId} tone="light" />
           </defs>
           <SkyWindow sky={sky} width={width} skyId={skyId} hatchId={hatchId} f={f} />
-          {sun.altitude > 0 && (
-            <SunGlyph x={sunX} y={sunY} r={inWindow ? SUN_R : 5} dim={!lit || !inWindow} />
-          )}
+          {sun.altitude > 0 && <SunGlyph x={sunX} y={sunY} r={sunR} dim={!lit || !inWindow} />}
+          {/* Hour labels over the sun glyph (their halo keeps them legible) */}
+          {hours.map((h) => (
+            <text
+              key={h.label}
+              x={px(h.x)}
+              y={px(h.y)}
+              textAnchor="middle"
+              className={`${s.small} ${s.num} ${s.halo}`}
+            >
+              {h.label}
+            </text>
+          ))}
           <FacadeDrawing facade={facade} width={width} />
           <ShadeLayer
             instant={instant}

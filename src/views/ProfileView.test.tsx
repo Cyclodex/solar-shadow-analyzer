@@ -12,6 +12,7 @@ import {
   expectSaneSvg,
   expectUniqueIds,
   figureOf,
+  pathPoints,
   setConfig,
   svgTexts,
 } from './svg/testUtils';
@@ -81,6 +82,60 @@ describe('ProfileView', () => {
     expect(text).toMatch(/Nur ein Stockwerk/);
     expect(text).not.toMatch(/kritisch/);
     expect(text).not.toMatch(/Abstand/);
+  });
+
+  it.each([
+    { name: 'tall floors', patch: { building: { floorHeight: 500 } } },
+    { name: '4 floors', patch: { building: { numFloors: 4 } } },
+    { name: 'single floor', patch: { building: { numFloors: 1 } } },
+  ])('keeps the dimension labels clear of the status text and floor labels: $name', ({ patch }) => {
+    setConfig(patch);
+    const { container } = render(<ProfileView />);
+    const texts = Array.from(figureOf(container).querySelectorAll('text'));
+    const find = (re: RegExp): SVGTextElement => {
+      const el = texts.find((t) => re.test(t.textContent ?? ''));
+      if (!el) throw new Error(`no text ${re}`);
+      return el;
+    };
+    const y = (el: Element): number => Number(el.getAttribute('y'));
+    const reach = find(/^(Auskragung )?80\scm$/);
+    const status = find(/Profilwinkel/);
+    // Reach baseline + descent + gap + the status line's cap height.
+    expect(y(status) - y(reach)).toBeGreaterThanOrEqual(16);
+    if (patch.building.numFloors === 1) return;
+    // The rotated floor-height label (glyphs up to ~9 px left of its baseline) stays clear of the floor labels.
+    const height = find(/^(Stockwerkhöhe )?(280|500)\scm$/);
+    const floorLabelRight = Math.max(
+      ...texts.filter((t) => /\. OG$/.test(t.textContent ?? '')).map((t) => Number(t.getAttribute('x'))),
+    );
+    expect(Number(height.getAttribute('x')) - 13).toBeGreaterThanOrEqual(floorLabelRight - 0.01);
+  });
+
+  it('warns when ground-floor panels would reach into the ground', () => {
+    setConfig({ building: { lowestFloor: 0 }, panels: { width: 113.4, length: 176.2 } });
+    render(<ProfileView />);
+    expect(screen.getByRole('note')).toHaveTextContent(
+      /untersten Reihe \(EG\) reichen 25\scm unter das Terrain/,
+    );
+  });
+
+  it('ends the sun ray on the balcony floor instead of drawing it through the slab', () => {
+    // 21 June 15:00: the ray passes above the lower row (profile angle below the critical angle).
+    useTimeStore.setState({ minutes: 15 * 60 });
+    const { container } = render(<ProfileView />);
+    const paths = Array.from(figureOf(container).querySelectorAll('path'));
+    const byClass = (name: string): SVGPathElement | undefined =>
+      paths.find((p) => new RegExp(`(^|\\s)_${name}_`).test(p.getAttribute('class') ?? ''));
+    const [to] = pathPoints(byClass('ray')?.getAttribute('d') ?? '');
+    // Slab rectangles: M x y h w v h h −w Z → top-left, top-right, bottom-right, bottom-left.
+    const slabPts = pathPoints(byClass('slab')?.getAttribute('d') ?? '');
+    expect(slabPts.length).toBe(12);
+    const onSlabTop = [];
+    for (let i = 0; i < slabPts.length; i += 4) {
+      const [[x0, top], [x1]] = slabPts.slice(i, i + 2);
+      if (Math.abs(to[1] - top) < 0.05 && to[0] > x0 && to[0] < x1) onSlabTop.push(i);
+    }
+    expect(onSlabTop).toHaveLength(1);
   });
 
   it('shows at least the analysed pair of floors and names it when not all fit', () => {

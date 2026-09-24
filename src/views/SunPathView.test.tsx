@@ -71,6 +71,58 @@ describe('SunPathView', () => {
     expectSaneSvg(svg);
   });
 
+  it('ends every sentence of the description with a single period', () => {
+    const descOf = (): string => figureOf(document.body).querySelector('desc')?.textContent ?? '';
+    const cases: (() => void)[] = [
+      () => {},
+      // North facade in winter: "never in front of the facade." already ends with a period.
+      () => {
+        setConfig({ building: { facadeAzimuth: 0 } });
+        useTimeStore.setState({ date: '2025-12-21' });
+      },
+      // Polar night: "… does not rise." likewise.
+      () => {
+        setConfig({ location: { latitude: 78.2, longitude: 15.6, timezone: 'Arctic/Longyearbyen' } });
+        useTimeStore.setState({ date: '2025-12-21' });
+      },
+    ];
+    for (const prepare of cases) {
+      resetStores();
+      prepare();
+      const { unmount } = render(<SunPathView />);
+      const desc = descOf();
+      expect(desc).toMatch(/Die Fassade schaut nach \d+° \S+\. /);
+      expect(desc).not.toMatch(/\.\./);
+      unmount();
+    }
+  });
+
+  it('keeps the facade label inside the figure for an east or west facade', () => {
+    for (const facadeAzimuth of [90, 270]) {
+      setConfig({ building: { facadeAzimuth } });
+      const { container, unmount } = render(<SunPathView />);
+      const label = Array.from(figureOf(container).querySelectorAll('text')).find(
+        (t) => t.textContent === `Fassade ${facadeAzimuth}°`,
+      );
+      const x = Number(label?.getAttribute('x'));
+      if (label?.getAttribute('text-anchor') === 'end') expect(x).toBeGreaterThan(80);
+      else expect(x).toBeLessThan(480 - 80);
+      unmount();
+    }
+  });
+
+  it('draws the hour labels over the current sun', () => {
+    const { container } = render(<SunPathView />);
+    const svg = figureOf(container);
+    const all = Array.from(svg.querySelectorAll('*'));
+    const twelve = all.findIndex((e) => e.tagName === 'text' && e.textContent === '12');
+    const sunCore = all.findIndex(
+      (e) => e.tagName === 'circle' && /(^|\s)_sunCore_/.test(e.getAttribute('class') ?? ''),
+    );
+    expect(sunCore).toBeGreaterThan(0);
+    expect(twelve).toBeGreaterThan(sunCore);
+  });
+
   it('shows the current sun only above the horizon', () => {
     useTimeStore.setState({ minutes: 0 });
     const { container } = render(<SunPathView />);

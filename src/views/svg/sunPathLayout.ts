@@ -4,8 +4,24 @@ import { horizonAt } from '../../model/horizon';
 import type { SolarPathPoint } from '../../model/sun';
 import type { FloorPlacement, HorizonProfile, PanelLayout } from '../../model/types';
 import { angleDiff, toRad } from '../../model/units';
-import { circleD, pathD, polylinesD, px, type Anchor, type Pt } from './geometry2d';
-import { PAD } from './constants';
+import {
+  boxDistance,
+  boxHitsCircle,
+  boxesOverlap,
+  circleD,
+  clampLabelX,
+  labelBox,
+  pathD,
+  polylinesD,
+  px,
+  shiftBox,
+  textWidth,
+  type Anchor,
+  type Box,
+  type PlacedText,
+  type Pt,
+} from './geometry2d';
+import { FONT, PAD } from './constants';
 
 // ─────────────────────────────────────────────
 // SUN PATH LAYOUT (pure, no React)
@@ -68,11 +84,15 @@ export interface HourMark {
   ly: number;
 }
 
+/** Font size of hour, date and ring labels (svg.module.css `.small`). */
+const SMALL = 10;
+
 export function hourMarks(points: readonly SolarPathPoint[], polar: Polar): HourMark[] {
   const out: HourMark[] = [];
   let last: Pt | null = null;
   for (const p of points) {
-    if (p.minutes % 60 !== 0 || p.sun.altitude <= 0) continue;
+    // The path's 24:00 point closes the curve but is the next day's 0:00 (polar day: same place as "0").
+    if (p.minutes % 60 !== 0 || p.minutes >= 1440 || p.sun.altitude <= 0) continue;
     const q = polar.pos(p.sun.azimuth, p.sun.altitude);
     // Label radially outwards (towards the horizon ring).
     const dx = q.x - polar.cx;
@@ -178,8 +198,53 @@ export function compassLabels(polar: Polar, facadeAz: number, lang: Lang) {
 export interface RefPath {
   date: string;
   d: string;
-  /** Direct label position (highest point of the path, nudged towards the zenith); null if not labelled. */
-  label: Pt | null;
+  /** Direct label (highest point of the path, nudged towards the zenith, inside the figure); null if none. */
+  label: PlacedText | null;
+}
+
+/** Altitudes of the labelled grid rings. */
+export const RING_ALTITUDES = [30, 60] as const;
+
+/** Estimated box of a hour / date / ring label (centred, `.small`). */
+export function smallLabelBox(x: number, y: number, text: string): Box {
+  return labelBox(x, y, textWidth(text, SMALL), 'middle', SMALL);
+}
+
+/** Estimated box of the facade label (bold, wider than textWidth estimates). */
+export function facadeLabelBox(l: PlacedText): Box {
+  return labelBox(l.x, l.y, textWidth(l.text, FONT) * 1.12, l.anchor, FONT);
+}
+
+/**
+ * Azimuth for the altitude-ring labels: pole-ward (where the sun path rarely runs) or the nearest direction
+ * in 15° steps where both labels stay ≥ 4 px clear of `obstacles` (label boxes) and `points` (the day's
+ * path); else the direction with the most room.
+ */
+export function ringLabelAzimuth(
+  polar: Polar,
+  latitude: number,
+  obstacles: readonly Box[],
+  points: readonly Pt[],
+): number {
+  const preferred = (latitude >= 0 ? 0 : 180) + 12;
+  let best = preferred;
+  let bestClear = -Infinity;
+  for (let i = 0; i < 24; i++) {
+    const az = preferred + Math.ceil(i / 2) * 15 * (i % 2 === 0 ? 1 : -1);
+    let clear = Infinity;
+    for (const alt of RING_ALTITUDES) {
+      const p = polar.pos(az, alt);
+      const b = smallLabelBox(p.x, p.y + 4, `${alt}°`);
+      for (const o of obstacles) clear = Math.min(clear, boxDistance(b, o));
+      for (const q of points) clear = Math.min(clear, boxDistance(b, { x0: q.x, y0: q.y, x1: q.x, y1: q.y }));
+    }
+    if (clear >= 4) return az;
+    if (clear > bestClear) {
+      bestClear = clear;
+      best = az;
+    }
+  }
+  return best;
 }
 
 export interface Diagram {
@@ -194,13 +259,18 @@ export interface Diagram {
   normal: string;
   backHalf: string;
   frontHalf: string;
-  facadeLabel: { x: number; y: number; anchor: Anchor };
+  facadeLabel: PlacedText;
+  /** Azimuth at which the altitude rings are labelled. */
+  ringAz: number;
+  /** Boxes of the labels other than the hours (dates, compass, facade, rings) that hour labels must avoid. */
+  fixedLabels: Box[];
   front: [number, number][];
   peak: SolarPathPoint | null;
 }
 
 export interface DiagramInput {
   width: number;
+  latitude: number;
   facadeAz: number;
   selectedDate: string;
   refDates: readonly string[];
@@ -210,45 +280,164 @@ export interface DiagramInput {
   layout: PanelLayout;
   placement: FloorPlacement;
   lang: Lang;
+  /** Label texts: the facade orientation and the reference dates (same order as refDates). */
+  facadeText: string;
+  refLabels: readonly string[];
 }
 
 /** Everything that does not depend on the time of day. */
 export function buildDiagram(input: DiagramInput): Diagram {
-  const { facadeAz } = input;
-  const polar = makePolar(input.width);
+  const { facadeAz, width } = input;
+  const polar = makePolar(width);
   const { cx, cy, R, pos } = polar;
   const refs = input.refPaths.map((pts, i) => {
     const top = input.refDates[i] === input.selectedDate ? null : peak(pts);
     const p = top ? pos(top.sun.azimuth, top.sun.altitude) : null;
+    const text = input.refLabels[i] ?? '';
     return {
       date: input.refDates[i],
       d: polylinesD(pathPieces(pts, polar)),
-      label: p ? { x: p.x, y: p.y + (cy > p.y ? 13 : -6) } : null,
+      label: p
+        ? {
+            x: clampLabelX(p.x, textWidth(text, SMALL), 'middle', PAD, width - PAD),
+            y: p.y + (cy > p.y ? 13 : -6),
+            anchor: 'middle' as const,
+            text,
+          }
+        : null,
     };
   });
   const ends = [pos(facadeAz - 90, 0), pos(facadeAz + 90, 0)];
   const normalTip = pos(facadeAz, 0);
-  const g = toRad(facadeAz);
+  const hours = hourMarks(input.selected, polar);
+  const compass = compassLabels(polar, facadeAz, input.lang);
+  const hourBoxes = hours.flatMap((h) => (h.label ? [smallLabelBox(h.lx, h.ly, h.label)] : []));
+  const refBoxes = refs.flatMap((r) => (r.label ? [smallLabelBox(r.label.x, r.label.y, r.label.text)] : []));
+  const compassBoxes = compass.map((c) => labelBox(c.x, c.y, textWidth(c.label, FONT), 'middle', FONT));
+  const facadeLabel = placeFacadeLabel(polar, facadeAz, input.facadeText, width, [
+    ...hourBoxes,
+    ...refBoxes,
+    ...compassBoxes,
+  ]);
+  const facadeBox = facadeLabelBox(facadeLabel);
+  const pathPoints = input.selected
+    .filter((p) => p.sun.altitude > 0)
+    .map((p) => pos(p.sun.azimuth, p.sun.altitude));
+  const ringAz = ringLabelAzimuth(polar, input.latitude, [...hourBoxes, ...refBoxes, facadeBox], pathPoints);
+  const ringBoxes = RING_ALTITUDES.map((alt) => {
+    const p = pos(ringAz, alt);
+    return smallLabelBox(p.x, p.y + 4, `${alt}°`);
+  });
   return {
     polar,
     refs,
     selected: polylinesD(pathPieces(input.selected, polar)),
-    hours: hourMarks(input.selected, polar),
+    hours,
     horizon: horizonArea(input.horizon, polar),
     footprint: footprint(polar, facadeAz, input.layout, input.placement),
-    compass: compassLabels(polar, facadeAz, input.lang),
+    compass,
     facadeLine: pathD(ends),
     normal: pathD([{ x: cx, y: cy }, normalTip]),
     // Half of the sky behind the facade plane (clockwise from γ + 90° through γ + 180° to γ − 90°).
     backHalf: `M${px(ends[1].x)} ${px(ends[1].y)}A${px(R)} ${px(R)} 0 0 1 ${px(ends[0].x)} ${px(ends[0].y)}Z`,
     // Half in front of the facade (clockwise from γ − 90° through γ to γ + 90°): where the sun can reach the panels.
     frontHalf: `M${px(ends[0].x)} ${px(ends[0].y)}A${px(R)} ${px(R)} 0 0 1 ${px(ends[1].x)} ${px(ends[1].y)}Z`,
-    facadeLabel: {
-      x: normalTip.x + Math.sin(g) * 12,
-      y: normalTip.y - Math.cos(g) * 12 + 4,
-      anchor: Math.sin(g) > 0.3 ? 'start' : Math.sin(g) < -0.3 ? 'end' : 'middle',
-    },
+    facadeLabel,
+    ringAz,
+    fixedLabels: [...refBoxes, ...compassBoxes, facadeBox, ...ringBoxes],
     front: frontRanges(input.selected, facadeAz),
     peak: peak(input.selected),
   };
+}
+
+/** Overlap area of two boxes, px². */
+const overlapArea = (a: Box, b: Box): number =>
+  Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0)) *
+  Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+
+/**
+ * Facade label just beyond the normal's tip, inside the figure: east/west labels reach over the ring's edge
+ * into the sky disc. Slid along the facade line (up to 48 px) where it would sit on an hour, date or compass
+ * label; if no spot is free, the one with the least overlap.
+ */
+export function placeFacadeLabel(
+  polar: Polar,
+  facadeAz: number,
+  text: string,
+  width: number,
+  avoid: readonly Box[],
+): PlacedText {
+  const g = toRad(facadeAz);
+  const tip = polar.pos(facadeAz, 0);
+  const anchor: Anchor = Math.sin(g) > 0.3 ? 'start' : Math.sin(g) < -0.3 ? 'end' : 'middle';
+  const w = textWidth(text, FONT) * 1.12;
+  const at = (s: number): PlacedText => ({
+    x: clampLabelX(tip.x + Math.sin(g) * 12 + Math.cos(g) * s, w, anchor, PAD, width - PAD),
+    y: tip.y - Math.cos(g) * 12 + 4 + Math.sin(g) * s,
+    anchor,
+    text,
+  });
+  let best = at(0);
+  let least = Infinity;
+  for (let i = 0; i <= 16; i++) {
+    const l = at(Math.ceil(i / 2) * 6 * (i % 2 === 0 ? 1 : -1));
+    const b = facadeLabelBox(l);
+    const area = avoid.reduce((sum, o) => sum + overlapArea(b, o), 0);
+    if (area === 0) return l;
+    if (area < least) {
+      least = area;
+      best = l;
+    }
+  }
+  return best;
+}
+
+/** A hour label's final position. */
+export interface HourLabel {
+  x: number;
+  y: number;
+  label: string;
+}
+
+const unit = (x: number, y: number): Pt => {
+  const d = Math.hypot(x, y);
+  return d > 1e-6 ? { x: x / d, y: y / d } : { x: 0, y: -1 };
+};
+
+/**
+ * Hour labels at their places, except where the current sun glyph (circle of radius `ext` around `sun`)
+ * would cover one: that label moves just clear of the glyph (away from the sun, else radially or along the
+ * path) to a spot free of the other labels (`fixed` and the other hours), or is left out if there is none.
+ */
+export function hourLabels(
+  hours: readonly HourMark[],
+  polar: Polar,
+  sun: Pt | null,
+  ext: number,
+  fixed: readonly Box[] = [],
+): HourLabel[] {
+  const labelled = hours.flatMap((h) =>
+    h.label ? [{ h, label: h.label, box: smallLabelBox(h.lx, h.ly, h.label) }] : [],
+  );
+  return labelled.flatMap(({ h, label, box }) => {
+    if (!sun || !boxHitsCircle(box, sun, ext + 1)) return [{ x: h.lx, y: h.ly, label }];
+    const others = [...fixed, ...labelled.filter((o) => o.h !== h).map((o) => o.box)];
+    const radial = unit(h.x - polar.cx, h.y - polar.cy);
+    const dirs = [
+      unit((box.x0 + box.x1) / 2 - sun.x, (box.y0 + box.y1) / 2 - sun.y),
+      radial,
+      { x: -radial.x, y: -radial.y },
+      { x: -radial.y, y: radial.x },
+      { x: radial.y, y: -radial.x },
+    ];
+    for (const u of dirs) {
+      let s = 1;
+      while (s < 60 && boxHitsCircle(shiftBox(box, u.x * s, u.y * s), sun, ext + 1)) s++;
+      const moved = shiftBox(box, u.x * s, u.y * s);
+      if (s < 60 && !others.some((o) => boxesOverlap(moved, o))) {
+        return [{ x: h.lx + u.x * s, y: h.ly + u.y * s, label }];
+      }
+    }
+    return [];
+  });
 }

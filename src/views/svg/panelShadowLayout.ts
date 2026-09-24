@@ -1,6 +1,6 @@
 import { CELLS_ACROSS_SHORT_SIDE, SUBSTRINGS_PER_MODULE } from '../../model/geometry';
 import type { PanelLayout, ShadeRect } from '../../model/types';
-import { pathD, rectD, type Box, type Pt } from './geometry2d';
+import { boxDistance, labelBox, pathD, pt, rectD, textWidth, type Box, type Pt } from './geometry2d';
 import { PAD } from './constants';
 
 // ─────────────────────────────────────────────
@@ -92,13 +92,58 @@ export function buildRow(width: number, layout: PanelLayout): RowGeometry {
   };
 }
 
-/** Rectangle (u0…u1 × v0…v1, metres) clipped to the plot box, as a path (empty if outside). */
-export function clippedRect(row: RowGeometry, u0: number, u1: number, v0: number, v1: number): string {
+/** Rectangle (u0…u1 × v0…v1, metres) clipped to the plot box, in screen px (null if nothing is left). */
+export function clippedBox(row: RowGeometry, u0: number, u1: number, v0: number, v1: number): Box | null {
   const x0 = Math.max(row.box.x0, row.ux(u0));
   const x1 = Math.min(row.box.x1, row.ux(u1));
   const y0 = Math.max(row.box.y0, row.vy(v0));
   const y1 = Math.min(row.box.y1, row.vy(v1));
-  return x1 - x0 > 0.5 && y1 - y0 > 0.5 ? rectD(x0, y0, x1 - x0, y1 - y0) : '';
+  return x1 - x0 > 0.5 && y1 - y0 > 0.5 ? { x0, y0, x1, y1 } : null;
+}
+
+/** Screen boxes as one path. */
+export function boxesD(boxes: readonly Box[]): string {
+  return boxes.map((b) => rectD(b.x0, b.y0, b.x1 - b.x0, b.y1 - b.y0)).join('');
+}
+
+/** Font size of the railing label (svg.module.css `.small`). */
+const RAIL_FONT = 10;
+
+export interface RailLabel {
+  x: number;
+  y: number;
+  anchor: 'start' | 'end';
+  /** Leader line from the label down to the railing edge (label lifted above the cast shadow). */
+  leader: [Pt, Pt] | null;
+}
+
+/**
+ * Railing label ("top edge at the railing") at a row corner just above the rail line, on the side the cast
+ * shadow leaves free (`preferRight`: the shadow is shifted to the left). If the cast shadow covers both
+ * corners, the label goes into the band above the plot area (the cast shadow is clipped below it) with a
+ * leader down to the rail.
+ */
+export function railLabel(
+  row: RowGeometry,
+  rowWidth: number,
+  text: string,
+  cast: readonly Box[],
+  preferRight: boolean,
+): RailLabel {
+  const w = textWidth(text, RAIL_FONT) + 4;
+  const corner = (right: boolean) => ({
+    x: row.ux(((right ? 1 : -1) * rowWidth) / 2),
+    anchor: right ? ('end' as const) : ('start' as const),
+  });
+  const sides = preferRight ? [corner(true), corner(false)] : [corner(false), corner(true)];
+  const y = row.railY - 8;
+  const free = sides.find(({ x, anchor }) => {
+    const b = labelBox(x, y, w, anchor, RAIL_FONT);
+    return cast.every((c) => boxDistance(b, c) >= 2);
+  });
+  if (free) return { ...free, y, leader: null };
+  const top = row.box.y0 - 4;
+  return { ...sides[0], y: top, leader: [pt(sides[0].x, top + 3), pt(sides[0].x, row.railY - 2)] };
 }
 
 /** Substring bands of each module touched by a shade rectangle. */
