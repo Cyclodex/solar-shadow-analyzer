@@ -31,7 +31,7 @@ src/
     geometry.ts            Fassaden-Koordinaten, Panel-Layout, Schattenwurf zwischen Stockwerken, Teilstrang-Verlust
     horizon.ts             Horizontprofile, Hindernisse (Nachbargebäude) → Horizont, CSV-Import
     terrain.ts             Gelände-Horizont aus DEM-Kacheln (AWS Terrarium) im Browser; Kachel-Retries (2×, n·400 ms,
-                           nur Netzwerkfehler/429/5xx), Ergebnis-Cache ssa.terrain.v1:* (max. 12)
+                           nur Netzwerkfehler/429/5xx), Ergebnis-Cache ssa.terrain.v1:* (max. 40: 8 Höhen × 5 Standorte)
     pvgis.ts               PVGIS-printhorizon-Import (JSON/CSV/basic; Azimut S-basiert → N-basiert: A + 180)
     irradiance.ts          Clear-Sky-Modell, Einfallswinkel, IAM, POA-Einstrahlung, Himmelssichtfaktor
     weather.ts             Stündliche Wetterdaten (Open-Meteo-Archiv, Modell best_match) + Clear-Sky-Jahr,

@@ -1,4 +1,5 @@
 import { decode } from 'fast-png';
+import { LIMITS } from './defaults';
 import type { HorizonProfile } from './types';
 import { DEG, clamp, toDeg } from './units';
 import { getStorage, touchCacheEntry, writeCacheEntry } from './storageCache';
@@ -422,8 +423,13 @@ const TILE_CACHE_MAX = 96;
 const tileCache = new Map<string, Promise<Float32Array>>();
 
 const RESULT_CACHE_PREFIX = 'ssa.terrain.v1:';
-/** Horizon results kept in localStorage (≈ 2 kB each; the least recently used one is evicted). */
-export const TERRAIN_RESULT_CACHE_MAX = 12;
+/** Sites whose horizon results are kept in localStorage. */
+const RESULT_CACHE_SITES = 5;
+/**
+ * Horizon results kept in localStorage (≈ 2 kB each; the least recently used one is evicted): one per
+ * observer height, i.e. up to one per panel floor (LIMITS.building.numFloors.max) for RESULT_CACHE_SITES sites.
+ */
+export const TERRAIN_RESULT_CACHE_MAX = LIMITS.building.numFloors.max * RESULT_CACHE_SITES;
 
 /** Empties the in-memory tile cache (tests, memory pressure). */
 export function clearTerrainTileCache(): void {
@@ -567,8 +573,8 @@ function writeCachedResult(key: string, r: TerrainHorizonResult): void {
 /**
  * Terrain horizon for a site from AWS Terrarium DEM tiles (multi-resolution, see TERRAIN_ZOOM_BANDS).
  * Downloads at most TILE_CONCURRENCY tiles at once, keeps decoded tiles in memory and the result in
- * localStorage (the TERRAIN_RESULT_CACHE_MAX most recently used sites; key: lat/lon rounded to 5 decimals
- * ≈ 1 m, observer height). The site elevation is taken from the DEM. Rejects with the signal's reason
+ * localStorage (the TERRAIN_RESULT_CACHE_MAX most recently used results; key: lat/lon rounded to 5
+ * decimals ≈ 1 m, observer height). The site elevation is taken from the DEM. Rejects with the signal's reason
  * (AbortError) when aborted, or on a failed tile.
  */
 export async function fetchTerrainHorizon(
