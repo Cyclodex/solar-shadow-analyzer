@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
+import { BOTTOM_BAR_LAYOUT } from './app/layout';
 import { DEFAULT_CONFIG } from './model/defaults';
 import { encodeConfig } from './model/share';
 import { useConfigStore } from './state/configStore';
@@ -135,6 +136,38 @@ describe('App', () => {
     expect(time.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(settings).toContainElement(screen.getByRole('heading', { name: 'Einstellungen' }));
     expect(settings).not.toContainElement(time);
+    expect(screen.queryByRole('region', { name: 'Schnellsteuerung' })).toBeNull();
+  });
+
+  it('phone layout: control bar at the bottom, views → time/tilt → analysis, "jump to" the settings', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === BOTTOM_BAR_LAYOUT,
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    const hash = `#c=${encodeConfig({ ...DEFAULT_CONFIG, panels: { ...DEFAULT_CONFIG.panels, tiltFromVertical: 30 } })}`;
+    history.replaceState(null, '', `/${hash}`);
+    render(<App />);
+    const views = screen.getByRole('heading', { name: 'Ansichten' });
+    const time = screen.getByRole('heading', { name: 'Zeitpunkt' });
+    const analysis = screen.getByRole('heading', { name: 'Analyse' });
+    expect(views.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(time.compareDocumentPosition(analysis) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    // One time card (with the animation) besides the bar.
+    expect(screen.getAllByRole('heading', { name: 'Zeitpunkt' })).toHaveLength(1);
+
+    const bar = screen.getByRole('region', { name: 'Schnellsteuerung' });
+    expect(
+      screen.getByRole('main').compareDocumentPosition(bar) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    fireEvent.click(within(bar).getByRole('button', { name: 'Springe zu' }));
+    fireEvent.click(within(bar).getByRole('link', { name: 'Einstellungen' }));
+    expect(document.activeElement).toContainElement(screen.getByRole('heading', { name: 'Einstellungen' }));
+    expect(location.hash).toBe(hash);
+    fireEvent.click(within(bar).getByRole('button', { name: 'Springe zu' }));
+    fireEvent.click(within(bar).getByRole('link', { name: 'Ansichten (3D)' }));
+    expect(document.activeElement).toContainElement(views);
   });
 
   it('wide layout: sidebar with time/tilt and settings before the results', () => {

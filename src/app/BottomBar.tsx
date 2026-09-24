@@ -242,8 +242,7 @@ export function BottomBar() {
           onClick={() => toggle('time')}
         >
           {/* Not a live region: the animation would announce every step. */}
-          <span className="sr-only">{t.clock} </span>
-          <span className={styles.clock}>{f.time(minutes)}</span>{' '}
+          <span className="sr-only">{t.clock}</span> <span className={styles.clock}>{f.time(minutes)}</span>{' '}
           <span className={styles.date}>{f.dateShort(date)}</span>
         </button>
         <Button iconOnly icon={<PlusIcon />} title={t.later(TIME_STEP)} onClick={() => step(1)}>
@@ -271,7 +270,7 @@ export function BottomBar() {
         title={t.tiltTitle}
         onClick={() => toggle('tilt')}
       >
-        <span className="sr-only">{t.tilt} </span>
+        <span className="sr-only">{t.tilt}</span>{' '}
         <span className={styles.value}>
           {c.tiltSymbol} {f.deg(theta)}
         </span>
