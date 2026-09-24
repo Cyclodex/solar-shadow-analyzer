@@ -16,7 +16,7 @@ function localStorageOrNull(): Storage | null {
 }
 
 /** Reads a raw string from localStorage; null if missing or storage is unavailable. Never throws. */
-export function readStorage(key: string): string | null {
+function readStorage(key: string): string | null {
   try {
     return localStorageOrNull()?.getItem(key) ?? null;
   } catch {
@@ -25,7 +25,7 @@ export function readStorage(key: string): string | null {
 }
 
 /** Writes a raw string to localStorage; silently ignored when storage is unavailable or full. */
-export function writeStorage(key: string, value: string): void {
+function writeStorage(key: string, value: string): void {
   try {
     localStorageOrNull()?.setItem(key, value);
   } catch {
@@ -34,7 +34,7 @@ export function writeStorage(key: string, value: string): void {
 }
 
 /** Removes a key from localStorage; never throws. */
-export function removeStorage(key: string): void {
+function removeStorage(key: string): void {
   try {
     localStorageOrNull()?.removeItem(key);
   } catch {

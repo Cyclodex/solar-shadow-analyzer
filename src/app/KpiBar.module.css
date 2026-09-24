@@ -113,3 +113,11 @@
     font-size: var(--fs-xl);
   }
 }
+
+/* Forced colours: keep the floor colour swatches (they would be dropped as backgrounds). */
+@media (forced-colors: active) {
+  .swatch {
+    forced-color-adjust: none;
+    border: 1px solid CanvasText;
+  }
+}

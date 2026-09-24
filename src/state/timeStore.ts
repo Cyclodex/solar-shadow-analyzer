@@ -6,6 +6,7 @@ import { useConfigStore } from './configStore';
 // ─────────────────────────────────────────────
 // TIME STORE (not persisted)
 // Selected local date + local clock minutes of the site's time zone, and the animation state.
+// Initial date: today at the site (moves with a changed time zone while still "today", see below).
 // ─────────────────────────────────────────────
 
 /** Animation speeds: simulated minutes per real second. */
@@ -47,3 +48,16 @@ export const useTimeStore = create<TimeState>()((set) => ({
   togglePlaying: () => set((s) => ({ playing: !s.playing })),
   setSpeed: (speed) => set({ speed }),
 }));
+
+// "Today" follows the site: when the time zone changes (share link at start-up, place search, own
+// location) while today is selected, the date moves to today in the new zone — e.g. a link to Auckland
+// opened in Europe in the evening shows tomorrow's date. A date picked on purpose is kept.
+useConfigStore.subscribe((s, prev) => {
+  const tz = s.config.location.timezone;
+  const prevTz = prev.config.location.timezone;
+  if (tz === prevTz) return;
+  const now = Date.now();
+  if (useTimeStore.getState().date === todayInTimeZone(prevTz, now)) {
+    useTimeStore.setState({ date: todayInTimeZone(tz, now) });
+  }
+});

@@ -1,10 +1,13 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
+import { Button } from '../components/Button';
 import { AlertIcon, InfoIcon } from '../components/icons';
+import { useCommon } from '../i18n/common';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { panelsOverlap } from '../model/geometry';
 import { useLayout } from '../hooks/useModel';
 import { useConfig } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
+import { useShareLinkStore } from '../state/shareLinkStore';
 import styles from './WarningsBar.module.css';
 
 const de = {
@@ -19,6 +22,15 @@ const de = {
   clearSky: 'Wetterdaten: klarer Himmel. Die Erträge sind ein theoretisches Maximum, kein reales Wetter.',
   singleFloor: 'Nur ein Stockwerk: Es gibt keine gegenseitige Verschattung durch Panels.',
   details: 'Details',
+  linkReplaced:
+    'Konfiguration aus dem geöffneten Link geladen – die bisher gespeicherte Konfiguration wurde ersetzt.',
+  restore: 'Bisherige Konfiguration wiederherstellen',
+  restored: 'Vorherige Konfiguration wiederhergestellt.',
+  linkInvalid: (showing: 'saved' | 'default') =>
+    `Der geöffnete Teilen-Link ist ungültig oder unvollständig – angezeigt wird ${
+      showing === 'saved' ? 'die gespeicherte Konfiguration' : 'die Standardkonfiguration'
+    }.`,
+  dismiss: 'Hinweis schliessen',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -34,6 +46,15 @@ const messages: Messages<typeof de> = {
     clearSky: 'Weather data: clear sky. Yields are a theoretical maximum, not real weather.',
     singleFloor: 'Only one floor: panels cannot shade each other.',
     details: 'Details',
+    linkReplaced:
+      'Configuration loaded from the opened link – the previously saved configuration was replaced.',
+    restore: 'Restore previous configuration',
+    restored: 'Previous configuration restored.',
+    linkInvalid: (showing) =>
+      `The opened share link is invalid or incomplete – showing ${
+        showing === 'saved' ? 'the saved configuration' : 'the default configuration'
+      }.`,
+    dismiss: 'Close notice',
   },
 };
 
@@ -44,19 +65,79 @@ interface Notice {
   tone: Tone;
   text: string;
   detail?: string | null;
+  /** Buttons after the text (e.g. restore, close). */
+  actions?: ReactNode;
 }
 
-/** Warnings and notices above the results (geometry conflicts, data problems, modelling limits). */
+/** Warnings and notices above the results (geometry conflicts, data problems, modelling limits, share links). */
 export function WarningsBar() {
   const t = useMessages(messages);
+  const c = useCommon();
   const f = useFormat();
   const config = useConfig();
   const layout = useLayout();
   const terrain = useDataStore((s) => s.terrain);
   const weather = useDataStore((s) => s.weather);
+  const link = useShareLinkStore();
   const { numFloors } = config.building;
+  // After "restore" the restore button is gone: keep keyboard focus in the notice (its close button).
+  const restoredCloseRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (link.restored) restoredCloseRef.current?.focus();
+  }, [link.restored]);
+  // A closed notice takes its focused button with it: continue at the results block around the notices.
+  const dismiss = (notice: 'link' | 'invalid'): void => {
+    link.dismiss(notice);
+    document.getElementById('results')?.focus({ preventScroll: true });
+  };
 
   const notices: Notice[] = [];
+  if (link.invalid) {
+    notices.push({
+      id: 'link-invalid',
+      tone: 'warn',
+      text: t.linkInvalid(link.invalid),
+      actions: (
+        <Button size="sm" variant="ghost" onClick={() => dismiss('invalid')} aria-label={t.dismiss}>
+          {c.close}
+        </Button>
+      ),
+    });
+  }
+  if (link.replaced) {
+    notices.push({
+      id: 'link-replaced',
+      tone: 'info',
+      text: t.linkReplaced,
+      actions: (
+        <>
+          <Button size="sm" onClick={link.restore}>
+            {t.restore}
+          </Button>
+          <Button size="sm" variant="ghost" onClick={() => dismiss('link')} aria-label={t.dismiss}>
+            {c.close}
+          </Button>
+        </>
+      ),
+    });
+  } else if (link.restored) {
+    notices.push({
+      id: 'link-restored',
+      tone: 'info',
+      text: t.restored,
+      actions: (
+        <Button
+          ref={restoredCloseRef}
+          size="sm"
+          variant="ghost"
+          onClick={() => dismiss('link')}
+          aria-label={t.dismiss}
+        >
+          {c.close}
+        </Button>
+      ),
+    });
+  }
   if (numFloors > 1 && panelsOverlap(layout)) {
     notices.push({
       id: 'overlap',
@@ -89,7 +170,13 @@ export function WarningsBar() {
       <div role="status">
         <ul className={styles.list}>
           {notices.map((n) => (
-            <NoticeItem key={n.id} tone={n.tone} detail={n.detail} detailLabel={t.details}>
+            <NoticeItem
+              key={n.id}
+              tone={n.tone}
+              detail={n.detail}
+              detailLabel={t.details}
+              actions={n.actions}
+            >
               {n.text}
             </NoticeItem>
           ))}
@@ -103,11 +190,13 @@ function NoticeItem({
   tone,
   detail,
   detailLabel,
+  actions,
   children,
 }: {
   tone: Tone;
   detail?: string | null;
   detailLabel: string;
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
@@ -123,6 +212,7 @@ function NoticeItem({
             <code>{detail}</code>
           </details>
         )}
+        {actions && <span className={styles.actions}>{actions}</span>}
       </span>
     </li>
   );

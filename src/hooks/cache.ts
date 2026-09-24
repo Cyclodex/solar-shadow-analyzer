@@ -9,11 +9,14 @@
 export interface SharedCache<T> {
   /** Cached value for `deps`, computing it with `compute` on a miss. */
   get: (deps: readonly unknown[], compute: () => T) => T;
+  /** Cached value for `deps` without computing (undefined on a miss). */
+  peek: (deps: readonly unknown[]) => T | undefined;
   /** Drops all entries (tests). */
   clear: () => void;
 }
 
-const sameDeps = (a: readonly unknown[], b: readonly unknown[]): boolean =>
+/** Same length and Object.is-equal entries. */
+export const sameDeps = (a: readonly unknown[], b: readonly unknown[]): boolean =>
   a.length === b.length && a.every((x, i) => Object.is(x, b[i]));
 
 /** Most-recently-used cache with `size` entries. */
@@ -30,6 +33,9 @@ export function createCache<T>(size = 3): SharedCache<T> {
       const value = compute();
       entries = [{ deps: [...deps], value }, ...entries].slice(0, size);
       return value;
+    },
+    peek(deps) {
+      return entries.find((e) => sameDeps(e.deps, deps))?.value;
     },
     clear() {
       entries = [];

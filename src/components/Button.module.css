@@ -93,3 +93,27 @@
   border-color: var(--accent);
   color: var(--text);
 }
+
+/* Touch targets: ≥ 36 px on phones/tablets (one column below 1100 px) and on any touch screen. */
+@media (max-width: 1099px), (pointer: coarse) {
+  .sm {
+    min-height: var(--touch);
+  }
+
+  .sm.iconOnly {
+    width: var(--touch);
+  }
+}
+
+/*
+ * Forced colours (Windows High Contrast) drop author backgrounds: show the pressed state with system
+ * colours. forced-color-adjust: none, else the text backplate paints Canvas behind HighlightText.
+ */
+@media (forced-colors: active) {
+  .button[aria-pressed='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    border-color: Highlight;
+    color: HighlightText;
+  }
+}

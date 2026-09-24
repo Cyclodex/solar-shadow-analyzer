@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import App from './App';
 import { DEFAULT_CONFIG } from './model/defaults';
 import { encodeConfig } from './model/share';
@@ -93,5 +93,49 @@ describe('App', () => {
     render(<App />);
     expect(useConfigStore.getState().config.building.numFloors).toBe(5);
     expect(within(screen.getByRole('banner')).getByText('5 Stockwerke')).toBeInTheDocument();
+    // The replaced own configuration (3 floors) can be restored.
+    fireEvent.click(screen.getByRole('button', { name: 'Bisherige Konfiguration wiederherstellen' }));
+    expect(useConfigStore.getState().config.building.numFloors).toBe(3);
+  });
+
+  it('the skip link focuses the results without replacing the share hash', () => {
+    const hash = `#c=${encodeConfig({ ...DEFAULT_CONFIG, panels: { ...DEFAULT_CONFIG.panels, tiltFromVertical: 30 } })}`;
+    history.replaceState(null, '', `/${hash}`);
+    render(<App />);
+    fireEvent.click(screen.getByRole('link', { name: 'Zu den Ergebnissen springen' }));
+    expect(location.hash).toBe(hash);
+    expect(document.activeElement?.id).toBe('results');
+  });
+
+  it('narrow layout: DOM order KPIs → time/tilt → views → analysis → settings', () => {
+    render(<App />);
+    const main = screen.getByRole('main');
+    const settings = screen.getByRole('complementary', { name: 'Eingaben' });
+    // main (with the time and tilt controls) comes before the settings in the DOM / focus order
+    expect(main.compareDocumentPosition(settings) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const kpis = screen.getByRole('region', { name: 'Ergebnisse' });
+    const time = screen.getByRole('heading', { name: 'Zeitpunkt' });
+    const views = screen.getByRole('heading', { name: 'Ansichten' });
+    expect(main).toContainElement(time);
+    expect(kpis.compareDocumentPosition(time) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(time.compareDocumentPosition(views) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(settings).toContainElement(screen.getByRole('heading', { name: 'Einstellungen' }));
+    expect(settings).not.toContainElement(time);
+  });
+
+  it('wide layout: sidebar with time/tilt and settings before the results', () => {
+    vi.stubGlobal('matchMedia', (query: string) => ({
+      matches: query === '(min-width: 1100px)',
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    render(<App />);
+    const sidebar = screen.getByRole('complementary', { name: 'Eingaben' });
+    expect(sidebar).toContainElement(screen.getByRole('heading', { name: 'Zeitpunkt' }));
+    expect(sidebar).toContainElement(screen.getByRole('heading', { name: 'Einstellungen' }));
+    expect(
+      sidebar.compareDocumentPosition(screen.getByRole('main')) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 });

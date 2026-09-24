@@ -79,12 +79,46 @@ describe('NumberField', () => {
     const onChange = vi.fn();
     render(<Controlled onChange={onChange} />);
     const slider = screen.getByRole('slider', { name: 'Stockwerkhöhe' });
-    expect(slider).toHaveAttribute('aria-valuetext', '280 cm');
+    expect(slider).toHaveAttribute('aria-valuetext', '280\u00a0cm');
     expect(slider).toHaveAttribute('min', '200');
     expect(slider).toHaveAttribute('max', '500');
     fireEvent.change(slider, { target: { value: '300' } });
     expect(onChange).toHaveBeenCalledWith(300);
-    expect(slider).toHaveAttribute('aria-valuetext', '300 cm');
+    expect(slider).toHaveAttribute('aria-valuetext', '300\u00a0cm');
+  });
+
+  it('describes the text input with the allowed range incl. the unit, also next to a hint', () => {
+    render(
+      <NumberField
+        label="Höhe über Meer"
+        value={486}
+        onChange={() => {}}
+        limit={{ min: -500, max: 9000, step: 1 }}
+        unit="m"
+        slider={false}
+        hint="Zur Information"
+      />,
+    );
+    const input = screen.getByRole('textbox', { name: 'Höhe über Meer' });
+    expect(input).toHaveAccessibleDescription(/^Erlaubt: −500 bis 9.000\sm Zur Information$/);
+  });
+
+  it('formats angles like the rest of the app ("45°") and shows the range as error text', () => {
+    render(
+      <NumberField
+        label="Neigung"
+        value={45}
+        onChange={() => {}}
+        limit={{ min: 0, max: 90, step: 1 }}
+        unit="°"
+      />,
+    );
+    expect(screen.getByRole('slider', { name: 'Neigung' })).toHaveAttribute('aria-valuetext', '45°');
+    const input = screen.getByRole('textbox', { name: 'Neigung' });
+    expect(input).toHaveAccessibleDescription('Erlaubt: 0 bis 90°');
+    fireEvent.change(input, { target: { value: '120' } });
+    expect(input).toHaveAccessibleDescription('Erlaubt: 0 bis 90°');
+    expect(screen.getByRole('status')).toHaveTextContent('Erlaubt: 0 bis 90°');
   });
 });
 

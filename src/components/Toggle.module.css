@@ -69,3 +69,19 @@
   font-size: var(--fs-xs);
   color: var(--text-faint);
 }
+
+/* Forced colours: thumb and "on" state by system colours (the thumb is a background-only box). */
+@media (forced-colors: active) {
+  .thumb {
+    background: CanvasText;
+  }
+
+  .switch[aria-checked='true'] {
+    background: Highlight;
+    border-color: Highlight;
+  }
+
+  .switch[aria-checked='true'] .thumb {
+    background: HighlightText;
+  }
+}

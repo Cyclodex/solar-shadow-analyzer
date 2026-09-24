@@ -13,7 +13,12 @@ export interface ViewCardProps {
   subtitle?: ReactNode;
   /** Extra controls in the header, before the PNG button (e.g. a floor selector). */
   toolbar?: ReactNode;
-  /** Base file name for the PNG export (sanitised, ".png" appended); omit to hide the PNG button. */
+  /**
+   * File name of the PNG export incl. ".png" (build it with useExportFilename, app/useExportFilename.ts:
+   * localised, with location and year); omit (and exportName) to hide the PNG button.
+   */
+  exportFilename?: string;
+  /** @deprecated Base file name (sanitised, ".png" appended); use exportFilename. */
   exportName?: string;
   /** Minimum height of the body in px (reserves space, avoids layout shifts). Default 240. */
   minHeight?: number;
@@ -39,6 +44,7 @@ export function ViewCard({
   title,
   subtitle,
   toolbar,
+  exportFilename,
   exportName,
   minHeight = 240,
   busy = false,
@@ -54,12 +60,14 @@ export function ViewCard({
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState(false);
 
+  const filename = exportFilename ?? (exportName ? `${safeFilename(exportName)}.png` : undefined);
+
   const onExport = async (): Promise<void> => {
-    if (!bodyRef.current || !exportName) return;
+    if (!bodyRef.current || !filename) return;
     setExporting(true);
     setError(false);
     try {
-      await exportViewPng(bodyRef.current, `${safeFilename(exportName)}.png`);
+      await exportViewPng(bodyRef.current, filename);
     } catch {
       setError(true);
     } finally {
@@ -76,10 +84,10 @@ export function ViewCard({
           </h3>
           {subtitle && <p className={styles.subtitle}>{subtitle}</p>}
         </div>
-        {(toolbar || exportName) && (
+        {(toolbar || filename) && (
           <div className={styles.toolbar}>
             {toolbar}
-            {exportName && (
+            {filename && (
               <Button
                 size="sm"
                 variant="ghost"

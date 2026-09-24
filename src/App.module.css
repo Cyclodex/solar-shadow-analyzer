@@ -1,35 +1,33 @@
 /*
- * Page grid. Mobile/tablet (< 1100 px): one column, areas in reading order
- *   top (warnings + KPIs) → quick (time + tilt) → results (views + analysis) → settings → footer.
- * The <aside> and <main> wrappers are `display: contents` there, so their children are grid items.
- * `reading-flow` (progressive enhancement) makes keyboard focus follow the visual order.
- * Desktop (≥ 1100 px): sticky sidebar (own scroll) | main column, footer below main.
+ * Page grid. The DOM order is the reading order of each layout (App.tsx renders the wrappers per
+ * breakpoint), so keyboard focus and screen readers follow the visual order.
+ * Mobile/tablet (< 1100 px): one column — main (warnings + KPIs → time + tilt → views + analysis) →
+ * settings (aside) → footer.
+ * Desktop (≥ 1100 px): sticky sidebar (quick controls + settings, own scroll) | main column, footer below main.
  */
 
 .shell {
   --gutter: clamp(12px, 3vw, 24px);
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-areas:
-    'top'
-    'quick'
-    'results'
-    'settings'
-    'footer';
   gap: var(--space-5);
   max-width: var(--content-max);
   margin: 0 auto;
   padding: var(--space-4) var(--gutter) 0;
-  reading-flow: grid-rows;
 }
 
-.sidebar,
 .main {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+.sidebar {
+  min-width: 0;
 }
 
 .top {
-  grid-area: top;
   display: flex;
   flex-direction: column;
   gap: var(--space-3);
@@ -42,12 +40,10 @@
 }
 
 .quick {
-  grid-area: quick;
   min-width: 0;
 }
 
 .results {
-  grid-area: results;
   display: flex;
   flex-direction: column;
   gap: var(--space-8);
@@ -56,12 +52,10 @@
 }
 
 .settings {
-  grid-area: settings;
   min-width: 0;
 }
 
 .footer {
-  grid-area: footer;
   min-width: 0;
 }
 
@@ -163,17 +157,11 @@
 
   .main {
     grid-area: main;
-    display: flex;
-    flex-direction: column;
     gap: var(--space-6);
-    min-width: 0;
     padding: var(--space-4) 0 var(--space-6);
   }
 
-  .top,
-  .quick,
-  .results,
-  .settings {
-    grid-area: auto;
+  .footer {
+    grid-area: footer;
   }
 }

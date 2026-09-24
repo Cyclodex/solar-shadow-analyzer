@@ -88,15 +88,20 @@ export function NumberField({
   const labelId = `${autoId}-label`;
   const hintId = `${autoId}-hint`;
   const errorId = `${autoId}-error`;
+  const rangeId = `${autoId}-range`;
   const shownDigits = digits ?? digitsOf(step);
   const [draft, setDraft] = useState<string | null>(null);
 
   const parsed = draft === null ? value : parseNumberInput(draft);
   const invalid = draft !== null && (parsed === null || parsed < min || parsed > max);
-  const rangeText = t.range(
-    f.num(min, digitsOf(step)),
-    `${f.num(max, digitsOf(step))}${unit ? ` ${unit}` : ''}`,
-  );
+  /** Value with the unit, formatted like everywhere else in the app ("45°", "280 cm", "14 %"). */
+  const withUnit = (v: number, d: number): string => {
+    if (!unit) return f.num(v, d);
+    if (unit === '°') return f.deg(v, d);
+    if (unit === '%') return f.pct(v, d);
+    return f.unit(v, unit, d);
+  };
+  const rangeText = t.range(f.num(min, digitsOf(step)), withUnit(max, digitsOf(step)));
 
   const commit = (): void => {
     if (draft === null) return;
@@ -122,8 +127,10 @@ export function NumberField({
     }
   };
 
-  const valueText = (v: number): string => `${f.num(v, shownDigits)}${unit ? ` ${unit}` : ''}`;
-  const describedBy = [hint ? hintId : null, invalid ? errorId : null].filter(Boolean).join(' ') || undefined;
+  const valueText = (v: number): string => withUnit(v, shownDigits);
+  // The visible unit is aria-hidden: the range sentence (it ends with the unit) or the error describes
+  // the text input, followed by the hint. `title` alone is dropped by browsers once a hint is referenced.
+  const describedBy = [invalid ? errorId : rangeId, hint ? hintId : null].filter(Boolean).join(' ');
   const hasSlider = slider && Number.isFinite(sliderMin ?? min) && Number.isFinite(sliderMax ?? max);
 
   return (
@@ -156,6 +163,9 @@ export function NumberField({
               {unit}
             </span>
           )}
+          <span id={rangeId} hidden>
+            {rangeText}
+          </span>
         </div>
       </div>
       {hasSlider && (

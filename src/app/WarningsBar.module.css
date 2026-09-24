@@ -86,3 +86,18 @@
   font-family: var(--font-mono);
   overflow-wrap: anywhere;
 }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+
+/* Touch target of the "Details" disclosure (keeps the default list-item marker). */
+@media (max-width: 1099px), (pointer: coarse) {
+  .details summary {
+    min-height: var(--touch);
+    line-height: var(--touch);
+  }
+}
