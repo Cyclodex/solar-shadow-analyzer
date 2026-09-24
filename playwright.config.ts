@@ -33,6 +33,10 @@ export default defineConfig({
       name: 'chromium',
       use: {
         ...devices['Desktop Chrome'],
+        // Full Chromium in the new headless mode (not the reduced headless shell, Playwright's default), as in
+        // the sandbox and in real browsers: the headless shell does not process the web app manifest, so
+        // Page.getAppId returns nothing there. Ignored when an executablePath is set.
+        channel: chromiumPath ? undefined : 'chromium',
         launchOptions: {
           executablePath: chromiumPath,
           // Software WebGL so the 3D view renders in headless Chromium.

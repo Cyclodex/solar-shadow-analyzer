@@ -68,7 +68,7 @@ jobs:
 
       # Browsers are only downloaded in CI; locally see README (Tests).
       - name: Install Chromium
-        run: npx playwright install --with-deps chromium
+        run: npx playwright install --with-deps --no-shell chromium
 
       # Builds the app and serves it with `vite preview`; external APIs are blocked inside the specs.
       - name: E2E
