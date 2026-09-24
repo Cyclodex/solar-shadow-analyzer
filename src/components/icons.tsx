@@ -122,6 +122,32 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+export function MinusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M5 12h14" />
+    </Icon>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  );
+}
+
+/** Page sections (a list), e.g. for a "jump to" menu. */
+export function SectionsIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M9 6h11M9 12h11M9 18h11" />
+      <path d="M4.5 6h.01M4.5 12h.01M4.5 18h.01" strokeWidth={3} />
+    </Icon>
+  );
+}
+
 export function ResetIcon(props: IconProps) {
   return (
     <Icon {...props}>

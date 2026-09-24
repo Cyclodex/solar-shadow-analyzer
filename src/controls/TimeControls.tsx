@@ -2,14 +2,15 @@ import { useId } from 'react';
 import { Button } from '../components/Button';
 import { PauseIcon, PlayIcon } from '../components/icons';
 import { Segmented } from '../components/Segmented';
-import { Slider, type SliderMark } from '../components/Slider';
+import { Slider } from '../components/Slider';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
-import { tzOffsetMinutes, utcToLocal } from '../model/time';
+import { utcToLocal } from '../model/time';
 import { useAnimation } from '../hooks/useAnimation';
-import { useSelectedUtc, useSunTimes } from '../hooks/useModel';
+import { useSunTimes } from '../hooks/useModel';
 import { useConfigSection } from '../state/configStore';
 import { SPEED_OPTIONS, todayAtSite, useTimeStore, type Speed } from '../state/timeStore';
+import { useTimeSlider } from './useTimeSlider';
 import styles from './TimeControls.module.css';
 
 const de = {
@@ -73,7 +74,7 @@ export function TimeControls() {
   const togglePlaying = useTimeStore((s) => s.togglePlaying);
   const setSpeed = useTimeStore((s) => s.setSpeed);
   const times = useSunTimes();
-  const utc = useSelectedUtc();
+  const { slider: timeSlider, zone } = useTimeSlider();
 
   const year = date.slice(0, 4);
   const quickDates = [
@@ -83,12 +84,6 @@ export function TimeControls() {
     { date: `${year}-09-22`, title: t.quick.sep },
   ];
   const today = todayAtSite();
-  const zone = `${f.tzName(tz, utc)}, ${f.utcOffset(tzOffsetMinutes(tz, utc))}`;
-
-  const marks: SliderMark[] = [];
-  // Sun-coloured ticks at sunrise/sunset (the text line below names them).
-  if (times.sunrise !== null) marks.push({ value: times.sunrise, label: f.time(times.sunrise), tone: 'sun' });
-  if (times.sunset !== null) marks.push({ value: times.sunset, label: f.time(times.sunset), tone: 'sun' });
 
   const setNow = (): void => {
     const now = utcToLocal(Date.now(), tz);
@@ -163,17 +158,8 @@ export function TimeControls() {
           {t.now}
         </Button>
       </div>
-      <Slider
-        id={`${id}-time`}
-        value={minutes}
-        min={0}
-        max={1440}
-        step={5}
-        onChange={setMinutes}
-        valueText={(m) => `${f.time(m)} (${zone})`}
-        marks={marks}
-        aria-describedby={`${id}-sun ${id}-zone`}
-      />
+      {/* Sun-coloured ticks at sunrise/sunset (the text line below names them). */}
+      <Slider id={`${id}-time`} {...timeSlider} aria-describedby={`${id}-sun ${id}-zone`} />
       <p id={`${id}-sun`} className={styles.meta}>
         {sunText}
       </p>

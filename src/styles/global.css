@@ -229,6 +229,8 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  /* Focused elements scrolled into view stay above the control bar of phones. */
+  scroll-padding-bottom: var(--bottom-bar-h, 0px);
 }
 
 body {
@@ -240,6 +242,8 @@ body {
   line-height: var(--lh);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+  /* Room for the control bar of phones at the end of the page (app/BottomBar sets it). */
+  padding-bottom: var(--bottom-bar-h, 0px);
 }
 
 /* Installed iOS app: the page runs under the transparent status bar. A fixed strip as tall as the covered
