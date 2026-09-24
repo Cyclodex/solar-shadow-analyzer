@@ -7,7 +7,8 @@ import { getStorage, touchCacheEntry, writeCacheEntry } from './storageCache';
 // ─────────────────────────────────────────────
 // WEATHER SERIES
 // Hourly irradiance + air temperature for one calendar year: Open-Meteo historical archive
-// (reanalysis, CORS, no key) or a synthetic clear-sky year. timesUtc = interval midpoints.
+// (model best_match: ERA5 reanalysis and ECMWF IFS analysis; CORS, no key) or a synthetic clear-sky year.
+// timesUtc = interval midpoints.
 // ─────────────────────────────────────────────
 
 /** Air temperature of the synthetic clear-sky year, °C (no weather → constant, roughly the Swiss Plateau's mean daytime value). */

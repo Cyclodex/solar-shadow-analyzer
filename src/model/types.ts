@@ -106,7 +106,7 @@ export type WeatherSource = 'open-meteo' | 'clear-sky';
 
 export interface WeatherConfig {
   source: WeatherSource;
-  /** Calendar year for historical weather (Open-Meteo ERA5). */
+  /** Calendar year for historical weather (Open-Meteo best_match: ERA5 reanalysis, ECMWF IFS analysis). */
   year: number;
 }
 

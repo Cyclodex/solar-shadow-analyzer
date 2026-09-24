@@ -39,6 +39,8 @@ src/
     simulation.ts          Jahressimulation (kWh je Stockwerk/Monat, Verschattungsverlust)
     analysis.ts            Heatmap-Daten, Neigungs-Sweep (0–90° in 5°-Schritten), Tagesprofil
     economics.ts           Wirtschaftlichkeit
+    storageCache.ts        localStorage-LRU-Cache der Wetter- und Geländeergebnisse (fängt fehlendes, gesperrtes oder
+                           volles localStorage ab)
     presets.ts             Standort- (24) und Modul-Presets (5), Ortssuche (Open-Meteo Geocoding)
     share.ts               Config ⇄ URL-Hash (Base64url) und JSON, Validierung (sanitizeConfig), Migration v1 → v2
   app/                     App-Shell: Header, WarningsBar, KpiBar, ViewToggles, ShareButton, ExportMenu, Footer,
@@ -46,14 +48,18 @@ src/
                            theme-color)
   components/              Generische UI-Bausteine: Button, InfoTip, NumberField (+ numberInput.ts),
                            Placeholder, Section, Segmented, SelectField, Skeleton, Slider, Spinner, TextField,
-                           Toggle, ViewCard, icons, cssVars
+                           Toggle, ViewCard, icons, cssVars, usePopover (Popover im Viewport halten, Schliessen bei
+                           Klick ausserhalb)
     svg/                   SVG-Helfer für Diagramme und 2D-Ansichten: useElementWidth, useSvgId, paths, text
                            (Textbreiten, Fliesslayout), legend (gemeinsamer Legendenstil), HatchPattern
   controls/                Eingaben (Sidebar): Sidebar, TimeControls, TiltControl und je Einstellungsgruppe eine
-                           *Section.tsx (Location, Building, Panel, System, Horizon, Weather, Economics)
-    location/              PlaceSearch, PresetSelect, MyLocationButton, CompassDial, TimeZoneField, timeZones, icons
+                           *Section.tsx (Location, Building, Panel, System, Horizon, Weather, Economics);
+                           sections.module.css (gemeinsames Layout der Abschnitte), icons (gemeinsame Icons der
+                           Eingaben), loadError.ts + LoadErrorDetails (übersetzte Ursache eines Ladefehlers,
+                           technische Meldung aufklappbar)
+    location/              PlaceSearch, PresetSelect, MyLocationButton, CompassDial, TimeZoneField, timeZones
     horizon/               TerrainStatus, ObstacleList/ObstacleItem, ManualHorizon (inkl. PVGIS-Dateiimport),
-                           HorizonSparkline, horizonData, icons
+                           HorizonSparkline, horizonData
   views/                   2D-Ansichten: FrontalView, ProfileView (Seite), SunPathView, PanelShadowView
     svg/                   Reine Layout-Module ohne React (frontalLayout, profileLayout, sunPathLayout,
                            panelShadowLayout, geometry2d, legend, constants) + SvgFigure, Legend, ViewNotice,
@@ -61,19 +67,23 @@ src/
     scene3d/               3D-Ansicht (three.js/R3F), lazy: index.ts → Scene3D → SceneView; SceneStage, SceneContent,
                            Building, PanelRows, Ground, Surroundings, SkyAndLights, SunMarker, CameraRig, Label,
                            SceneErrorBoundary, useSceneData; coords.ts, sceneLayout, palette, shadeMaterial
-                           (Modellschatten-Overlay), textures, webgl, messages
+                           (Modellschatten-Overlay), textures, webgl, messages, captureRender (Bild für PNG-Export
+                           und Druck sofort und in höherer Auflösung rendern)
   charts/                  Analyse: DailyProfileChart, ShadeHeatmap (Canvas), MonthlyYieldChart, TiltSweepChart,
                            EconomicsCard, MonthlyTable
     lib/                   Chart-Bausteine ohne Library: scale, Axes, timeAxis, legend/ChartLegend, ChartTooltip,
-                           ChartStats, DataTable, heatmap, monthlyTable, colors, canvasTheme, floors, focus,
-                           sourceLabel, usePlotPointer
+                           ChartStats, DataTable (+ ColumnHeader), heatmap, monthlyTable, colors, canvasTheme,
+                           floors, focus, sourceLabel, usePlotPointer, PlotSlider (Tastatur-/Zeiger-Ebene mit
+                           Fadenkreuz), sliderKeys, shadingTotals (Verschattungsverlust für KPI, Monatsertrag und
+                           Monatstabelle)
   export/                  png, csv (RFC 4180), resultsCsv (Monatsertrag, Neigungsvergleich, Heatmap), configFile
                            (JSON speichern/laden), clipboard, download, filenames, Druckbericht (print.ts, print.css,
-                           PrintReport.tsx)
+                           PrintReport.tsx, PrintRoot.tsx), canvasRender (Canvas vor PNG-Export/Druck synchron neu
+                           zeichnen)
   hooks/                   useModel (memoisierte Modell-Hooks) + cache.ts, useTerrain/useWeather (je Loader + Leser),
-                           useAnimation
-  state/                   configStore, timeStore, uiStore, dataStore, urlSync (#c=-Hash), storage (localStorage,
-                           das Fehler abfängt)
+                           useAnimation, useMediaQuery (Layout-Umbruch bei 1100 px)
+  state/                   configStore, timeStore, uiStore, dataStore, shareLinkStore (Hinweise zum Teilen-Link),
+                           urlSync (#c=-Hash), storage (Persistenz der Stores, fängt localStorage-Fehler ab)
   i18n/                    index.ts (useLang, useMessages, useFormat, floorLabel, compassPoint …), common.ts
   styles/                  global.css: Design-Tokens (CSS-Variablen) für Dark/Light, globale Styles; tokens.ts:
                            Token-Zugriff aus TypeScript (Stockwerksfarben, useThemeKey, cssVar, parseCssColor)
@@ -81,6 +91,7 @@ src/
 
 e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts)
 scripts/validate-terrain.ts  Gelände-Horizont gegen PVGIS printhorizon prüfen (braucht Netzwerk)
+scripts/validate-yield.ts    Jahresertrag gegen PVGIS seriescalc/PVcalc prüfen (braucht Netzwerk)
 .github/workflows/ci.yml   CI: Lint, Format, Typecheck, Tests, Build; danach E2E
 ```
 
@@ -150,8 +161,13 @@ Pro Zeitschritt (Wetterdaten stündlich, Werte = Mittel der vorangehenden Stunde
 Datenquellen: Open-Meteo Historical Weather API (Modell `best_match`, CORS, ohne Key) für ein wählbares Jahr; Fallback:
 Clear-Sky (Meinel-DNI, DHI = 0.1·DNI) — in der UI als „theoretisches Maximum bei klarem Himmel“ gekennzeichnet.
 
-Validierung (Bern, 47.1° N / 7.45° E, freistehend, 1 kWp, 14 % Verluste): Abweichung zu PVGIS-ERA5 (gleiche Jahre
-2020–2023) −0.7 % bis −1.3 %, zu PVGIS-SARAH3 (2005–2023) +3.6 % bis +5.8 % für β = 35° Süd, 45° und 90° bei 202°.
+Validierung (`scripts/validate-yield.ts`; Bern, 47.1° N / 7.45° E, freistehend (`facade: false`), 1 kWp, 14 % Verluste,
+ohne Horizont und AC-Grenze; β = 35° Süd, 45° und 90° bei 202°; Wetter 2020–2023, gegen PVGIS 5.3):
+
+| Open-Meteo-Modell | PVGIS-ERA5 2020–2023 | PVGIS-SARAH3 2020–2023 | PVGIS-SARAH3 2005–2023 (PVcalc) |
+| ----------------- | -------------------- | ---------------------- | ------------------------------- |
+| `era5`            | −0.7 % bis −1.3 %    | +0.6 % bis +3.6 %      | +3.6 % bis +5.8 %               |
+| `best_match`      | −1.8 % bis +0.6 %    | +1.4 % bis +2.9 %      | +4.3 % bis +5.3 %               |
 
 ## Gelände-Horizont
 
@@ -172,9 +188,16 @@ Abschnitt „Horizont & Umgebung“ als eigener Horizont importiert werden (`mod
 - `useUiStore` (persistiert unter `ssa.ui`): Sprache, Theme, sichtbare Ansichten, offene Abschnitte, analysiertes Stockwerk.
 - `useDataStore` (nicht persistiert): Gelände-Horizont und Wetterreihe inkl. Ladezustand/Fehler; geschrieben von den
   Loadern in `hooks/useTerrain.ts` und `hooks/useWeather.ts` (einmal in `<DataLoader/>` gemountet).
-- URL-Hash `#c=…` überschreibt beim Laden die gespeicherte Config (Teilen-Link, `state/urlSync.ts`); danach wird der
-  Hash bei Config-Änderungen (entprellt) nachgeführt.
-- localStorage-Zugriffe laufen über `state/storage.ts` (fehlendes, gesperrtes oder volles localStorage bricht nichts).
+- `useShareLinkStore` (nicht persistiert, von `resetStores()` zurückgesetzt): Hinweise zum Teilen-Link für die
+  WarningsBar (ersetzte eigene Config wiederherstellen, ungültiger Link).
+- URL-Hash `#c=…` überschreibt beim Laden die gespeicherte Config (Teilen-Link, `state/urlSync.ts`); ein nicht
+  lesbarer `#c=` wird gemeldet. Danach wird der Hash bei Config-Änderungen gedrosselt nachgeführt (sofort, danach
+  höchstens alle 400 ms, `HASH_THROTTLE_MS`, mit dem letzten Stand am Schluss); die Standard-Config leert den Hash. Ein
+  beim Verlassen der Seite noch ausstehender Hash geht über den sessionStorage (`ssa.pendingHash`) an den nächsten
+  Aufruf.
+- Speicher: Store-Persistenz über `state/storage.ts`, Wetter- und Geländecache über `model/storageCache.ts` (das Modell
+  importiert keinen State); beide fangen fehlendes, gesperrtes oder volles localStorage ab. Das Skript in `index.html`
+  liest `ssa.ui` direkt, um das Theme vor dem ersten Paint zu setzen.
 - Abgeleitete Daten über Hooks in `hooks/useModel.ts`: ein komponentenübergreifender Cache (`hooks/cache.ts`), dessen
   Schlüssel die Config-_Abschnitte_ sind. Neigungsänderungen berechnen daher z. B. den Neigungs-Sweep nicht neu,
   Zeitänderungen nur den Momentanzustand. Jahresrechnungen lesen ihre Eingaben über `useDeferredValue`.
@@ -207,7 +230,8 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
     `SceneStage.test.tsx` mockt `./webgl`, um die DOM-Teile der 3D-Ansicht zu testen.
 - **E2E** (`npm run e2e`, Playwright gegen den `vite preview`-Build, Chromium + SwiftShader, Open-Meteo und Kacheln
   blockiert, Port über `E2E_PORT`): App lädt mit Jahresertrag; kein horizontales Scrollen bei 360 px; 3D-Canvas zeichnet
-  Inhalt (mehr als 20 Farben, kein Screenshot-Vergleich); Teilen-Link stellt die Konfiguration wieder her;
+  Inhalt (mehr als 20 Farben, kein Screenshot-Vergleich); Kamera-Preset «Aus Sonnenrichtung» bleibt nach einem Klick
+  erhalten, folgt der Uhrzeit und weicht nachts der Übersicht; Teilen-Link stellt die Konfiguration wieder her;
   Sprachumschaltung DE → EN.
 - **CI** (`.github/workflows/ci.yml`, Node aus `.nvmrc`): Lint, `format:check`, Typecheck, Tests und Build; danach
   E2E mit dem von Playwright installierten Chromium.

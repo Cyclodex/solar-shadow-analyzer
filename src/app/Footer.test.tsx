@@ -13,6 +13,10 @@ describe('Footer', () => {
     const { container } = render(<Footer />);
     const footer = screen.getByRole('contentinfo');
     expect(footer).toHaveTextContent('Wetterdaten von Open-Meteo.com, Lizenz CC BY 4.0.');
+    expect(footer).toHaveTextContent('Modellauswahl best_match: ERA5-Reanalyse');
+    expect(footer).toHaveTextContent(
+      'Open-Meteo Geocoding API: Ortssuche; Ortsdaten von GeoNames, Lizenz CC BY 4.0.',
+    );
     expect(footer).not.toHaveTextContent(/Weather data by/);
     expect(footer).toHaveTextContent(
       'EU-DEM (produced using Copernicus data and information funded by the European Union), 3DEP/NED',
@@ -26,6 +30,7 @@ describe('Footer', () => {
     act(() => useUiStore.getState().setLang('en'));
     const footer = screen.getByRole('contentinfo');
     expect(footer).toHaveTextContent('Weather data by Open-Meteo.com, licence CC BY 4.0.');
+    expect(footer).toHaveTextContent('Open-Meteo Geocoding API: Place search; place data by GeoNames');
     expect(footer).toHaveTextContent(
       'EU-DEM (produced using Copernicus data and information funded by the European Union), 3DEP/NED',
     );

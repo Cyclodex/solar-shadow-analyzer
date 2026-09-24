@@ -13,7 +13,7 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
   Teilverschattung je Modul wahlweise flächenanteilig oder mit 3 Bypass-Teilsträngen.
 - **Fünf Ansichten**, alle relativ zur Fassadenausrichtung: 3D (drehbar, Kamera-Presets Front / Seite / Oben / Aus
   Sonnenrichtung, gerenderter Schatten plus exakter Modellschatten), Frontalansicht, Seitenansicht, Sonnenbahn und
-  Panel-Schatten. Jede Ansicht lässt sich ein- und ausblenden und als PNG exportieren.
+  Panel-Schatten. Jede Ansicht lässt sich ein- und ausblenden und, wie jedes Diagramm, als PNG exportieren.
 - **Zeitpunkt:** beliebiges Datum mit Schnellwahl (21. Dez., 20. März, 21. Juni, 22. Sept., Heute, Jetzt), Ortszeit
   00:00–24:00 in 5-Minuten-Schritten in der Zeitzone des Standorts, Sonnenauf- und -untergang, Tagesanimation mit
   15 / 30 / 60 / 120 simulierten Minuten pro Sekunde.
@@ -32,7 +32,7 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
   gewählten Zeitpunkt), Tagesverlauf, Jahres-Heatmap der Verschattung, Monatsertrag, Neigungsvergleich 0–90° in
   5°-Schritten, Wirtschaftlichkeit und Monatstabelle.
 - **Teilen und Export:** Teilen-Link (`#c=…`), Konfiguration als JSON speichern und laden, CSV (Monatsertrag je
-  Stockwerk, Neigungsvergleich, Heatmap), PNG je Ansicht, Druckbericht (auch als PDF). Einstellungen bleiben im
+  Stockwerk, Neigungsvergleich, Heatmap), PNG je Ansicht und Diagramm, Druckbericht (auch als PDF). Einstellungen bleiben im
   Browser gespeichert.
 - **Oberfläche:** Deutsch und Englisch, dunkles und helles Design. Ab 1100 px Breite stehen die Eingaben in einer
   Seitenleiste; schmaler ist die Seite einspaltig, mit den Ergebnissen vor den Einstellungen (getestet bis 360 px).
@@ -41,7 +41,9 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
 
 ## Schnellstart
 
-Voraussetzung: Node.js ≥ 22 (siehe `.nvmrc`, z. B. `nvm use`).
+Voraussetzung: Node.js 22.22.2 oder neuer (22.x), 24.15 oder neuer (24.x) oder ≥ 26, wie `engines` in
+`package.json`: die Versionen, die jsdom, Vitest, Vite und ESLint unterstützen. `.nvmrc` wählt die neueste
+22.x (z. B. `nvm use`).
 
 ```bash
 git clone https://github.com/Cyclodex/solar-shadow-analyzer.git
@@ -65,6 +67,7 @@ npm run dev   # http://localhost:5173
 | `npm run format:check`     | Prettier: Formatierung prüfen                                          |
 | `npm run e2e`              | End-to-End-Tests mit Playwright (Chromium) gegen den Produktions-Build |
 | `npm run validate:terrain` | Geländehorizont gegen PVGIS `printhorizon` prüfen (braucht Netzwerk)   |
+| `npm run validate:yield`   | Jahresertrag gegen PVGIS prüfen (braucht Netzwerk)                     |
 
 ### Tests und CI
 
@@ -72,8 +75,9 @@ npm run dev   # http://localhost:5173
   `npx playwright install chromium` ausführen; mit `PLAYWRIGHT_CHROMIUM_PATH` lässt sich ein anderes Chromium
   verwenden. Die Tests blockieren alle externen Dienste und prüfen u. a. die 3D-Darstellung (WebGL über SwiftShader),
   den Teilen-Link, die Sprachumschaltung und das Layout bei 360 px.
-- `npm run validate:terrain` lädt Höhenkacheln und PVGIS-Horizonte. Hinter einem HTTP-Proxy braucht Node
-  `NODE_USE_ENV_PROXY=1`; die Optionen stehen im Kopf von `scripts/validate-terrain.ts`.
+- `npm run validate:terrain` lädt Höhenkacheln und PVGIS-Horizonte, `npm run validate:yield` Open-Meteo-Wetter und
+  PVGIS-Ertragsreihen. Hinter einem HTTP-Proxy braucht Node `NODE_USE_ENV_PROXY=1`; die Optionen stehen im Kopf von
+  `scripts/validate-terrain.ts` und `scripts/validate-yield.ts`.
 - Die CI (GitHub Actions, Node aus `.nvmrc`) führt Lint, `format:check`, Typecheck, Tests und Build aus und danach die
   E2E-Tests.
 
@@ -102,8 +106,10 @@ stehen dort in `LIMITS`.
   das Schattenrechteck wird exakt mit den Modulen geschnitten und gegen Brute-Force-Ray-Casting getestet.
 - **Energie:** Direktstrahlung mit Einfallswinkelverlust (ASHRAE), isotrope Diffusstrahlung mit Himmelssichtfaktor
   je Stockwerk, Bodenreflexion, Modultemperatur nach NOCT, Systemverluste und AC-Grenze je Stockwerk.
-  Im Vergleich mit PVGIS (Bern, freistehend, 1 kWp, 14 % Verluste; β = 35° Süd, 45° und 90° bei 202°):
-  −0.7 % bis −1.3 % zu PVGIS-ERA5 (gleiche Jahre 2020–2023), +3.6 % bis +5.8 % zu PVGIS-SARAH3 (2005–2023).
+  Im Vergleich mit PVGIS 5.3 (Bern, freistehend, 1 kWp, 14 % Verluste, ohne Horizont; β = 35° Süd, 45° und 90° bei
+  202°; Wetter 2020–2023; `npm run validate:yield`): mit Open-Meteo `era5` −0.7 % bis −1.3 % zu PVGIS-ERA5 derselben
+  Jahre; mit der Standardauswahl `best_match` +1.4 % bis +2.9 % zu PVGIS-SARAH3 derselben Jahre und +4.3 % bis
+  +5.3 % zum SARAH3-Mittel 2005–2023.
 - **Geländehorizont:** AWS-Terrarium-Kacheln, 1°-Raster bis ca. 50 km, mit Erdkrümmung und Refraktion. Gegenüber
   PVGIS `printhorizon` RMS 0.34° (Mittelland), 1.19° (Grindelwald) und 1.22° (Zermatt).
 
@@ -126,7 +132,9 @@ Die App hat kein eigenes Backend. Sie ruft direkt aus dem Browser folgende Diens
   Standort, die heruntergeladene Datei kann importiert werden.
 
 Der Gerätestandort wird nur auf Klick über die Geolocation-API des Browsers abgefragt. Konfiguration (inkl.
-Koordinaten), UI-Einstellungen und zwischengespeicherte Wetter- und Geländedaten liegen im `localStorage`. Der
+Koordinaten), UI-Einstellungen und zwischengespeicherte Wetter- und Geländedaten liegen im `localStorage`. Wird die
+Seite verlassen, bevor der URL-Hash nachgeführt ist, übergibt der `sessionStorage` (`ssa.pendingHash`) ihn dem
+nächsten Aufruf im selben Tab. Der
 Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet, wer den Link erhält, sieht
 aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
 
@@ -134,8 +142,9 @@ aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
 
 - Nur die Panelreihe des direkt darüberliegenden Stockwerks wirft Schatten. Höhere Stockwerke könnten nur durch
   Lücken zwischen Modulen zusätzlich schatten; der Effekt liegt unter 0.01 Prozentpunkten des Jahresertrags.
-- Gelände und Hindernisse wirken als Horizont, gesehen von der Panelmitte jedes Stockwerks: Die Direktstrahlung ist
-  dann für die ganze Reihe da oder nicht, ohne Teilschatten einzelner Module durch Hindernisse.
+- Gelände und Hindernisse wirken als Horizont: das Gelände ab der Oberkante der Panelreihe (auf 1 m gerundet), die
+  Hindernisse gesehen von der Panelmitte jedes Stockwerks. Die Direktstrahlung ist dann für die ganze Reihe da oder
+  nicht, ohne Teilschatten einzelner Module durch Hindernisse.
 - Isotropes Diffusmodell, ohne zirkumsolare Aufhellung und ohne Horizontaufhellung.
 - Seitenwände und Nachbarbalkone werden nicht modelliert; die Balkonplatte liegt hinter der Panelebene und
   schattet nicht.

@@ -30,7 +30,12 @@ const de = {
     {
       name: 'Open-Meteo Historical Weather API',
       href: 'https://open-meteo.com/',
-      text: 'Stündliche Einstrahlung und Temperatur (Reanalyse, u. a. ERA5 von Copernicus/ECMWF). Wetterdaten von Open-Meteo.com, Lizenz CC BY 4.0.',
+      text: 'Stündliche Einstrahlung und Temperatur (Modellauswahl best_match: ERA5-Reanalyse von Copernicus/ECMWF und ECMWF-IFS-Analyse). Wetterdaten von Open-Meteo.com, Lizenz CC BY 4.0.',
+    },
+    {
+      name: 'Open-Meteo Geocoding API',
+      href: 'https://open-meteo.com/en/docs/geocoding-api',
+      text: 'Ortssuche; Ortsdaten von GeoNames, Lizenz CC BY 4.0.',
     },
     {
       name: 'Terrain Tiles (AWS Open Data, Mapzen/Tilezen)',
@@ -71,7 +76,12 @@ const messages: Messages<typeof de> = {
       {
         name: 'Open-Meteo Historical Weather API',
         href: 'https://open-meteo.com/',
-        text: 'Hourly irradiance and temperature (reanalysis incl. ERA5 by Copernicus/ECMWF). Weather data by Open-Meteo.com, licence CC BY 4.0.',
+        text: 'Hourly irradiance and temperature (model selection best_match: ERA5 reanalysis by Copernicus/ECMWF and ECMWF IFS analysis). Weather data by Open-Meteo.com, licence CC BY 4.0.',
+      },
+      {
+        name: 'Open-Meteo Geocoding API',
+        href: 'https://open-meteo.com/en/docs/geocoding-api',
+        text: 'Place search; place data by GeoNames, licence CC BY 4.0.',
       },
       {
         name: 'Terrain Tiles (AWS Open Data, Mapzen/Tilezen)',

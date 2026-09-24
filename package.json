@@ -15,7 +15,7 @@
   },
   "type": "module",
   "engines": {
-    "node": ">=22"
+    "node": "^22.22.2 || ^24.15.0 || >=26"
   },
   "scripts": {
     "dev": "vite",
@@ -28,7 +28,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "e2e": "playwright test",
-    "validate:terrain": "tsx scripts/validate-terrain.ts"
+    "validate:terrain": "tsx scripts/validate-terrain.ts",
+    "validate:yield": "tsx scripts/validate-yield.ts"
   },
   "dependencies": {
     "@react-three/drei": "^10.7.8",

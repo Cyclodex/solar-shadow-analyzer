@@ -21,7 +21,7 @@ const MIN_YEAR = LIMITS.weather.year.min;
 const de = {
   title: 'Wetterdaten',
   source: 'Datenquelle',
-  openMeteoHint: 'Stündliche Einstrahlung und Temperatur des gewählten Jahres (Reanalyse) von Open-Meteo.',
+  openMeteoHint: 'Stündliche Einstrahlung und Temperatur des gewählten Jahres von Open-Meteo.',
   clearSkyHint: 'Synthetisches Jahr ohne Wolken: ein theoretisches Maximum, kein reales Wetter.',
   year: 'Jahr',
   yearHintClearSky: 'Beim klaren Himmel legt das Jahr nur den Kalender fest.',
@@ -35,14 +35,14 @@ const de = {
   retry: 'Erneut versuchen',
   attribution: 'Wetterdaten von',
   license: 'Lizenz CC BY 4.0',
-  reanalysis: 'Reanalyse u. a. ERA5 (Copernicus/ECMWF).',
+  models: 'Modellauswahl best_match: ERA5-Reanalyse (Copernicus/ECMWF) und ECMWF-IFS-Analyse.',
 };
 const messages: Messages<typeof de> = {
   de,
   en: {
     title: 'Weather data',
     source: 'Data source',
-    openMeteoHint: 'Hourly irradiance and temperature of the selected year (reanalysis) from Open-Meteo.',
+    openMeteoHint: 'Hourly irradiance and temperature of the selected year from Open-Meteo.',
     clearSkyHint: 'Synthetic cloudless year: a theoretical maximum, not real weather.',
     year: 'Year',
     yearHintClearSky: 'With clear skies the year only sets the calendar.',
@@ -55,7 +55,7 @@ const messages: Messages<typeof de> = {
     retry: 'Try again',
     attribution: 'Weather data by',
     license: 'licence CC BY 4.0',
-    reanalysis: 'Reanalysis incl. ERA5 (Copernicus/ECMWF).',
+    models: 'Model selection best_match: ERA5 reanalysis (Copernicus/ECMWF) and ECMWF IFS analysis.',
   },
 };
 
@@ -155,7 +155,7 @@ export function WeatherSection() {
           <a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener noreferrer">
             {t.license}
           </a>
-          . {t.reanalysis}
+          . {t.models}
         </p>
       )}
     </Section>

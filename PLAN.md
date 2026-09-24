@@ -26,7 +26,7 @@ Die Phasen des alten Plans und ihre Umsetzung:
   360 px.
 - **4.2 Presets:** 24 Standorte, Ortssuche, Gerätestandort, 5 Modultypen; Einstellungen werden automatisch im
   Browser gespeichert.
-- **4.3 Export:** Teilen-Link, Konfiguration als JSON, CSV-Tabellen, PNG je Ansicht und Druckbericht (auch als PDF).
+- **4.3 Export:** Teilen-Link, Konfiguration als JSON, CSV-Tabellen, PNG je Ansicht und Diagramm und Druckbericht (auch als PDF).
 - **4.4 Sprache:** Deutsch und Englisch.
 - **5.1 Heatmap:** Jahres-Heatmap der Verschattung je Stockwerk.
 - **5.2 Animation:** Tagesanimation mit einstellbarer Geschwindigkeit, alle Ansichten synchron.
@@ -36,8 +36,7 @@ Die Phasen des alten Plans und ihre Umsetzung:
 
 - Übersetzungen Französisch und Italienisch (aus dem alten Punkt 4.4).
 - SVG-Export der Ansichten und Diagramme (aus dem alten Punkt 4.3).
-- Deployment, z. B. auf GitHub Pages. Bei einer Vite-`base` den absoluten Pfad `/favicon.svg` in `index.html`
-  anpassen; Open-Graph-Tags mit `og:url` und `og:image` erst mit einer festen Adresse.
+- Deployment, z. B. auf GitHub Pages. Open-Graph-Tags mit `og:url` und `og:image` erst mit einer festen Adresse.
 
 ## Ideen
 
