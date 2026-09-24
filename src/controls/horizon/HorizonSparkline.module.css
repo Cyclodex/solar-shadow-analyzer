@@ -1,0 +1,182 @@
+.figure {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.caption {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.title {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.subtitle {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.plot {
+  position: relative;
+  border-radius: var(--radius-sm);
+}
+
+.plot:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.svg {
+  width: 100%;
+  height: auto;
+  touch-action: pan-y;
+}
+
+.bg {
+  fill: var(--surface-2);
+}
+
+.grid {
+  stroke: var(--grid);
+  stroke-width: 1;
+}
+
+.axis {
+  stroke: var(--axis);
+  stroke-width: 1;
+}
+
+.yLabel,
+.xLabel,
+.xFacade {
+  font-size: 10px;
+  fill: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.xFacade {
+  font-weight: 700;
+  fill: var(--text);
+}
+
+.facade {
+  stroke: var(--accent);
+  stroke-width: 1;
+}
+
+/* Series identity: categorical slots 2 / 1 / 0 (validated palette, fixed per series). */
+.terrain {
+  --series: var(--floor-2);
+}
+
+.obstacles {
+  --series: var(--floor-1);
+}
+
+.manual {
+  --series: var(--floor-0);
+}
+
+.effective {
+  fill: var(--text-faint);
+  fill-opacity: 0.18;
+}
+
+.line {
+  fill: none;
+  stroke: var(--series);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.crosshair {
+  stroke: var(--text-muted);
+  stroke-width: 1;
+}
+
+.dot {
+  fill: var(--series);
+  stroke: var(--surface-2);
+  stroke-width: 2;
+}
+
+/* Line key (legend/tooltip) and area swatch. */
+.key {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 14px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--series);
+}
+
+.swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 12px;
+  height: 10px;
+  border-radius: 2px;
+}
+
+.effectiveKey {
+  background: color-mix(in srgb, var(--text-faint) 30%, transparent);
+}
+
+.readout {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.readoutHead {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 2px var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.legendLabel {
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-muted);
+}
+
+.legendValue {
+  font-weight: 650;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (forced-colors: active) {
+  .line {
+    stroke: CanvasText;
+  }
+
+  .key {
+    background: CanvasText;
+  }
+}
