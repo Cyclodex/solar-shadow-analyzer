@@ -32,4 +32,12 @@ describe('createCache', () => {
     cache.get([{}], compute);
     expect(compute).toHaveBeenCalledTimes(3);
   });
+
+  it('peek reads without computing', () => {
+    const cache = createCache<string>(2);
+    expect(cache.peek([1])).toBeUndefined();
+    cache.get([1], () => 'one');
+    expect(cache.peek([1])).toBe('one');
+    expect(cache.peek([2])).toBeUndefined();
+  });
 });

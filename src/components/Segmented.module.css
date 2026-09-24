@@ -67,3 +67,24 @@
 .option:focus-visible {
   outline-offset: -2px;
 }
+
+/* Touch targets: every option ≥ 36 px on phones/tablets and touch screens. */
+@media (max-width: 1099px), (pointer: coarse) {
+  .option,
+  .sm .option {
+    min-height: var(--touch);
+  }
+}
+
+/* Forced colours: the checked option by system colours (backgrounds are dropped otherwise). */
+@media (forced-colors: active) {
+  .option[aria-checked='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .option:disabled {
+    color: GrayText;
+  }
+}

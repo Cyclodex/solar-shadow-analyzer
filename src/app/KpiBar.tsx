@@ -3,17 +3,19 @@ import { Skeleton } from '../components/Skeleton';
 import { cssVars } from '../components/cssVars';
 import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
+import { panelsOverlap, substringBeamLoss } from '../model/geometry';
 import {
+  useAnnualInputsPending,
   useEconomics,
   useFloorPlacements,
-  useFocusFloor,
   useInstant,
   useInstantPower,
   useLayout,
+  useShadedFloor,
   useSimulation,
+  useSimulationConfig,
 } from '../hooks/useModel';
 import { useConfig } from '../state/configStore';
-import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import styles from './KpiBar.module.css';
 
@@ -36,9 +38,11 @@ const de = {
   profile: 'Profilwinkel',
   profileSub: (critical: string) => `kritisch ${critical} (2D-Näherung, nur zur Erklärung)`,
   profileNever: 'Profilwinkel-Grenze wird nie erreicht',
+  profileNone: 'keine Reihe darüber',
+  profileOverlap: 'Panelreihen überlappen sich',
   shadeOn: (floor: string) => `Schatten auf ${floor}`,
-  shadeSub: 'exakt aus dem 3D-Modell',
-  topFloor: 'oberstes Stockwerk: keine Panels darüber',
+  shadeSub: 'der Panelfläche, exakt aus dem 3D-Modell',
+  beamLoss: (pct: string) => `${pct} Verlust der Direktstrahlung (Teilstränge)`,
   power: 'Leistung jetzt',
   powerSub: 'bei klarem Himmel, AC',
   loading: 'Jahresergebnisse werden berechnet …',
@@ -64,9 +68,11 @@ const messages: Messages<typeof de> = {
     profile: 'Profile angle',
     profileSub: (critical) => `critical ${critical} (2D approximation, explanatory only)`,
     profileNever: 'profile angle limit is never reached',
+    profileNone: 'no row above',
+    profileOverlap: 'panel rows overlap',
     shadeOn: (floor) => `Shade on ${floor}`,
-    shadeSub: 'exact, from the 3D model',
-    topFloor: 'top floor: no panels above',
+    shadeSub: 'of panel area, exact from the 3D model',
+    beamLoss: (pct) => `${pct} direct-beam loss (substrings)`,
     power: 'Power now',
     powerSub: 'clear sky, AC',
     loading: 'Computing annual results …',
@@ -91,14 +97,22 @@ function Kpi({
 }: {
   label: string;
   value: ReactNode;
-  sub?: ReactNode;
+  /** Secondary text; several entries become separate lines. */
+  sub?: ReactNode | readonly string[];
   children?: ReactNode;
 }) {
+  const lines = Array.isArray(sub) ? sub : null;
   return (
     <div className={styles.kpi}>
       <dt className={styles.label}>{label}</dt>
       <dd className={styles.value}>{value}</dd>
-      {sub && <dd className={styles.sub}>{sub}</dd>}
+      {lines
+        ? lines.map((line) => (
+            <dd key={line} className={styles.sub}>
+              {line}
+            </dd>
+          ))
+        : sub && <dd className={styles.sub}>{sub as ReactNode}</dd>}
       {children && <dd className={styles.extra}>{children}</dd>}
     </div>
   );
@@ -122,30 +136,37 @@ function FloorList({ items }: { items: { floor: number; label: string; value: st
   );
 }
 
-/** Headline numbers: annual results (simulation) and the state at the selected instant. */
+/**
+ * Headline numbers: annual results (simulation) and the state at the selected instant.
+ * Every annual number comes from one snapshot (the simulation and the config it was computed from), and
+ * the annual group stays busy while its inputs are still loading (weather, terrain horizon).
+ */
 export function KpiBar() {
   const t = useMessages(messages);
   const c = useCommon();
   const f = useFormat();
   const lang = useLang();
   const config = useConfig();
-  const weather = useDataStore((s) => s.weather);
   const simulation = useSimulation();
+  const simConfig = useSimulationConfig();
   const econ = useEconomics();
+  const pending = useAnnualInputsPending();
   const instant = useInstant();
   const power = useInstantPower();
   const layout = useLayout();
   const placements = useFloorPlacements();
-  const focus = useFocusFloor();
+  const shadedFloor = useShadedFloor();
   const date = useTimeStore((s) => s.date);
   const minutes = useTimeStore((s) => s.minutes);
 
   const { numFloors } = config.building;
-  const loading = weather.status === 'loading' || simulation === null;
+  const loading = pending || simulation === null;
+  const ready = simulation !== null && !loading;
   const topDown = [...placements].reverse();
-  const ratedKwp = (numFloors * config.panels.count * config.panels.powerWp) / 1000;
 
-  // ── Annual ──
+  // ── Annual (one snapshot: simulation + simConfig) ──
+  const simFloors = simulation?.floors.length ?? numFloors;
+  const ratedKwp = (simFloors * simConfig.panels.count * simConfig.panels.powerWp) / 1000;
   const unshadedKwh = simulation?.floors.reduce((s, fl) => s + fl.annualUnshadedKwh, 0) ?? 0;
   const lossPct = simulation && unshadedKwh > 0 ? (simulation.totalShadingLossKwh / unshadedKwh) * 100 : 0;
   const sourceText = simulation?.source === 'open-meteo' ? t.source(simulation.year) : c.clearSkyHint;
@@ -153,22 +174,38 @@ export function KpiBar() {
 
   // ── Instant ──
   const { sun } = instant;
-  const focusState = instant.floors[focus];
-  const hasAbove = focus < numFloors - 1;
+  // The floor below the top floor (or the chosen lower floor): same floor as the heatmap.
+  const shadeState = instant.floors[shadedFloor];
   let shadeValue: string;
-  let shadeSub: string;
-  if (!hasAbove) {
+  let shadeSub: string[];
+  if (numFloors < 2) {
     shadeValue = '–';
-    shadeSub = numFloors === 1 ? t.noShadingFloors : t.topFloor;
-  } else if (focusState.state !== 'lit') {
+    shadeSub = [t.noShadingFloors];
+  } else if (!shadeState || shadeState.state !== 'lit') {
     shadeValue = '–';
-    shadeSub = c.sunStates[focusState.state];
+    shadeSub = [c.sunStates[shadeState?.state ?? 'night']];
   } else {
-    shadeValue = f.pct(focusState.shade.fraction * 100);
-    shadeSub = t.shadeSub;
+    // Share of the row's panel area; with bypass substrings the direct-beam loss is larger.
+    const { shade } = shadeState;
+    shadeValue = f.pct(shade.fraction * 100);
+    shadeSub = [t.shadeSub];
+    if (config.system.shadingModel === 'substring' && shade.fraction > 0) {
+      const losses = substringBeamLoss(shade, layout);
+      const meanLoss = losses.reduce((a, b) => a + b, 0) / Math.max(1, losses.length);
+      shadeSub.push(t.beamLoss(f.pct(meanLoss * 100)));
+    }
   }
   const profile = instant.profileAngle;
   const critical = layout.criticalProfileAngle;
+  // The critical angle only exists for a row above that does not overlap this one.
+  const profileSub =
+    numFloors < 2
+      ? t.profileNone
+      : panelsOverlap(layout)
+        ? t.profileOverlap
+        : critical >= 90
+          ? t.profileNever
+          : t.profileSub(f.deg(critical, 1));
 
   const headingId = useId();
   const skeleton = <Skeleton width="7ch" height="1.1em" />;
@@ -186,12 +223,10 @@ export function KpiBar() {
         <dl className={styles.grid}>
           <Kpi
             label={t.annualYield}
-            value={
-              simulation && !loading ? <Num value={f.num(simulation.totalAnnualKwh)} unit="kWh" /> : skeleton
-            }
-            sub={simulation && !loading ? sourceText : null}
+            value={ready ? <Num value={f.num(simulation.totalAnnualKwh)} unit="kWh" /> : skeleton}
+            sub={ready ? sourceText : null}
           >
-            {simulation && !loading && numFloors > 1 && (
+            {ready && simFloors > 1 && (
               <FloorList
                 items={[...simulation.floors].reverse().map((fl) => ({
                   floor: fl.floor,
@@ -204,7 +239,7 @@ export function KpiBar() {
           <Kpi
             label={t.shadingLoss}
             value={
-              simulation && !loading ? (
+              ready ? (
                 <>
                   <Num value={f.num(simulation.totalShadingLossKwh)} unit="kWh" />{' '}
                   <span className={styles.secondary}>({f.pct(lossPct, 1)})</span>
@@ -213,23 +248,23 @@ export function KpiBar() {
                 skeleton
               )
             }
-            sub={numFloors > 1 ? t.shadingLossSub : t.noShadingFloors}
+            sub={simFloors > 1 ? t.shadingLossSub : t.noShadingFloors}
           />
           <Kpi
             label={t.specificYield}
             value={
-              simulation && !loading && ratedKwp > 0 ? (
+              ready && ratedKwp > 0 ? (
                 <Num value={f.num(simulation.totalAnnualKwh / ratedKwp)} unit="kWh/kWp" />
               ) : (
                 skeleton
               )
             }
-            sub={t.specificYieldSub(f.unit(ratedKwp, 'kWp', 2))}
+            sub={ready ? t.specificYieldSub(f.unit(ratedKwp, 'kWp', 2)) : null}
           />
           <Kpi
             label={t.payback}
             value={
-              econ && !loading ? (
+              econ && ready ? (
                 Number.isFinite(payback) ? (
                   <Num value={f.num(payback, 1)} unit={t.yearsUnit} />
                 ) : (
@@ -240,7 +275,7 @@ export function KpiBar() {
               )
             }
             sub={
-              econ && !loading
+              econ && ready
                 ? t.paybackSub(f.currency(econ.annualSavings, config.economics.currency, 0))
                 : null
             }
@@ -270,10 +305,10 @@ export function KpiBar() {
           <Kpi
             label={t.profile}
             value={profile === null || sun.altitude <= 0 ? '–' : f.deg(profile, 1)}
-            sub={critical >= 90 ? t.profileNever : t.profileSub(f.deg(critical, 1))}
+            sub={profileSub}
           />
           <Kpi
-            label={t.shadeOn(floorLabel(placements[focus]?.storey ?? focus, lang))}
+            label={t.shadeOn(floorLabel(placements[shadedFloor]?.storey ?? shadedFloor, lang))}
             value={shadeValue}
             sub={shadeSub}
           />

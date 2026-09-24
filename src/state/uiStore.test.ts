@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { useConfigStore } from './configStore';
 import { UI_STORAGE_KEY, useUiStore } from './uiStore';
 import { resetStores } from '../test/utils';
 
@@ -10,7 +11,7 @@ describe('useUiStore', () => {
     s.toggleLang();
     s.toggleTheme();
     s.toggleView('scene3d');
-    s.toggleSection('location');
+    s.setSectionOpen('location', true);
     const after = useUiStore.getState();
     expect(after.lang).toBe('en');
     expect(after.theme).toBe('light');
@@ -25,6 +26,34 @@ describe('useUiStore', () => {
     expect(useUiStore.getState().focusFloor).toBe(2);
   });
 
+  it('caps the focus floor when the floor count shrinks', () => {
+    const floors = (n: number): void => useConfigStore.getState().patch('building', { numFloors: n });
+    floors(4);
+    useUiStore.getState().setFocusFloor(2); // 3. OG, below the top floor
+    floors(2);
+    expect(useUiStore.getState().focusFloor).toBe(0); // the floor below the new top floor
+    // An explicit pick of the top floor stays on the top floor (useFocusFloor clamps it).
+    floors(4);
+    useUiStore.getState().setFocusFloor(3);
+    floors(3);
+    expect(useUiStore.getState().focusFloor).toBe(3);
+    // A growing floor count never moves the focus.
+    useUiStore.getState().setFocusFloor(1);
+    floors(8);
+    expect(useUiStore.getState().focusFloor).toBe(1);
+  });
+
+  it('caps a stored focus floor beyond the stored floor count at start-up', async () => {
+    localStorage.setItem(
+      'ssa.config',
+      JSON.stringify({ state: { config: { building: { numFloors: 3 } } }, version: 2 }),
+    );
+    localStorage.setItem(UI_STORAGE_KEY, JSON.stringify({ state: { focusFloor: 6 }, version: 1 }));
+    vi.resetModules();
+    const { useUiStore: fresh } = await import('./uiStore');
+    expect(fresh.getState().focusFloor).toBe(1);
+  });
+
   it('persists and validates stored state', async () => {
     localStorage.setItem(
       UI_STORAGE_KEY,
@@ -33,7 +62,7 @@ describe('useUiStore', () => {
           lang: 'en',
           theme: 'purple',
           views: { frontal: false, bogus: 1 },
-          openSections: { weather: true, x: 'y' },
+          openSections: { weather: true, x: 'y', bogus: true },
           focusFloor: -3,
         },
         version: 1,

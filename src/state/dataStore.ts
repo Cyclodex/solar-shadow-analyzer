@@ -9,13 +9,21 @@ import type { HorizonProfile, WeatherSeries } from '../model/types';
 
 export type LoadStatus = 'idle' | 'loading' | 'ready' | 'error';
 
+/** Terrain horizons of one site per observer height above ground (whole metres, see hooks/useTerrain.ts). */
+export type TerrainProfiles = Readonly<Record<number, HorizonProfile>>;
+
 export interface TerrainData {
   /** idle = terrain horizon disabled; error = load failed (profile null → computed without terrain). */
   status: LoadStatus;
   /** Download progress 0…1 (tiles done / total). */
   progress: number;
-  /** Terrain horizon at the site (null unless status 'ready'). */
+  /** Terrain horizon at the lowest panel floor's height (null unless status 'ready'). */
   profile: HorizonProfile | null;
+  /**
+   * Terrain horizon per observer height of the panel floors (null unless 'ready'). Heights still being
+   * computed are missing: readers fall back to the nearest height (terrainProfileAt).
+   */
+  profiles: TerrainProfiles | null;
   /** Ground elevation at the site from the DEM, m (null unless 'ready'). */
   siteElevation: number | null;
   /** Error message (technical, English) when status 'error'. */
@@ -56,6 +64,7 @@ export const INITIAL_TERRAIN: TerrainData = {
   status: 'idle',
   progress: 0,
   profile: null,
+  profiles: null,
   siteElevation: null,
   error: null,
 };
@@ -76,5 +85,6 @@ export const useDataStore = create<DataState>()((set) => ({
   setWeather: (partial) => set((s) => ({ weather: { ...s.weather, ...partial } })),
   retryTerrain: () => set((s) => ({ terrainAttempt: s.terrainAttempt + 1 })),
   retryWeather: () => set((s) => ({ weatherAttempt: s.weatherAttempt + 1 })),
-  resetData: () => set({ terrain: INITIAL_TERRAIN, weather: INITIAL_WEATHER, terrainAttempt: 0, weatherAttempt: 0 }),
+  resetData: () =>
+    set({ terrain: INITIAL_TERRAIN, weather: INITIAL_WEATHER, terrainAttempt: 0, weatherAttempt: 0 }),
 }));

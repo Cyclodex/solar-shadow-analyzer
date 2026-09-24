@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo } from 'react';
+import { useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import type {
   Config,
   DailyProfilePoint,
@@ -10,38 +10,58 @@ import type {
   PanelLayout,
   SimulationResult,
   TiltSweepPoint,
+  WeatherSeries,
 } from '../model/types';
 import { floorPlacements, instantStateFromSun, panelLayout } from '../model/geometry';
-import { floorHorizons } from '../model/horizon';
 import { sunPosition, sunTimes, solarPath, type SolarPathPoint, type SunTimes } from '../model/sun';
 import { dayOfYear, localToUtc } from '../model/time';
 import {
+  annualFloorKwh,
   simulateYear,
   createFloorModel,
   createStepResult,
   evaluateStep,
+  sunTrack,
   type FloorModel,
+  type SunTrack,
 } from '../model/simulation';
-import { dailyProfile, heatmapStats, shadeHeatmap, tiltSweep, type HeatmapStats } from '../model/analysis';
+import {
+  DEFAULT_SWEEP_TILTS,
+  dailyProfile,
+  heatmapStats,
+  shadeHeatmap,
+  type HeatmapStats,
+} from '../model/analysis';
 import { economics } from '../model/economics';
 import { clearSkyIrradiance } from '../model/irradiance';
 import { CLEAR_SKY_TEMPERATURE_C } from '../model/weather';
 import { clamp } from '../model/units';
-import { useConfig } from '../state/configStore';
-import { useDataStore } from '../state/dataStore';
+import { useConfig, useConfigSection } from '../state/configStore';
+import { useDataStore, type DataState } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
-import { createCache } from './cache';
+import { createCache, sameDeps } from './cache';
+import {
+  floorHorizonsWithTerrain,
+  floorTerrainHeight,
+  terrainProfileAt,
+  type TerrainSource,
+} from './useTerrain';
+import { weatherMatches } from './useWeather';
 
 // ─────────────────────────────────────────────
 // MODEL HOOKS
 // Thin, memoised wrappers around src/model. Results are shared between components (createCache) and
 // keyed by config *sections* (stable references, see configStore), so e.g. a tilt change never
 // refetches weather/terrain and never recomputes the tilt sweep, and a time-slider change only
-// re-evaluates the instant (never a yearly computation).
+// re-evaluates the instant (never a yearly computation). `location` is keyed by latitude, longitude
+// and time zone only: its name and elevation are display-only.
 // Heavy yearly computations (simulation, tilt sweep, heatmap) read their inputs through
 // useDeferredValue: while a slider is dragged React renders the old result first and computes the
-// new one in a background render.
+// new one in a background render. useDeferredValue without an initial value does not defer on mount,
+// so consumers far below the fold (heatmap) can opt out of the first render (`enabled`).
+// Annual results never mix inputs: they are null while the loaded weather series belongs to another
+// site or year than the config (e.g. right after a location change).
 // ─────────────────────────────────────────────
 
 const layoutCache = createCache<PanelLayout>(4);
@@ -51,7 +71,7 @@ const sunTimesCache = createCache<SunTimes>(8);
 // Frontal + sun-path views alone use 4 dates (selected, solstices, equinox); leave room for other callers.
 const solarPathCache = createCache<SolarPathPoint[]>(8);
 const simulationCache = createCache<SimulationResult>(3);
-const sweepCache = createCache<TiltSweepResult>(2);
+const sweepCache = createCache<TiltSweepResult>(3);
 const heatmapCache = createCache<HeatmapData>(4);
 const heatmapStatsCache = createCache<HeatmapStats>(4);
 const dailyCache = createCache<DailyProfilePoint[]>(4);
@@ -76,25 +96,32 @@ export function clearModelCaches(): void {
   ]) {
     c.clear();
   }
+  resetSweeps();
 }
 
 // ── Geometry ─────────────────────────────────
+
+/** Cache key of the panel geometry (everything but the module power, which no geometry depends on). */
+const panelGeometryKey = (panels: Config['panels']): string => JSON.stringify({ ...panels, powerWp: 0 });
 
 function layoutOf(config: Config): PanelLayout {
   return layoutCache.get([config.panels, config.building], () => panelLayout(config));
 }
 
-function horizonsOf(config: Config, terrain: HorizonProfile | null): HorizonProfile[] {
+function horizonsOf(config: Config, terrain: TerrainSource): HorizonProfile[] {
   const { horizon, building, panels } = config;
-  // Obstacle horizons are seen from the panel centre (depends on the panels); terrain only if enabled.
+  // Obstacle horizons are seen from the panel centre (depends on the panel geometry); terrain only if enabled.
   const deps = [
     horizon,
     building,
-    horizon.obstacles.length > 0 ? panels : null,
+    horizon.obstacles.length > 0 ? panelGeometryKey(panels) : null,
     horizon.terrainEnabled ? terrain : null,
   ];
-  return horizonsCache.get(deps, () => floorHorizons(config, terrain));
+  return horizonsCache.get(deps, () => floorHorizonsWithTerrain(config, terrain));
 }
+
+/** Terrain input of the horizons: profiles per floor height, or the single site profile. */
+const terrainSourceOf = (s: DataState): TerrainSource => s.terrain.profiles ?? s.terrain.profile;
 
 /** Panel row geometry in metres (identical for every floor). */
 export function useLayout(): PanelLayout {
@@ -107,25 +134,42 @@ export function useFloorPlacements(): FloorPlacement[] {
   return placementsCache.get([config.building, config.panels], () => floorPlacements(config));
 }
 
-/** Terrain horizon profile when loaded (null while loading, on error or when disabled). */
-export function useTerrainProfile(): HorizonProfile | null {
-  const enabled = useConfig().horizon.terrainEnabled;
-  const profile = useDataStore((s) => s.terrain.profile);
-  return enabled ? profile : null;
+/**
+ * Terrain horizon of `floor` (default: the lowest panel floor), seen from that floor's railing height;
+ * null while loading, on error or when disabled.
+ */
+export function useTerrainProfile(floor = 0): HorizonProfile | null {
+  const enabled = useConfigSection('horizon').terrainEnabled;
+  const placements = useFloorPlacements();
+  const terrain = useDataStore(terrainSourceOf);
+  if (!enabled) return null;
+  const placement = placements[clamp(Math.round(floor), 0, placements.length - 1)];
+  return terrainProfileAt(terrain, floorTerrainHeight(placement));
 }
 
 /** Horizon per floor (index = floor): terrain ∪ manual points ∪ obstacles seen from that floor. */
 export function useHorizons(): HorizonProfile[] {
   const config = useConfig();
-  const terrain = useDataStore((s) => s.terrain.profile);
+  const terrain = useDataStore(terrainSourceOf);
   return horizonsOf(config, terrain);
 }
 
-/** Analysed floor (uiStore.focusFloor clamped to 0…numFloors−1). */
+/** Focus floor (uiStore.focusFloor clamped to 0…numFloors−1): Panel-Schatten, sun path, horizon lists. */
 export function useFocusFloor(): number {
   const numFloors = useConfig().building.numFloors;
   const focus = useUiStore((s) => s.focusFloor);
   return clamp(focus, 0, numFloors - 1);
+}
+
+/**
+ * Floor analysed by the "shade now" KPI, the heatmap and the shaded-hours column: the focus floor, but
+ * never the top floor when there are floors below it (no panels above the top row, so it is never
+ * shaded by them). A single floor is floor 0.
+ */
+export function useShadedFloor(): number {
+  const numFloors = useConfigSection('building').numFloors;
+  const focus = useFocusFloor();
+  return numFloors <= 1 ? 0 : Math.min(focus, numFloors - 2);
 }
 
 // ── Instant (selected date + time) ───────────
@@ -174,44 +218,90 @@ export function useInstantPower(): number[] {
 
 /** Sunrise / solar noon / sunset (local clock minutes) of `date` (default: selected date). */
 export function useSunTimes(date?: string): SunTimes {
-  const location = useConfig().location;
+  const { latitude, longitude, timezone } = useConfigSection('location');
   const selected = useTimeStore((s) => s.date);
   const d = date ?? selected;
-  return sunTimesCache.get([d, location], () =>
-    sunTimes(d, location.latitude, location.longitude, location.timezone),
+  return sunTimesCache.get([d, latitude, longitude, timezone], () =>
+    sunTimes(d, latitude, longitude, timezone),
   );
 }
 
 /** Sun positions over the local day 00:00–24:00 of `date` (default: selected date). */
 export function useSolarPath(date?: string, stepMinutes = 10): SolarPathPoint[] {
-  const location = useConfig().location;
+  const { latitude, longitude, timezone } = useConfigSection('location');
   const selected = useTimeStore((s) => s.date);
   const d = date ?? selected;
-  return solarPathCache.get([d, location, stepMinutes], () =>
-    solarPath(d, location.latitude, location.longitude, location.timezone, stepMinutes),
+  return solarPathCache.get([d, latitude, longitude, timezone, stepMinutes], () =>
+    solarPath(d, latitude, longitude, timezone, stepMinutes),
   );
 }
 
 // ── Yearly computations (deferred) ───────────
 
-/** Deferred config + horizons + weather: consistent snapshot for heavy computations. */
-function useDeferredInputs(): { config: Config; horizons: HorizonProfile[]; terrain: HorizonProfile | null } {
+/** Deferred config + horizons + terrain: consistent snapshot for heavy computations. */
+function useDeferredInputs(): { config: Config; horizons: HorizonProfile[]; terrain: TerrainSource } {
   const config = useDeferredValue(useConfig());
-  const terrain = useDeferredValue(useDataStore((s) => s.terrain.profile));
+  const terrain = useDeferredValue(useDataStore(terrainSourceOf));
   return { config, terrain, horizons: horizonsOf(config, terrain) };
 }
 
 /**
+ * The deferred weather series if it belongs to the site and year of both the deferred `config` and the
+ * current config, else null: after a location or year change the previous series is kept while the new
+ * one loads (stale-while-revalidate), and the new site's sun must never be combined with it.
+ */
+function useAnnualWeather(config: Config): WeatherSeries | null {
+  const weather = useDeferredValue(useDataStore((s) => s.weather.series));
+  const live = useConfigSection('location');
+  const liveYear = useConfigSection('weather').year;
+  if (!weather) return null;
+  const { latitude, longitude } = config.location;
+  const matches =
+    weatherMatches(weather, latitude, longitude, config.weather.year) &&
+    weatherMatches(weather, live.latitude, live.longitude, liveYear);
+  return matches ? weather : null;
+}
+
+/**
+ * True while inputs of the annual results are still arriving: the weather series is loading, or the
+ * terrain horizon is enabled and loading — and while a newly arrived series or terrain horizon has not
+ * reached the (deferred) annual results yet. Annual numbers computed meanwhile are provisional.
+ */
+export function useAnnualInputsPending(): boolean {
+  const terrainEnabled = useConfigSection('horizon').terrainEnabled;
+  const loading = useDataStore(
+    (s) => s.weather.status === 'loading' || (terrainEnabled && s.terrain.status === 'loading'),
+  );
+  const weather = useDataStore((s) => s.weather.series);
+  const terrain = useDataStore(terrainSourceOf);
+  // Same deferral as useDeferredInputs / useAnnualWeather: differs only in the urgent render.
+  const deferredWeather = useDeferredValue(weather);
+  const deferredTerrain = useDeferredValue(terrain);
+  return loading || deferredWeather !== weather || (terrainEnabled && deferredTerrain !== terrain);
+}
+
+/**
+ * The (deferred) config the annual results (useSimulation, useEconomics) are computed from. Values shown
+ * next to them (e.g. installed kWp for kWh/kWp) must come from it, never from the live config: while a
+ * slider is dragged the live config is ahead of the results.
+ */
+export function useSimulationConfig(): Config {
+  return useDeferredInputs().config;
+}
+
+/**
  * Annual simulation (kWh per floor/month, shading loss) for the loaded weather series;
- * null until a series is available (see dataStore.weather).
+ * null until a series of the configured site and year is available (see dataStore.weather).
  */
 export function useSimulation(): SimulationResult | null {
   const { config, horizons } = useDeferredInputs();
-  const weather = useDeferredValue(useDataStore((s) => s.weather.series));
+  const weather = useAnnualWeather(config);
   if (!weather) return null;
-  const { location, building, panels, system } = config;
-  return simulationCache.get([location, building, panels, system, horizons, weather], () =>
-    simulateYear(config, weather, horizons),
+  const { building, panels, system } = config;
+  const { latitude, longitude, timezone } = config.location;
+  return simulationCache.get(
+    [latitude, longitude, timezone, building, panels, system, horizons, weather],
+    () => simulateYear(config, weather, horizons),
   );
 }
 
@@ -220,48 +310,240 @@ export interface TiltSweepResult {
   points: TiltSweepPoint[];
   /** Point with the highest total annual yield (first one on ties). */
   optimum: TiltSweepPoint;
+  /**
+   * True while inputs other than the tilt are being changed: the result is the previous one (the sweep
+   * is recomputed once the inputs have settled). Mark it as updating; do not export it.
+   */
+  updating?: boolean;
 }
 
-/** Tilt at which the (tilt-dependent) obstacle horizons for the sweep are evaluated. */
-const SWEEP_HORIZON_TILT = 45;
+/** Quiet time after the last change of building/panel/system/horizon inputs before the sweep recomputes. */
+export const SWEEP_SETTLE_MS = 250;
+
+/** `value`, but a changed value only once it has stopped changing for `ms` (the first value at once). */
+function useSettledValue<T>(value: T, ms: number): T {
+  const [settled, setSettled] = useState(value);
+  useEffect(() => {
+    if (Object.is(settled, value)) return;
+    const id = setTimeout(() => setSettled(() => value), ms);
+    return () => clearTimeout(id);
+  }, [value, settled, ms]);
+  return settled;
+}
+
+/** Config sections a drag can change continuously (sliders, dial); location and weather year are discrete. */
+interface SweepShape {
+  building: Config['building'];
+  panels: Config['panels'];
+  system: Config['system'];
+  horizon: Config['horizon'];
+}
+
+/** Inputs of one tilt sweep and its cache key. */
+interface SweepRequest {
+  deps: unknown[];
+  config: Config;
+  weather: WeatherSeries;
+  terrain: TerrainSource;
+}
+
+function sweepRequest(
+  config: Config,
+  shape: SweepShape,
+  terrain: TerrainSource,
+  weather: WeatherSeries,
+): SweepRequest {
+  const { latitude, longitude, timezone } = config.location;
+  const { building, panels, system, horizon } = shape;
+  const panelsWithoutTilt = JSON.stringify({ ...panels, tiltFromVertical: 0 });
+  const terrainDep = horizon.terrainEnabled ? terrain : null;
+  return {
+    deps: [latitude, longitude, timezone, building, panelsWithoutTilt, system, horizon, terrainDep, weather],
+    config: { ...config, ...shape },
+    weather,
+    terrain,
+  };
+}
+
+/**
+ * Tilt sweep in steps — model tiltSweep (sun track shared by all tilts), but with each tilt's own
+ * horizons: obstacle horizons are seen from the panel centre, which moves with the tilt, so every point
+ * equals simulateYear at that tilt. `step()` computes the next tilt; `points` is complete when done.
+ */
+function createSweep(req: SweepRequest): { points: TiltSweepPoint[]; done: () => boolean; step: () => void } {
+  const { config, weather, terrain } = req;
+  let track: SunTrack | null = null;
+  // Without obstacles no horizon depends on the tilt.
+  const fixed = config.horizon.obstacles.length > 0 ? null : floorHorizonsWithTerrain(config, terrain);
+  const points: TiltSweepPoint[] = [];
+  return {
+    points,
+    done: () => points.length === DEFAULT_SWEEP_TILTS.length,
+    step: () => {
+      track ??= sunTrack(config, weather);
+      const tiltFromVertical = DEFAULT_SWEEP_TILTS[points.length];
+      const c: Config = { ...config, panels: { ...config.panels, tiltFromVertical } };
+      const floorsKwh = annualFloorKwh(
+        createFloorModel(c, fixed ?? floorHorizonsWithTerrain(c, terrain)),
+        weather,
+        track,
+      );
+      points.push({ tiltFromVertical, floorsKwh, totalKwh: floorsKwh.reduce((a, b) => a + b, 0) });
+    },
+  };
+}
+
+function sweepResult(points: TiltSweepPoint[]): TiltSweepResult {
+  const optimum = points.reduce((best, p) => (p.totalKwh > best.totalKwh ? p : best), points[0]);
+  return { points, optimum };
+}
+
+/** The updating variant of each sweep result (stable identity for consumers' memos). */
+const updatingSweeps = new WeakMap<TiltSweepResult, TiltSweepResult>();
+
+function asUpdating(result: TiltSweepResult): TiltSweepResult {
+  let r = updatingSweeps.get(result);
+  if (!r) {
+    r = { ...result, updating: true };
+    updatingSweeps.set(result, r);
+  }
+  return r;
+}
+
+// ── Background sweep ──
+// A sweep takes 50–150 ms (19 annual runs); on a slow phone several times that. When a previous result
+// can be shown meanwhile, the new one is computed in slices of ≈ SWEEP_SLICE_MS between frames instead of
+// blocking the main thread; the hooks re-render when it is done.
+
+/** Time budget of one background slice (one tilt at least). */
+const SWEEP_SLICE_MS = 8;
+
+let sweepJob: { req: SweepRequest; sweep: ReturnType<typeof createSweep> } | null = null;
+let sweepTimer: ReturnType<typeof setTimeout> | undefined;
+/** Last finished sweep: shown (updating) while the next one of the same site and weather computes. */
+let lastSweep: { req: SweepRequest; result: TiltSweepResult } | null = null;
+let sweepVersion = 0;
+const sweepListeners = new Set<() => void>();
+
+function subscribeSweeps(listener: () => void): () => void {
+  sweepListeners.add(listener);
+  return () => sweepListeners.delete(listener);
+}
+
+const getSweepVersion = (): number => sweepVersion;
+
+function finishSweep(req: SweepRequest, points: TiltSweepPoint[]): TiltSweepResult {
+  const result = sweepCache.get(req.deps, () => sweepResult(points));
+  lastSweep = { req, result };
+  return result;
+}
+
+function runSweepSlice(): void {
+  sweepTimer = undefined;
+  const job = sweepJob;
+  if (!job) return;
+  const start = performance.now();
+  do job.sweep.step();
+  while (!job.sweep.done() && performance.now() - start < SWEEP_SLICE_MS);
+  if (!job.sweep.done()) {
+    sweepTimer = setTimeout(runSweepSlice, 0);
+    return;
+  }
+  sweepJob = null;
+  finishSweep(job.req, job.sweep.points);
+  sweepVersion++;
+  sweepListeners.forEach((l) => l());
+}
+
+/** Starts (or keeps) the background sweep for `req`; a job for other inputs is dropped. */
+function startSweep(req: SweepRequest): void {
+  if (sweepJob && sameDeps(sweepJob.req.deps, req.deps)) return;
+  if (sweepCache.peek(req.deps)) return;
+  sweepJob = { req, sweep: createSweep(req) };
+  clearTimeout(sweepTimer);
+  sweepTimer = setTimeout(runSweepSlice, 0);
+}
+
+function resetSweeps(): void {
+  clearTimeout(sweepTimer);
+  sweepTimer = undefined;
+  sweepJob = null;
+  lastSweep = null;
+}
+
+/** The last finished sweep if it belongs to the same site and weather series as `req` (else null). */
+function previousSweep(req: SweepRequest): TiltSweepResult | null {
+  if (!lastSweep) return null;
+  const [lat, lon, tz] = lastSweep.req.deps;
+  const [rLat, rLon, rTz] = req.deps;
+  const sameSite = lat === rLat && lon === rLon && tz === rTz && lastSweep.req.weather === req.weather;
+  return sameSite ? lastSweep.result : null;
+}
 
 /**
  * Annual yield for every tilt 0…90° (step 5). The cache key excludes panels.tiltFromVertical, so
- * dragging the tilt never recomputes it. Pass enabled = false to skip the computation (returns null).
+ * dragging the tilt never recomputes it. Other building/panel/system/horizon changes are applied once
+ * they have settled (SWEEP_SETTLE_MS), so a slider drag computes one sweep instead of one per step, and
+ * that sweep runs in the background in short slices. Meanwhile the previous result is returned with
+ * `updating: true`. The first result for a site and weather series is computed at once. Null without a
+ * matching weather series; pass enabled = false to skip the computation (returns null).
  */
 export function useTiltSweep(enabled = true): TiltSweepResult | null {
   const { config, terrain } = useDeferredInputs();
-  const weather = useDeferredValue(useDataStore((s) => s.weather.series));
-  if (!enabled || !weather) return null;
-  const { location, building, panels, system, horizon } = config;
-  const panelsWithoutTilt = JSON.stringify({ ...panels, tiltFromVertical: 0 });
-  const terrainDep = horizon.terrainEnabled ? terrain : null;
-  return sweepCache.get([location, building, panelsWithoutTilt, system, horizon, terrainDep, weather], () => {
-    const c: Config = { ...config, panels: { ...panels, tiltFromVertical: SWEEP_HORIZON_TILT } };
-    const points = tiltSweep(c, weather, floorHorizons(c, terrain));
-    const optimum = points.reduce((best, p) => (p.totalKwh > best.totalKwh ? p : best), points[0]);
-    return { points, optimum };
+  const weather = useAnnualWeather(config);
+  const { building, panels, system, horizon } = config;
+  const shape = useMemo<SweepShape>(
+    () => ({ building, panels, system, horizon }),
+    [building, panels, system, horizon],
+  );
+  const settled = useSettledValue(shape, SWEEP_SETTLE_MS);
+  // Re-render when a background sweep has finished.
+  useSyncExternalStore(subscribeSweeps, getSweepVersion, getSweepVersion);
+  const req = enabled && weather ? sweepRequest(config, settled, terrain, weather) : null;
+  const cached = req ? sweepCache.peek(req.deps) : undefined;
+  const previous = req && !cached ? previousSweep(req) : null;
+  useEffect(() => {
+    if (!req) return;
+    if (cached)
+      lastSweep = { req, result: cached }; // the one shown: "previous" for the next change
+    else if (previous) startSweep(req);
   });
+  if (!req || !weather) return null;
+  const updating = !sameDeps(sweepRequest(config, shape, terrain, weather).deps, req.deps);
+  if (cached) return updating ? asUpdating(cached) : cached;
+  if (previous) return asUpdating(previous);
+  const sweep = createSweep(req);
+  while (!sweep.done()) sweep.step();
+  return finishSweep(req, sweep.points);
 }
 
 /**
  * Shade heatmap (day × 10-min local slot) of `floor` (default: focus floor) for config.weather.year.
- * Geometry only (no weather), so it is available immediately.
+ * Geometry only (no weather), so it is available immediately. With enabled = false nothing is computed
+ * and null is returned (e.g. `useDeferredValue(true, false)` to keep it out of the first render).
  */
-export function useHeatmap(floor?: number): HeatmapData {
+export function useHeatmap(floor?: number): HeatmapData;
+export function useHeatmap(floor: number | undefined, enabled: boolean): HeatmapData | null;
+export function useHeatmap(floor?: number, enabled = true): HeatmapData | null {
   const { config, horizons } = useDeferredInputs();
   const focus = useFocusFloor();
+  if (!enabled) return null;
   const k = clamp(Math.round(floor ?? focus), 0, config.building.numFloors - 1);
-  const { location, building, panels } = config;
+  const { building, panels } = config;
+  const { latitude, longitude, timezone } = config.location;
   const year = config.weather.year;
-  return heatmapCache.get([location, building, panels, horizons, year, k], () =>
-    shadeHeatmap(config, horizons, year, k, 10),
+  return heatmapCache.get(
+    [latitude, longitude, timezone, building, panelGeometryKey(panels), horizons, year, k],
+    () => shadeHeatmap(config, horizons, year, k, 10),
   );
 }
 
-/** Lit/shaded hours (total and per month) of useHeatmap(floor). */
-export function useHeatmapStats(floor?: number): HeatmapStats {
-  const heatmap = useHeatmap(floor);
+/** Lit/shaded hours (total and per month) of useHeatmap(floor); null (not computed) when disabled. */
+export function useHeatmapStats(floor?: number): HeatmapStats;
+export function useHeatmapStats(floor: number | undefined, enabled: boolean): HeatmapStats | null;
+export function useHeatmapStats(floor?: number, enabled = true): HeatmapStats | null {
+  const heatmap = useHeatmap(floor, enabled);
+  if (!heatmap) return null;
   return heatmapStatsCache.get([heatmap], () => heatmapStats(heatmap));
 }
 
@@ -271,19 +553,21 @@ export function useDailyProfile(date?: string): DailyProfilePoint[] {
   const horizons = useHorizons();
   const selected = useTimeStore((s) => s.date);
   const d = date ?? selected;
-  const { location, building, panels, system } = config;
-  return dailyCache.get([d, location, building, panels, system, horizons], () =>
+  const { building, panels, system } = config;
+  const { latitude, longitude, timezone } = config.location;
+  return dailyCache.get([d, latitude, longitude, timezone, building, panels, system, horizons], () =>
     dailyProfile(config, d, horizons),
   );
 }
 
-/** Economics for the simulated annual yield; null while no simulation is available. */
+/**
+ * Economics for the simulated annual yield; null while no simulation is available. The investment
+ * follows the simulated floors (same snapshot as the yield), the economics inputs are live.
+ */
 export function useEconomics(): EconomicsResult | null {
   const simulation = useSimulation();
-  const config = useConfig();
+  const e = useConfigSection('economics');
   if (!simulation) return null;
-  const { economics: e, building } = config;
-  return economicsCache.get([simulation, e, building.numFloors], () =>
-    economics(simulation.totalAnnualKwh, building.numFloors, e),
-  );
+  const floors = simulation.floors.length;
+  return economicsCache.get([simulation, e, floors], () => economics(simulation.totalAnnualKwh, floors, e));
 }

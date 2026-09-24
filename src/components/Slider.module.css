@@ -123,3 +123,57 @@
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * Forced colours: the gradient track, the thumb shadow and the tick marks are dropped otherwise.
+ * WebKit and Gecko selectors stay in separate rules (an unknown selector invalidates the whole list).
+ */
+@media (forced-colors: active) {
+  .range {
+    forced-color-adjust: none;
+  }
+
+  .range::-webkit-slider-runnable-track {
+    background: linear-gradient(
+      to right,
+      Highlight 0 calc(var(--fill) * 100%),
+      Canvas calc(var(--fill) * 100%) 100%
+    );
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .range::-moz-range-track {
+    background: Canvas;
+    border: 1px solid CanvasText;
+    box-shadow: none;
+  }
+
+  .range::-moz-range-progress {
+    background: Highlight;
+  }
+
+  .range::-webkit-slider-thumb {
+    background: CanvasText;
+    border-color: Canvas;
+    box-shadow: none;
+  }
+
+  .range::-moz-range-thumb {
+    background: CanvasText;
+    border-color: Canvas;
+    box-shadow: none;
+  }
+
+  .range:focus-visible::-webkit-slider-thumb {
+    outline: 2px solid Highlight;
+  }
+
+  .range:focus-visible::-moz-range-thumb {
+    outline: 2px solid Highlight;
+  }
+
+  .mark::before {
+    background: CanvasText;
+  }
+}

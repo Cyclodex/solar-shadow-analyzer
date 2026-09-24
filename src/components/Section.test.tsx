@@ -9,7 +9,7 @@ describe('Section', () => {
 
   it('toggles via a button with aria-expanded and stores the state', () => {
     render(
-      <Section id="demo" title="Gebäude" summary="202° SSW">
+      <Section id="building" title="Gebäude" summary="202° SSW">
         <p>Inhalt</p>
       </Section>,
     );
@@ -19,7 +19,7 @@ describe('Section', () => {
     fireEvent.click(button);
     expect(button).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getByText('Inhalt')).toBeVisible();
-    expect(useUiStore.getState().openSections.demo).toBe(true);
+    expect(useUiStore.getState().openSections.building).toBe(true);
     expect(document.getElementById(button.getAttribute('aria-controls') ?? '')).toContainElement(
       screen.getByText('Inhalt'),
     );

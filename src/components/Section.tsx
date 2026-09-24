@@ -1,10 +1,10 @@
 import { useId, type ReactNode } from 'react';
-import { useUiStore } from '../state/uiStore';
+import { useUiStore, type SectionId } from '../state/uiStore';
 import styles from './Section.module.css';
 
 export interface SectionProps {
   /** Key in uiStore.openSections (persisted open state). */
-  id: string;
+  id: SectionId;
   title: string;
   /** Short summary of the current values, shown next to the title (e.g. "47.1° N · 202°"). */
   summary?: ReactNode;

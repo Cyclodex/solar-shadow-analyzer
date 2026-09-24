@@ -1,28 +1,35 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import type { Lang, Theme } from '../model/types';
+import { useConfigStore } from './configStore';
 import { safeJsonStorage } from './storage';
 
 // ─────────────────────────────────────────────
 // UI STORE (persisted: localStorage 'ssa.ui', version 1)
 // Language, theme, visible views, open sidebar sections, analysed ("focus") floor.
+// A focus floor that no longer fits a smaller floor count is capped (see capFocusFloor below).
 // ─────────────────────────────────────────────
 
 export type ViewKey = 'scene3d' | 'frontal' | 'profile' | 'sunpath' | 'panelShadow';
 export const VIEW_KEYS: readonly ViewKey[] = ['scene3d', 'frontal', 'profile', 'sunpath', 'panelShadow'];
 
 /** Ids of the collapsible sidebar sections (keys of `openSections`). */
-export type SectionId = 'location' | 'building' | 'panels' | 'system' | 'horizon' | 'weather' | 'economics';
+const SECTION_IDS = ['location', 'building', 'panels', 'system', 'horizon', 'weather', 'economics'] as const;
+export type SectionId = (typeof SECTION_IDS)[number];
+
+const isSectionId = (id: string): id is SectionId => (SECTION_IDS as readonly string[]).includes(id);
 
 export interface UiState {
   lang: Lang;
   theme: Theme;
   views: Record<ViewKey, boolean>;
   /** Open state per collapsible section id; missing = closed. */
-  openSections: Partial<Record<string, boolean>>;
+  openSections: Partial<Record<SectionId, boolean>>;
   /**
-   * Floor index (0 = lowest panel floor) analysed by the PanelShadowView, the heatmap and the "shade now" KPI.
-   * Not clamped here — read it through useFocusFloor() (hooks/useModel.ts), which clamps to the floor count.
+   * Floor index (0 = lowest panel floor) chosen in the floor selectors. Not clamped here — read it through
+   * useFocusFloor() (hooks/useModel.ts, clamped to 0…numFloors−1: Panel-Schatten, sun path, horizon) or
+   * useShadedFloor() (capped at numFloors−2, the top floor has no panels above it: "shade now" KPI,
+   * heatmap, shaded hours).
    */
   focusFloor: number;
   setLang: (lang: Lang) => void;
@@ -31,8 +38,7 @@ export interface UiState {
   toggleTheme: () => void;
   setView: (key: ViewKey, visible: boolean) => void;
   toggleView: (key: ViewKey) => void;
-  setSectionOpen: (id: string, open: boolean) => void;
-  toggleSection: (id: string) => void;
+  setSectionOpen: (id: SectionId, open: boolean) => void;
   setFocusFloor: (floor: number) => void;
 }
 
@@ -68,9 +74,11 @@ function mergeUi(persisted: unknown, current: UiState): UiState {
   if (isRecord(p.views)) {
     for (const k of VIEW_KEYS) if (typeof p.views[k] === 'boolean') views[k] = p.views[k];
   }
-  const openSections: Record<string, boolean> = {};
+  const openSections: Partial<Record<SectionId, boolean>> = {};
   if (isRecord(p.openSections)) {
-    for (const [k, v] of Object.entries(p.openSections)) if (typeof v === 'boolean') openSections[k] = v;
+    for (const [k, v] of Object.entries(p.openSections)) {
+      if (isSectionId(k) && typeof v === 'boolean') openSections[k] = v;
+    }
   }
   return {
     ...current,
@@ -100,7 +108,6 @@ export const useUiStore = create<UiState>()(
       setView: (key, visible) => set((s) => ({ views: { ...s.views, [key]: visible } })),
       toggleView: (key) => set((s) => ({ views: { ...s.views, [key]: !s.views[key] } })),
       setSectionOpen: (id, open) => set((s) => ({ openSections: { ...s.openSections, [id]: open } })),
-      toggleSection: (id) => set((s) => ({ openSections: { ...s.openSections, [id]: !s.openSections[id] } })),
       setFocusFloor: (floor) =>
         set((s) => (Number.isInteger(floor) && floor >= 0 ? { focusFloor: floor } : s)),
     }),
@@ -121,3 +128,26 @@ export const useUiStore = create<UiState>()(
     },
   ),
 );
+
+/**
+ * Keeps the focus floor meaningful when the floor count shrinks: a focus that pointed at a floor below the
+ * old top floor is capped at the floor below the new top floor (the floor the "shade now" KPI and the
+ * heatmap analyse). An explicit pick of the old top floor stays on the (new) top floor (useFocusFloor
+ * clamps it). Also caps a stored focus beyond the stored floor count at start-up.
+ */
+function capFocusFloor(numFloors: number, previousNumFloors?: number): void {
+  const { focusFloor, setFocusFloor } = useUiStore.getState();
+  const cap = Math.max(0, numFloors - 2);
+  if (previousNumFloors === undefined) {
+    if (focusFloor > numFloors - 1) setFocusFloor(cap);
+  } else if (numFloors < previousNumFloors && focusFloor > cap && focusFloor !== previousNumFloors - 1) {
+    setFocusFloor(cap);
+  }
+}
+
+capFocusFloor(useConfigStore.getState().config.building.numFloors);
+useConfigStore.subscribe((s, prev) => {
+  const n = s.config.building.numFloors;
+  const pn = prev.config.building.numFloors;
+  if (n !== pn) capFocusFloor(n, pn);
+});

@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
+import type { WeatherSeries } from '../model/types';
 import { clearSkyYear, fetchOpenMeteoYear } from '../model/weather';
 import { useConfig } from '../state/configStore';
-import { useDataStore, type WeatherData } from '../state/dataStore';
+import { useDataStore } from '../state/dataStore';
 
 // ─────────────────────────────────────────────
 // WEATHER LOADER
@@ -12,6 +13,29 @@ import { useDataStore, type WeatherData } from '../state/dataStore';
 
 /** Delay after the last location/year change before requesting Open-Meteo. */
 export const WEATHER_DEBOUNCE_MS = 800;
+
+/** Coordinate decimals of an Open-Meteo request (≈ 1 km, model/weather.ts openMeteoUrl). */
+const WEATHER_COORD_DECIMALS = 2;
+
+const roundCoord = (x: number): number => Number(x.toFixed(WEATHER_COORD_DECIMALS));
+
+/**
+ * True if `series` is the weather of this site and year: coordinates compared at the request precision
+ * (Open-Meteo series store rounded coordinates, clear-sky series the exact ones). The source is not
+ * compared: the clear-sky fallback after an Open-Meteo error belongs to the site as well.
+ */
+export function weatherMatches(
+  series: WeatherSeries,
+  latitude: number,
+  longitude: number,
+  year: number,
+): boolean {
+  return (
+    series.year === year &&
+    roundCoord(series.latitude) === roundCoord(latitude) &&
+    roundCoord(series.longitude) === roundCoord(longitude)
+  );
+}
 
 function errorMessage(e: unknown): string {
   if (e instanceof Error) return e.message;
@@ -67,9 +91,4 @@ export function useWeatherLoader(): void {
       ctrl.abort();
     };
   }, [source, year, latitude, longitude, attempt]);
-}
-
-/** Weather load state (status, series, error, usingFallback). */
-export function useWeather(): WeatherData {
-  return useDataStore((s) => s.weather);
 }

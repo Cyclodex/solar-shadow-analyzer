@@ -6,7 +6,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
 export interface ButtonProps extends ComponentProps<'button'> {
   /** Visual style. Default 'secondary'. */
   variant?: ButtonVariant;
-  /** Default 'md' (≥ 36 px touch target); 'sm' for dense toolbars (still ≥ 32 px). */
+  /** Default 'md' (≥ 36 px touch target); 'sm' for dense toolbars (32 px on desktop, 36 px on touch/mobile). */
   size?: 'sm' | 'md';
   /** Leading icon (decorative, aria-hidden). */
   icon?: ReactNode;
