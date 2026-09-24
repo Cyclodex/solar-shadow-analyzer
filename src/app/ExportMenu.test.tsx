@@ -48,6 +48,19 @@ function captureDownloads(): Download[] {
   return downloads;
 }
 
+/** Preferred browser languages (the CSV dialect follows them, see userCsvFormat). */
+function browserLanguages(languages: string[]): void {
+  vi.spyOn(navigator, 'languages', 'get').mockReturnValue(languages);
+  vi.spyOn(navigator, 'language', 'get').mockReturnValue(languages[0]);
+}
+
+async function csvLines(download: Download): Promise<string[]> {
+  return (await readBlob(download.blob))
+    .replace(/^\uFEFF/, '')
+    .trimEnd()
+    .split('\r\n');
+}
+
 function openMenu(): HTMLElement {
   fireEvent.click(screen.getByRole('button', { name: 'Export' }));
   return screen.getByRole('menu', { name: 'Export und Import' });
@@ -68,6 +81,7 @@ describe('ExportMenu', () => {
     resetStores();
     useConfigStore.getState().patch('horizon', { terrainEnabled: false });
     downloads = captureDownloads();
+    browserLanguages(['de-CH', 'de']);
   });
 
   afterEach(() => {
@@ -204,6 +218,7 @@ describe('ExportMenu', () => {
   });
 
   it('exports the tilt comparison and the shade heatmap as CSV', async () => {
+    browserLanguages(['en-GB']);
     useUiStore.getState().setLang('en');
     act(() => useDataStore.getState().setWeather({ status: 'ready', series }));
     render(<ExportMenu />);
@@ -231,27 +246,110 @@ describe('ExportMenu', () => {
     expect(heat[1].startsWith('2025-01-01,')).toBe(true);
   });
 
+  it('offers the heatmap of the floor shown in the heatmap card, never the top floor', async () => {
+    // Top floor in focus (e.g. picked in the panel-shadow view): the card shows the floor below it.
+    act(() => useUiStore.getState().setFocusFloor(1));
+    const { unmount } = render(<ExportMenu />);
+    fireEvent.click(within(openMenu()).getByRole('menuitem', { name: 'Schatten-Heatmap 1. OG CSV' }));
+    expect(downloads[0].name).toBe('verschattung-schatten-heatmap-47.100-N-7.450-E-1.-OG-2025.csv');
+    const cells = (await csvLines(downloads[0]))
+      .slice(1)
+      .flatMap((line) => line.split(';').slice(1))
+      .filter((v) => v !== '')
+      .map(Number);
+    expect(Math.max(...cells)).toBeGreaterThan(0); // the top floor would be all zeros
+    unmount();
+
+    act(() => {
+      useConfigStore.getState().patch('building', { numFloors: 3 });
+      useUiStore.getState().setFocusFloor(2);
+    });
+    render(<ExportMenu />);
+    expect(within(openMenu()).getByRole('menuitem', { name: /Schatten-Heatmap/ })).toHaveTextContent(
+      'Schatten-Heatmap 2. OG CSV',
+    );
+  });
+
+  it('writes the CSV dialect of the browser locale (decimal comma for de-AT)', async () => {
+    browserLanguages(['de-AT', 'de']);
+    act(() => useDataStore.getState().setWeather({ status: 'ready', series }));
+    render(<ExportMenu />);
+    fireEvent.click(within(openMenu()).getByRole('menuitem', { name: /Monatsertrag je Stockwerk/ }));
+    const lines = await csvLines(downloads[0]);
+    expect(lines[0].startsWith('Monat;1. OG: Ertrag (kWh);')).toBe(true);
+    expect(lines[1]).toMatch(/^Januar;\d+,\d+;/);
+  });
+
+  it('disables yield exports while weather for another year or location is loading', async () => {
+    // New year selected: the previous (2025) series is kept while 2024 loads.
+    act(() => {
+      useConfigStore.getState().patch('weather', { year: 2024 });
+      useDataStore.setState({ weather: { status: 'loading', series, error: null, usingFallback: false } });
+    });
+    render(<ExportMenu />);
+    let menu = openMenu();
+    // Let the deferred tilt sweep finish: it must stay unavailable anyway.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    for (const name of [/Monatsertrag je Stockwerk/, /Neigungsvergleich/]) {
+      const item = within(menu).getByRole('menuitem', { name });
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+      expect(item).toHaveTextContent('wird berechnet …');
+      fireEvent.click(item);
+    }
+    expect(downloads).toHaveLength(0);
+    // The heatmap is geometry only (no weather): still available.
+    expect(within(menu).getByRole('menuitem', { name: /Schatten-Heatmap/ })).not.toHaveAttribute(
+      'aria-disabled',
+    );
+    fireEvent.keyDown(menu, { key: 'Escape' });
+
+    // A loaded series of another year is not exported under the configured year either.
+    act(() => useDataStore.getState().setWeather({ status: 'ready' }));
+    menu = openMenu();
+    expect(within(menu).getByRole('menuitem', { name: /Monatsertrag/ })).toHaveAttribute(
+      'aria-disabled',
+      'true',
+    );
+    fireEvent.keyDown(menu, { key: 'Escape' });
+
+    act(() => useDataStore.getState().setWeather({ status: 'ready', series: { ...series, year: 2024 } }));
+    menu = openMenu();
+    const monthly = within(menu).getByRole('menuitem', { name: /Monatsertrag/ });
+    expect(monthly).not.toHaveAttribute('aria-disabled');
+    const tilt = await within(menu).findByRole('menuitem', { name: /^Neigungsvergleich CSV$/ });
+    fireEvent.click(tilt);
+    expect(downloads[0].name).toBe('verschattung-neigungsvergleich-47.100-N-7.450-E-2024-klarer-himmel.csv');
+  });
+
   it('prints a report in the light theme with an inputs appendix, then restores the theme', async () => {
-    const print = vi.fn();
+    let printed: { theme: string; dataTheme?: string; printing: boolean; appendix?: string | null } | null =
+      null;
+    // Like Chromium: print() fires beforeprint, takes the snapshot, fires afterprint, then returns.
+    const print = vi.fn(() => {
+      act(() => {
+        window.dispatchEvent(new Event('beforeprint'));
+      });
+      const report = screen.queryByRole('region', { name: 'Eingaben dieses Berichts' });
+      printed = {
+        theme: useUiStore.getState().theme,
+        dataTheme: document.documentElement.dataset.theme,
+        printing: document.documentElement.classList.contains('ssa-printing'),
+        appendix: report && within(report).getByText('Fassadenausrichtung').nextSibling?.textContent,
+      };
+      expect(report && within(report).getByText(/#c=/)).toBeInTheDocument();
+      act(() => {
+        window.dispatchEvent(new Event('afterprint'));
+      });
+    });
     vi.stubGlobal('print', print);
     render(<ExportMenu />);
     fireEvent.click(within(openMenu()).getByRole('menuitem', { name: /Bericht drucken/ }));
+    // The theme switches to light right away, before the print dialog opens.
+    expect(useUiStore.getState().theme).toBe('light');
+    expect(screen.queryByRole('menu')).toBeNull();
     await waitFor(() => expect(print).toHaveBeenCalledTimes(1));
 
-    expect(useUiStore.getState().theme).toBe('dark');
-    act(() => {
-      window.dispatchEvent(new Event('beforeprint'));
-    });
-    expect(useUiStore.getState().theme).toBe('light');
-    expect(document.documentElement.dataset.theme).toBe('light');
-    expect(document.documentElement).toHaveClass('ssa-printing');
-    const report = screen.getByRole('region', { name: 'Eingaben dieses Berichts' });
-    expect(within(report).getByText('Fassadenausrichtung').nextSibling).toHaveTextContent('202° SSW');
-    expect(within(report).getByText(/#c=/)).toBeInTheDocument();
-
-    act(() => {
-      window.dispatchEvent(new Event('afterprint'));
-    });
+    expect(printed).toEqual({ theme: 'light', dataTheme: 'light', printing: true, appendix: '202° SSW' });
     expect(useUiStore.getState().theme).toBe('dark');
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement).not.toHaveClass('ssa-printing');

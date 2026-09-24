@@ -5,10 +5,20 @@
    still come from the tokens in styles/global.css.
    Controls are not part of the report: the sidebar, buttons, button groups, radio groups, sliders,
    menus, dialogs and closed <details> are hidden. Mark anything else with data-print="hide".
+   Exception: a toggle button that labels printed content (3D legend: swatch + layer name) is marked
+   data-print="label" and prints as a plain label; if it is off (aria-pressed="false"), its whole list
+   entry is left out, because that layer is not in the printed image.
+   Canvases that re-render for print (see export/print.ts) are printed as a 2D copy placed next to
+   them ([data-print-stand-in], never shown on screen); the canvas itself is [data-print-replaced].
+   Selectors with :has() are kept in rules of their own: a browser without :has() then only drops those.
    Page breaks: no `break-inside: avoid` on flex/grid items — Chromium then pushes the item to the
    next page without growing its container, and the following content overlaps it. Cards may
    therefore continue on the next page; charts (<svg>, <canvas>) are never split.
    ───────────────────────────────────────────── */
+
+canvas[data-print-stand-in] {
+  display: none !important;
+}
 
 @media print {
   @page {
@@ -25,25 +35,52 @@
   }
 
   aside,
-  button,
+  button:not([data-print='label']),
   input[type='range'],
   input[type='file'],
   [role='radiogroup'],
-  [role='group']:has(> button),
   [role='menu'],
   [role='dialog'],
   details:not([open]),
   [data-print='hide'],
-  a[href='#results'] {
+  a[href='#results'],
+  canvas[data-print-replaced] {
     display: none !important;
+  }
+
+  [role='group']:has(> button) {
+    display: none !important;
+  }
+
+  li:has(> button[data-print='label'][aria-pressed='false']) {
+    display: none !important;
+  }
+
+  /* Legend swatches draw their outline with an inset shadow: keep it. */
+  *:not([data-print='label'] *),
+  *::before,
+  *::after {
+    box-shadow: none !important;
   }
 
   *,
   *::before,
   *::after {
-    box-shadow: none !important;
     animation: none !important;
     transition: none !important;
+  }
+
+  button[data-print='label'] {
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: none !important;
+    color: var(--text) !important;
+    pointer-events: none;
+  }
+
+  canvas[data-print-stand-in] {
+    display: block !important;
   }
 
   h2,

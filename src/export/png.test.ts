@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { CANVAS_RENDER_EVENT, type CanvasRenderDetail } from './canvasRender';
 import { EXPORT_IGNORE, exportViewPng, renderViewPng, serializeSvg } from './png';
 
 // jsdom has no canvas implementation and never loads images: both are mocked here.
@@ -171,6 +172,38 @@ describe('PNG export', () => {
     expect(ctx.fillRect).not.toHaveBeenCalled();
     expect(ctx.fillText).not.toHaveBeenCalled();
     expect(ctx.drawImage).toHaveBeenCalledWith(canvas, 0, 0, 300, 150);
+  });
+
+  it('lets a canvas owner re-render at the export scale right before the copy, then restore', async () => {
+    const host = document.createElement('div');
+    const canvas = document.createElement('canvas');
+    canvas.width = 300;
+    canvas.height = 150;
+    host.append(canvas);
+    document.body.append(host);
+    const calls: string[] = [];
+    const details: CanvasRenderDetail[] = [];
+    canvas.addEventListener(CANVAS_RENDER_EVENT, (e) => {
+      const detail = (e as CustomEvent<CanvasRenderDetail>).detail;
+      details.push(detail);
+      calls.push(`render ${detail.scale}`);
+      canvas.width = 600; // hi-res frame for the capture
+      canvas.height = 300;
+      detail.rendered = true;
+      detail.restore = () => {
+        calls.push('restore');
+        canvas.width = 300;
+        canvas.height = 150;
+      };
+    });
+    ctx.drawImage.mockImplementation((src: HTMLCanvasElement) => calls.push(`draw ${src.width}`));
+
+    // Default scale: max(2, devicePixelRatio) → 2 in jsdom.
+    await renderViewPng(host, { background: null, padding: 0, title: null });
+    expect(details.map((d) => d.reason)).toEqual(['export']);
+    expect(calls).toEqual(['render 2', 'draw 600', 'restore']);
+    expect(ctx.drawImage).toHaveBeenCalledWith(canvas, 0, 0, 600, 300);
+    expect(canvas.width).toBe(300);
   });
 
   it('rejects views without graphics and encoding failures', async () => {

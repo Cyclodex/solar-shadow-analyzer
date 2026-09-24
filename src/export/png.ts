@@ -1,3 +1,4 @@
+import { requestCanvasRender } from './canvasRender';
 import { downloadBlob } from './download';
 
 // ─────────────────────────────────────────────
@@ -12,8 +13,10 @@ import { downloadBlob } from './download';
 // SVG colours come from CSS variables and stylesheets, which a standalone SVG image cannot resolve,
 // so the computed presentation styles are inlined into a clone before rasterising — the PNG matches
 // the current theme. SVGs are rasterised at `scale` × their CSS size (default 2×).
-// WebGL canvases must be created with preserveDrawingBuffer: true (or be exported right after a
-// render), otherwise the exported image is blank.
+// Canvases are copied from their backing store. Right before the copy, CANVAS_RENDER_EVENT (see
+// canvasRender.ts) asks the canvas owner to redraw at `scale` × the CSS size; a canvas without a
+// listener is stretched to that size as it is. WebGL canvases must be created with
+// preserveDrawingBuffer: true (or re-render in that listener), otherwise the exported image is blank.
 // ─────────────────────────────────────────────
 
 export interface PngOptions {
@@ -267,7 +270,13 @@ export async function renderViewPng(element: HTMLElement, opts: PngOptions = {})
   for (const layer of layers) {
     const box = { ...layer.box, x: layer.box.x - x0, y: layer.box.y - y0 + titleSpace };
     if (layer.kind === 'canvas') {
-      ctx.drawImage(layer.el, box.x * scale, box.y * scale, box.width * scale, box.height * scale);
+      // No await between the re-render and the copy: the fresh frame must still be in the buffer.
+      const render = requestCanvasRender(layer.el, 'export', scale);
+      try {
+        ctx.drawImage(layer.el, box.x * scale, box.y * scale, box.width * scale, box.height * scale);
+      } finally {
+        render.restore?.();
+      }
     } else {
       await drawSvg(ctx, layer.el, box, scale);
     }
