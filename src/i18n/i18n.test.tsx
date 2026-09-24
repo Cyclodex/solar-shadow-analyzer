@@ -2,6 +2,7 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import {
   compassPoint,
+  displayLocationName,
   floorLabel,
   getFormat,
   monthNames,
@@ -37,6 +38,13 @@ describe('getFormat', () => {
     expect(en.pct(12.34, 1)).toBe('12.3%');
     expect(de.deg(44.6)).toBe('45°');
     expect(norm(de.unit(280, 'cm'))).toBe('280 cm');
+  });
+
+  it('formats coordinates with the hemisphere letters of the language', () => {
+    expect(de.coords(47.1, 7.45)).toBe('47.100° N, 7.450° O');
+    expect(en.coords(47.1, 7.45)).toBe('47.100° N, 7.450° E');
+    expect(de.coords(-33.86882, -151.20929, 4)).toBe('33.8688° S, 151.2093° W');
+    expect(en.coords(0, 0)).toBe('0.000° N, 0.000° E');
   });
 
   it('formats clock times and dates', () => {
@@ -82,6 +90,17 @@ describe('labels', () => {
     expect(compassPoint(90, 'de')).toBe('O');
     expect(compassPoint(90, 'en')).toBe('E');
     expect(compassPoint(359, 'en')).toBe('N');
+  });
+});
+
+describe('displayLocationName', () => {
+  it('localises the automatic coordinate label and keeps a chosen name', () => {
+    const auto = { name: '47.100° N, 7.450° E', latitude: 47.1, longitude: 7.45 };
+    expect(displayLocationName(auto, getFormat('de'))).toBe('47.100° N, 7.450° O');
+    expect(displayLocationName(auto, getFormat('en'))).toBe('47.100° N, 7.450° E');
+    // A label of other coordinates (or a typed one) is a chosen name.
+    expect(displayLocationName({ ...auto, latitude: 46 }, getFormat('de'))).toBe('47.100° N, 7.450° E');
+    expect(displayLocationName({ ...auto, name: 'Bern' }, getFormat('de'))).toBe('Bern');
   });
 });
 

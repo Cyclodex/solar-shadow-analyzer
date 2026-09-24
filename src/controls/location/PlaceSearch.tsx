@@ -1,7 +1,6 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 import { useFormat, useLang, useMessages, type Messages } from '../../i18n';
 import { searchLocations } from '../../model/presets';
-import { formatCoordinateName } from '../../model/share';
 import type { LocationConfig } from '../../model/types';
 import { SearchIcon } from '../icons';
 import styles from './PlaceSearch.module.css';
@@ -219,8 +218,7 @@ export function PlaceSearch({ onSelect }: PlaceSearchProps) {
             >
               <span className={styles.optionName}>{loc.name}</span>
               <span className={styles.optionMeta}>
-                {formatCoordinateName(loc.latitude, loc.longitude)} · {f.unit(loc.elevation, 'm')} ·{' '}
-                {loc.timezone}
+                {f.coords(loc.latitude, loc.longitude)} · {f.unit(loc.elevation, 'm')} · {loc.timezone}
               </span>
             </li>
           ))}

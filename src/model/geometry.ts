@@ -111,6 +111,15 @@ export function panelsOverlap(layout: PanelLayout): boolean {
   return layout.drop > layout.floorHeight;
 }
 
+/**
+ * How far the lowest panel row reaches below ground level (m); 0 when it stays above → UI warning. Only a
+ * ground-floor row can reach that far: from the 1st floor up the railing top is at least 2.5 m, the maximum drop.
+ */
+export function panelDepthBelowGround(layout: PanelLayout, placements: readonly FloorPlacement[]): number {
+  const lowest = placements[0];
+  return lowest ? Math.max(0, layout.drop - lowest.railTopZ) : 0;
+}
+
 /** Placement of every floor's panel row (index 0 = lowest panel floor). Slab of storey s at s·H above ground. */
 export function floorPlacements(config: Config): FloorPlacement[] {
   const b = config.building;

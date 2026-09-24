@@ -2,7 +2,7 @@ import { Button } from '../components/Button';
 import { NumberField } from '../components/NumberField';
 import { Section } from '../components/Section';
 import { TextField } from '../components/TextField';
-import { useFormat, useMessages, type Messages } from '../i18n';
+import { displayLocationName, useFormat, useMessages, type Messages } from '../i18n';
 import { LIMITS } from '../model/defaults';
 import { findLocationPreset, presetToLocation } from '../model/presets';
 import { MAX_LOCATION_NAME_LENGTH, formatCoordinateName } from '../model/share';
@@ -79,9 +79,17 @@ export function LocationSection() {
     }
     patch('location', next);
   };
+  /** Committing the displayed (localised) coordinate label keeps the automatic, language-neutral label. */
+  const setName = (name: string): void => {
+    const { latitude, longitude } = location;
+    patch('location', {
+      name: name === f.coords(latitude, longitude) ? formatCoordinateName(latitude, longitude) : name,
+    });
+  };
+  const shownName = displayLocationName(location, f);
 
   return (
-    <Section level={3} id="location" title={t.title} summary={location.name}>
+    <Section level={3} id="location" title={t.title} summary={shownName}>
       <div className={sections.group}>
         <h4 className={sections.subheading}>{t.find}</h4>
         <PlaceSearch onSelect={(loc) => patch('location', loc)} />
@@ -96,12 +104,7 @@ export function LocationSection() {
 
       <div className={sections.group}>
         <h4 className={sections.subheading}>{t.details}</h4>
-        <TextField
-          label={t.name}
-          value={location.name}
-          maxLength={MAX_LOCATION_NAME_LENGTH}
-          onCommit={(name) => patch('location', { name })}
-        />
+        <TextField label={t.name} value={shownName} maxLength={MAX_LOCATION_NAME_LENGTH} onCommit={setName} />
         <NumberField
           label={t.latitude}
           value={location.latitude}

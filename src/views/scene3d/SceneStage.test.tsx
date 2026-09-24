@@ -51,7 +51,7 @@ describe('Scene3D stage (DOM parts)', () => {
     ]);
     // Top floor: nothing above it. Lower floor at noon on 21 June: shaded by the row above.
     expect(items[0]).toHaveTextContent('besonnt');
-    expect(items[1]).toHaveTextContent(/\d+ % verschattet/);
+    expect(items[1]).toHaveTextContent(/\d+ % der Fläche verschattet/);
     const scene = screen.getByRole('group', { name: /^3D-Modell von Gebäude und Panels/ });
     expect(scene).toHaveAccessibleName(expect.stringMatching(/Sonne \d+° hoch, Azimut \d+°/));
     expect(scene).toHaveAccessibleDescription(/Pfeiltasten drehen/);

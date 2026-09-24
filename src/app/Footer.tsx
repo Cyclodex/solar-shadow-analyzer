@@ -1,10 +1,12 @@
+import type { ReactNode } from 'react';
 import { useMessages, type Messages } from '../i18n';
 import styles from './Footer.module.css';
 
 interface Source {
   name: string;
   href: string;
-  text: string;
+  /** Rich text: quoted English passages in the German texts carry lang="en". */
+  text: ReactNode;
 }
 
 const de = {
@@ -28,12 +30,18 @@ const de = {
     {
       name: 'Open-Meteo Historical Weather API',
       href: 'https://open-meteo.com/',
-      text: 'Stündliche Einstrahlung und Temperatur (Reanalyse, u. a. ERA5 von Copernicus/ECMWF). Weather data by Open-Meteo.com, Lizenz CC BY 4.0.',
+      text: 'Stündliche Einstrahlung und Temperatur (Reanalyse, u. a. ERA5 von Copernicus/ECMWF). Wetterdaten von Open-Meteo.com, Lizenz CC BY 4.0.',
     },
     {
       name: 'Terrain Tiles (AWS Open Data, Mapzen/Tilezen)',
       href: 'https://github.com/tilezen/joerd/blob/master/docs/attribution.md',
-      text: 'Höhenmodell für den Geländehorizont; Quellen u. a. SRTM, GMTED2010, ETOPO1, EU-DEM (produced using Copernicus data and information funded by the European Union), 3DEP/NED – vollständige Quellenliste unter dem Link.',
+      text: (
+        <>
+          Höhenmodell für den Geländehorizont; Quellen u. a. SRTM, GMTED2010, ETOPO1, EU-DEM (
+          <span lang="en">produced using Copernicus data and information funded by the European Union</span>
+          ), 3DEP/NED – vollständige Quellenliste unter dem Link.
+        </>
+      ),
     },
   ] satisfies Source[],
   disclaimer:

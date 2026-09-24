@@ -30,14 +30,17 @@ describe('ProfileView', () => {
     expect(screen.getByRole('img', { name: /Seitenansicht um 12:00/ })).toBe(svg);
     const text = allText(container);
     expect(text).toMatch(/Stockwerkhöhe 280\scm/);
-    expect(text).toMatch(/Abstand 200\scm/);
-    expect(text).toMatch(/Auskragung 80\scm/);
+    expect(text).toMatch(/Freiraum 200\scm/);
+    expect(text).toMatch(/Ausladung 80\scm/);
     expect(text).toMatch(/θ 45°/);
     expect(text).toMatch(/β 45°/);
     // Critical angle from the model (2D onset): atan2(H − L cos θ, L sin θ).
     const critical = panelLayout(useConfigStore.getState().config).criticalProfileAngle;
     expect(text).toContain(`kritisch ${critical.toFixed(1)}°`);
     expect(svg).toHaveAccessibleDescription(/Neigung θ 45° ab Senkrechte \(β 45° ab Horizontal\)/);
+    expect(svg).toHaveAccessibleDescription(
+      /Stockwerkhöhe 280\scm, Freiraum zur Reihe darunter 200\scm, Ausladung 80\scm\./,
+    );
     expectSaneSvg(svg);
   });
 
@@ -61,7 +64,7 @@ describe('ProfileView', () => {
     setConfig({ building: { floorHeight: 220 }, panels: { length: 170, tiltFromVertical: 60 } });
     useTimeStore.setState({ minutes: 750 });
     const { container } = render(<ProfileView />);
-    expect(allText(container)).toMatch(/1\. OG: \d+\s% verschattet \(exaktes 3D-Modell\)/);
+    expect(allText(container)).toMatch(/1\. OG: \d+\s% der Fläche verschattet \(exaktes 3D-Modell\)/);
   });
 
   it('explains when the profile angle exceeds the critical angle but the shadow misses the row', () => {
@@ -81,7 +84,7 @@ describe('ProfileView', () => {
     const text = allText(container);
     expect(text).toMatch(/Nur ein Stockwerk/);
     expect(text).not.toMatch(/kritisch/);
-    expect(text).not.toMatch(/Abstand/);
+    expect(text).not.toMatch(/Freiraum/);
   });
 
   it.each([
@@ -98,7 +101,7 @@ describe('ProfileView', () => {
       return el;
     };
     const y = (el: Element): number => Number(el.getAttribute('y'));
-    const reach = find(/^(Auskragung )?80\scm$/);
+    const reach = find(/^(Ausladung )?80\scm$/);
     const status = find(/Profilwinkel/);
     // Reach baseline + descent + gap + the status line's cap height.
     expect(y(status) - y(reach)).toBeGreaterThanOrEqual(16);
@@ -155,7 +158,7 @@ describe('ProfileView', () => {
     expect(screen.getByRole('note')).toHaveTextContent(/überlappen sich um 35 cm/);
     const text = allText(container);
     expect(text).toMatch(/Überlappung 35\scm/);
-    expect(text).not.toMatch(/Abstand\s−/);
+    expect(text).not.toMatch(/Freiraum\s−/);
     expect(text).not.toMatch(/kritisch/);
   });
 
@@ -186,6 +189,11 @@ describe('ProfileView', () => {
     );
     expectUniqueIds(container);
     expect(screen.getAllByRole('img', { name: /Side view at 12:00/ })).toHaveLength(2);
-    expect(allText(container)).toMatch(/Floor height 280\scm/);
+    const text = allText(container);
+    expect(text).toMatch(/Floor-to-floor height 280\scm/);
+    expect(text).toMatch(/Clearance 200\scm/);
+    expect(screen.getAllByRole('img', { name: /Side view/ })[0]).toHaveAccessibleDescription(
+      /floor-to-floor height 280\scm, clearance to the row below 200\scm, reach 80\scm\./,
+    );
   });
 });

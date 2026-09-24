@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '../components/Button';
 import { CheckIcon, ShareIcon } from '../components/icons';
-import { useMessages, type Messages } from '../i18n';
+import { displayLocationName, useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { copyText } from '../export/clipboard';
 import { useConfigStore } from '../state/configStore';
@@ -58,6 +58,7 @@ const isAbort = (e: unknown): boolean => e instanceof DOMException && e.name ===
  */
 export function ShareButton() {
   const t = useMessages(messages);
+  const f = useFormat();
   const c = useCommon();
   const [copied, setCopied] = useState(false);
   const [manualUrl, setManualUrl] = useState<string | null>(null);
@@ -103,7 +104,7 @@ export function ShareButton() {
     const url = shareUrl();
     const data: ShareData = {
       title: document.title,
-      text: t.shareText(useConfigStore.getState().config.location.name),
+      text: t.shareText(displayLocationName(useConfigStore.getState().config.location, f)),
       url,
     };
     if (nativeShareAvailable(data)) {

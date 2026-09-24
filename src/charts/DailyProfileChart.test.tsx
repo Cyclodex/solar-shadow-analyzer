@@ -40,7 +40,9 @@ describe('DailyProfileChart', () => {
     const slider = screen.getByRole('slider', { name: 'Uhrzeit im Tagesverlauf' });
     expect(slider).toHaveAttribute('aria-valuenow', '720');
     expect(slider).toHaveAttribute('aria-valuemin', String(WIN.start));
-    expect(slider.getAttribute('aria-valuetext')).toMatch(/^12:00, 2\. OG \d+\sW, 1\. OG \d+\sW \(\d+\s%/);
+    expect(slider.getAttribute('aria-valuetext')).toMatch(
+      /^12:00, 2\. OG \d+\sW, 1\. OG \d+\sW \(\d+\s% der Fläche verschattet\)/,
+    );
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
     expect(useTimeStore.getState().minutes).toBe(730);
     fireEvent.keyDown(slider, { key: 'ArrowLeft', shiftKey: true });

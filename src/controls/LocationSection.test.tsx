@@ -84,6 +84,7 @@ describe('LocationSection', () => {
       expect(url).toContain('language=de');
       expect(options).toHaveLength(2);
       expect(options[0]).toHaveTextContent('Bern, BE, CH');
+      expect(options[0]).toHaveTextContent('46.948° N, 7.447° O · 549 m · Europe/Zurich');
       expect(input).toHaveAttribute('aria-expanded', 'true');
       expect(input).not.toHaveAttribute('aria-activedescendant');
 
@@ -234,6 +235,29 @@ describe('LocationSection', () => {
     fireEvent.change(lon, { target: { value: '8' } });
     fireEvent.keyDown(lon, { key: 'Enter' });
     expect(location()).toMatchObject({ longitude: 8, name: 'Mein Balkon' });
+  });
+
+  it('shows the automatic coordinate label in the UI language and stores it language-neutral', () => {
+    const { container } = render(<LocationSection />);
+    const name = screen.getByRole('textbox', { name: 'Bezeichnung' });
+    expect(name).toHaveValue('47.100° N, 7.450° O');
+    expect(container).toHaveTextContent(/Standort\s*47\.100° N, 7\.450° O/); // section summary
+
+    fireEvent.change(name, { target: { value: 'Mein Balkon' } });
+    fireEvent.blur(name);
+    expect(location().name).toBe('Mein Balkon');
+    // Typing the displayed label back restores the automatic label, which follows the coordinates again.
+    fireEvent.change(name, { target: { value: '47.100° N, 7.450° O' } });
+    fireEvent.keyDown(name, { key: 'Enter' });
+    expect(location().name).toBe('47.100° N, 7.450° E');
+    const lon = screen.getByRole('textbox', { name: 'Längengrad' });
+    fireEvent.change(lon, { target: { value: '8' } });
+    fireEvent.blur(lon);
+    expect(location().name).toBe('47.100° N, 8.000° E');
+    expect(name).toHaveValue('47.100° N, 8.000° O');
+
+    act(() => useUiStore.getState().setLang('en'));
+    expect(screen.getByRole('textbox', { name: 'Name' })).toHaveValue('47.100° N, 8.000° E');
   });
 
   it('validates the time zone and shows the UTC offset at the selected date', () => {

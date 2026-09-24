@@ -1,4 +1,5 @@
-import type { Lang } from '../model/types';
+import type { Lang, LocationConfig } from '../model/types';
+import { formatCoordinateName } from '../model/share';
 import { formatMinutes } from '../model/time';
 import { normalizeDeg } from '../model/units';
 import { useUiStore } from '../state/uiStore';
@@ -49,6 +50,8 @@ export interface Format {
   deg: (value: number, digits?: number) => string;
   /** Number + unit with a non-breaking space: unit(280, 'cm') → "280 cm". */
   unit: (value: number, unit: string, digits?: number) => string;
+  /** Coordinates with hemisphere letters, `digits` decimals (default 3): de "47.100° N, 7.450° O", en "… E". */
+  coords: (latitude: number, longitude: number, digits?: number) => string;
   /** Local clock minutes → "HH:MM" (1440 → "24:00"). */
   time: (minutes: number) => string;
   /** "YYYY-MM-DD" → de "21. Juni 2025", en "21 June 2025". Invalid input is returned unchanged. */
@@ -122,6 +125,11 @@ function createFormat(lang: Lang): Format {
     pct: (percent, digits = 0) => `${num(percent, digits)}${lang === 'de' ? `${NBSP}%` : '%'}`,
     deg: (value, digits = 0) => `${num(value, digits)}°`,
     unit: (value, unit, digits = 0) => `${num(value, digits)}${NBSP}${unit}`,
+    coords: (latitude, longitude, digits = 3) => {
+      const lat = `${num(Math.abs(latitude), digits)}° ${latitude < 0 ? 'S' : 'N'}`;
+      const lon = `${num(Math.abs(longitude), digits)}° ${longitude < 0 ? 'W' : lang === 'de' ? 'O' : 'E'}`;
+      return `${lat}, ${lon}`;
+    },
     time: (minutes) => formatMinutes(minutes),
     date: (iso) => {
       const d = isoToUtcDate(iso);
@@ -203,6 +211,19 @@ export function floorLabel(storey: number, lang: Lang): string {
   }
   if (storey === 0) return 'Ground floor';
   return storey > 0 ? `Floor ${storey}` : `Basement ${-storey}`;
+}
+
+/**
+ * Location name for display. The automatic coordinate label (model/share formatCoordinateName) is stored
+ * language-neutral ("… E") and shown in the UI language; a chosen name is shown as it is.
+ */
+export function displayLocationName(
+  loc: Pick<LocationConfig, 'name' | 'latitude' | 'longitude'>,
+  f: Format,
+): string {
+  return loc.name === formatCoordinateName(loc.latitude, loc.longitude)
+    ? f.coords(loc.latitude, loc.longitude)
+    : loc.name;
 }
 
 const MONTHS = {
