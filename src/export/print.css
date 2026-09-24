@@ -11,9 +11,11 @@
    Canvases that re-render for print (see export/print.ts) are printed as a 2D copy placed next to
    them ([data-print-stand-in], never shown on screen); the canvas itself is [data-print-replaced].
    Selectors with :has() are kept in rules of their own: a browser without :has() then only drops those.
-   Page breaks: no `break-inside: avoid` on flex/grid items — Chromium then pushes the item to the
-   next page without growing its container, and the following content overlaps it. Cards may
-   therefore continue on the next page; charts (<svg>, <canvas>) are never split.
+   Page breaks: when content moves to the next page as a whole (a chart: <svg> and <canvas> are never
+   split; anything with `break-inside: avoid`), Chromium does not grow a flex container around it, and
+   the following content overlaps it. The report's columns and cards are therefore blocks in print
+   (App, ViewCard and EconomicsCard modules), and `break-inside: avoid` is only set on block children
+   (3D stage, economics table), never on flex/grid items. Cards may continue on the next page.
    ───────────────────────────────────────────── */
 
 canvas[data-print-stand-in] {

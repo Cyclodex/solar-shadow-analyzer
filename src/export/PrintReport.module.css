@@ -42,9 +42,10 @@
   font-size: var(--fs-xs);
 }
 
+/* Label at its natural width, the value wraps in the rest (a long value never covers its label). */
 .row {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: auto 1fr;
   gap: var(--space-3);
 }
 

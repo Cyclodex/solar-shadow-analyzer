@@ -69,3 +69,14 @@
   font-size: var(--fs-xs);
   color: var(--bad);
 }
+
+/* Print: a block, not a flex column (see export/print.css), with the header kept next to the body. */
+@media print {
+  .card {
+    display: block;
+  }
+
+  .header {
+    break-after: avoid;
+  }
+}

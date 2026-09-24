@@ -271,3 +271,23 @@
   border-radius: 2px;
   background: var(--c);
 }
+
+/* Print: block containers (see export/print.css); the per-floor table moves to the next page as a whole. */
+@media print {
+  .layout,
+  .details {
+    display: block;
+  }
+
+  .layout > * + * {
+    margin-top: var(--space-4);
+  }
+
+  .details > * + * {
+    margin-top: var(--space-5);
+  }
+
+  .tableWrap {
+    break-inside: avoid;
+  }
+}

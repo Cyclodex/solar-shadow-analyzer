@@ -236,3 +236,10 @@
     display: inline;
   }
 }
+
+/* Print: the stand-in image of the scene and its overlays move to the next page together. */
+@media print {
+  .stage {
+    break-inside: avoid;
+  }
+}
