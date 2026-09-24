@@ -15,7 +15,7 @@ import { SelectField } from '../components/SelectField';
 import { cssVars } from '../components/cssVars';
 import { monthNames, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
-import { useHeatmap, useHeatmapStats, useShadedFloor } from '../hooks/useModel';
+import { useHeatmap, useHeatmapStats, useShadedFloor, useTerrainPending } from '../hooks/useModel';
 import {
   HEATMAP_BEHIND,
   HEATMAP_HORIZON,
@@ -100,6 +100,7 @@ const de = {
   colShare: 'Anteil verschattet',
   colMax: 'Max. verschattete Fläche',
   total: 'Jahr',
+  provisional: 'vorläufig – Geländehorizont wird geladen',
 };
 type Texts = typeof de;
 const messages: Messages<Texts> = {
@@ -134,6 +135,7 @@ const messages: Messages<Texts> = {
     colShare: 'Shaded share',
     colMax: 'Max. shaded area',
     total: 'Year',
+    provisional: 'provisional – loading terrain horizon',
   },
 };
 
@@ -496,6 +498,9 @@ const HeatmapCard = memo(function HeatmapCard({ floor, heatmap, stats, nearRef }
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
+  // Computed without the terrain horizon while it is loading (like the annual KPIs, marked; the CSV export
+  // waits for it).
+  const provisional = useTerrainPending();
   const hasAbove = floor < numFloors - 1;
   const floorName = labels[floor] ?? String(floor);
   const aboveName = hasAbove ? (labels[floor + 1] ?? String(floor + 1)) : null;
@@ -622,6 +627,7 @@ const HeatmapCard = memo(function HeatmapCard({ floor, heatmap, stats, nearRef }
       }
     >
       <ChartStats
+        className={provisional ? styles.provisional : undefined}
         items={[
           { key: 'lit', label: t.litHours, value: hours(stats.litHours) },
           ...(hasAbove
@@ -635,6 +641,7 @@ const HeatmapCard = memo(function HeatmapCard({ floor, heatmap, stats, nearRef }
             : []),
         ]}
       />
+      {provisional && <p className={styles.provisionalNote}>{t.provisional}</p>}
       <div ref={rootRef} className={chart.root}>
         <canvas
           ref={canvasRef}

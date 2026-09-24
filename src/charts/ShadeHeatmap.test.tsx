@@ -3,6 +3,7 @@ import { renderToString } from 'react-dom/server';
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { dayOfYear } from '../model/time';
 import { useConfigStore } from '../state/configStore';
+import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
@@ -62,6 +63,19 @@ describe('ShadeHeatmap', () => {
     expect(screen.getByText('davon verschattet')).toBeInTheDocument();
     // Two floors: only the lower one can be shaded → no floor selector.
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+  });
+
+  it('marks the hours as provisional while the terrain horizon is loading', () => {
+    act(() => {
+      useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    render(<ShadeHeatmap />);
+    expect(screen.getByText('vorläufig – Geländehorizont wird geladen')).toBeInTheDocument();
+    // Failed: the hours without the terrain are final.
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(screen.queryByText(/vorläufig/)).not.toBeInTheDocument();
+    expect(screen.getByText('davon verschattet')).toBeInTheDocument();
   });
 
   it('keeps the year of shade out of the first render (placeholder until the deferred render)', () => {

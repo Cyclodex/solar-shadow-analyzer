@@ -18,6 +18,7 @@ import {
   useFloorPlacements,
   useHeatmap,
   useResultsReady,
+  useTerrainPending,
   useSimulation,
   useTiltSweep,
 } from '../hooks/useModel';
@@ -132,8 +133,10 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
   const sweep = useTiltSweep(ready && resultsReady);
   const monthlyReady = resultsReady && simulation !== null;
   const tiltReady = resultsReady && sweep !== null && !sweep.updating;
-  // Same floor as the heatmap card (useShadedFloor): never the top floor, which is never shaded.
+  // Same floor as the heatmap card (useShadedFloor): never the top floor, which is never shaded. The
+  // heatmap needs no weather, but the terrain horizon: not offered while it is loading.
   const heatmap = useHeatmap();
+  const heatmapReady = !useTerrainPending();
   const placements = useFloorPlacements();
   const name = config.location.name;
   const heatmapFloor = floorLabel(placements[heatmap.floor]?.storey ?? heatmap.floor, lang);
@@ -191,11 +194,15 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
           id: 'csv-heatmap',
           label: t.heatmap(heatmapFloor),
           format: c.exportCsv,
-          onSelect: () =>
+          disabled: !heatmapReady,
+          detail: heatmapReady ? undefined : t.computing,
+          onSelect: () => {
+            if (!heatmapReady) return;
             downloadCsv(
               heatmapCsv(heatmap, lang, userCsvFormat(lang)),
               exportFilename('heatmap', lang, [name, heatmapFloor, heatmap.year], 'csv'),
-            ),
+            );
+          },
         },
       ],
     },

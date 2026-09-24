@@ -360,11 +360,14 @@ describe('ExportMenu', () => {
     render(<ExportMenu />);
     let menu = openMenu();
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
-    for (const name of [/Monatsertrag je Stockwerk/, /Neigungsvergleich/]) {
+    // The heatmap needs no weather, but the terrain horizon.
+    for (const name of [/Monatsertrag je Stockwerk/, /Neigungsvergleich/, /Schatten-Heatmap/]) {
       const item = within(menu).getByRole('menuitem', { name });
       expect(item).toHaveAttribute('aria-disabled', 'true');
       expect(item).toHaveTextContent('wird berechnet …');
+      fireEvent.click(item);
     }
+    expect(downloads).toHaveLength(0);
     fireEvent.keyDown(menu, { key: 'Escape' });
 
     // Terrain done (failed: computed without it). Right after another input changed, the tilt sweep
@@ -379,6 +382,9 @@ describe('ExportMenu', () => {
       { timeout: 5000 },
     );
     expect(within(menu).getByRole('menuitem', { name: /Monatsertrag/ })).not.toHaveAttribute('aria-disabled');
+    expect(within(menu).getByRole('menuitem', { name: /Schatten-Heatmap/ })).not.toHaveAttribute(
+      'aria-disabled',
+    );
     act(() => useConfigStore.getState().patch('system', { lossesPct: 18 }));
     expect(tilt).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(tilt);

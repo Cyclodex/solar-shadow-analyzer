@@ -6,6 +6,17 @@
   min-width: 9rem;
 }
 
+/* Hours computed without the terrain horizon (still loading): muted values and a note below them. */
+.provisional > div > dd {
+  color: var(--text-muted);
+}
+
+.provisionalNote {
+  margin: calc(-1 * var(--space-1)) 0 var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
 /* Markers over the canvas (not part of the PNG export). Positions come in as --x/--y/--w/--h. */
 .markers {
   position: absolute;
