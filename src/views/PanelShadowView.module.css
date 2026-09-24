@@ -26,6 +26,12 @@
   fill: var(--wall);
 }
 
+/* "Facade" on the inset's wall: --text on --wall is 8.2:1 (dark) / 12:1 (light); --text-faint fails AA there. */
+.insetWallLabel {
+  fill: var(--text);
+  font-size: 10px;
+}
+
 /* Compact floor <select> in the card toolbar (many floors). */
 .select {
   min-height: 28px;

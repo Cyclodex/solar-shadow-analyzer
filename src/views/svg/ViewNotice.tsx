@@ -1,5 +1,10 @@
 import type { ReactNode } from 'react';
 import { AlertIcon, InfoIcon } from '../../components/icons';
+import { useFloorPlacements, useLayout } from '../../hooks/useModel';
+import { floorLabel, useFormat, useLang } from '../../i18n';
+import { panelsOverlap } from '../../model/geometry';
+import { panelDepthBelowGround } from './geometryChecks';
+import { useViewText } from './messages';
 import s from './svg.module.css';
 
 /** Short notice above a view's drawing (e.g. physically overlapping panel rows). */
@@ -11,5 +16,25 @@ export function ViewNotice({ tone = 'bad', children }: { tone?: 'bad' | 'info'; 
       </span>
       <span>{children}</span>
     </p>
+  );
+}
+
+/** Notices for physically impossible geometry the views still draw: overlapping rows, panels in the ground. */
+export function GeometryNotices() {
+  const vt = useViewText();
+  const f = useFormat();
+  const lang = useLang();
+  const layout = useLayout();
+  const placements = useFloorPlacements();
+  const cm = (m: number): string => f.unit(m * 100, 'cm');
+  const overlap = placements.length > 1 && panelsOverlap(layout);
+  const depth = panelDepthBelowGround(layout, placements);
+  return (
+    <>
+      {overlap && <ViewNotice>{vt.overlap(cm(layout.drop - layout.floorHeight))}</ViewNotice>}
+      {depth >= 0.005 && (
+        <ViewNotice>{vt.belowGround(cm(depth), floorLabel(placements[0].storey, lang))}</ViewNotice>
+      )}
+    </>
   );
 }

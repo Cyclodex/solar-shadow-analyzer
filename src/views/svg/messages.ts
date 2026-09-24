@@ -19,6 +19,8 @@ const de = {
   horizonLegend: (floor: string) => `Horizont (${floor})`,
   hoursLegend: (tz: string) => `Uhrzeit (${tz})`,
   overlap: (cm: string) => `Die Panelreihen überlappen sich um ${cm} – physisch nicht möglich.`,
+  belowGround: (cm: string, floor: string) =>
+    `Die Panels der untersten Reihe (${floor}) reichen ${cm} unter das Terrain – physisch nicht möglich.`,
   at: (time: string, tz: string) => `${time} ${tz}`,
 };
 
@@ -39,6 +41,8 @@ export const viewMessages: Messages<ViewText> = {
     horizonLegend: (floor) => `Horizon (${floor})`,
     hoursLegend: (tz) => `Clock time (${tz})`,
     overlap: (cm) => `The panel rows overlap by ${cm} – physically impossible.`,
+    belowGround: (cm, floor) =>
+      `The panels of the lowest row (${floor}) reach ${cm} below ground level – physically impossible.`,
     at: (time, tz) => `${time} ${tz}`,
   },
 };

@@ -115,27 +115,31 @@ export interface AngleArcProps {
   a0: number;
   a1: number;
   label: string;
-  /** Radius of the label position (default r + 10). */
+  /** Radius of the label position on the bisector (default r + 10). */
   labelR?: number;
+  /** Explicit label position (baseline) and anchor instead of the bisector (placed by the caller). */
+  labelAt?: { x: number; y: number; anchor: Anchor };
   className?: string;
   textClassName?: string;
 }
 
-/** Angle marker: arc between two directions at a vertex and a label on the bisector. */
-export function AngleArc({ c, r, a0, a1, label, labelR, className, textClassName }: AngleArcProps) {
+/** Angle marker: arc between two directions at a vertex and a label (on the bisector unless `labelAt`). */
+export function AngleArc({ c, r, a0, a1, label, labelR, labelAt, className, textClassName }: AngleArcProps) {
   const mid = (a0 + a1) / 2;
   const lr = labelR ?? r + 10;
-  const lx = c.x + Math.cos(mid) * lr;
-  const ly = c.y + Math.sin(mid) * lr + 4;
   const cos = Math.cos(mid);
-  const anchor: Anchor = cos > 0.35 ? 'start' : cos < -0.35 ? 'end' : 'middle';
+  const at: { x: number; y: number; anchor: Anchor } = labelAt ?? {
+    x: c.x + cos * lr,
+    y: c.y + Math.sin(mid) * lr + 4,
+    anchor: cos > 0.35 ? 'start' : cos < -0.35 ? 'end' : 'middle',
+  };
   return (
     <g>
       <path d={arcD(c, r, a0, a1)} className={className ?? s.arc} />
       <text
-        x={px(lx)}
-        y={px(ly)}
-        textAnchor={anchor}
+        x={px(at.x)}
+        y={px(at.y)}
+        textAnchor={at.anchor}
         className={[s.label, s.num, s.halo, textClassName].filter(Boolean).join(' ')}
       >
         {label}

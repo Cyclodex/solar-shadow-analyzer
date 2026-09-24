@@ -18,19 +18,22 @@ import { AngleArc, DimensionLine, HatchPattern, SunGlyph, TextLines } from './sv
 import { FONT, LINE, PAD } from './svg/constants';
 import {
   INTERIOR,
+  REACH_DIM_DY,
   WALL_T,
   buildBuilding,
   buildPair,
   buildScene,
+  criticalLabel,
   fitLabel,
   sunRay,
+  thetaLabel,
   type Building,
   type PairGeometry,
   type Scene,
 } from './svg/profileLayout';
 import { SvgFigure } from './svg/SvgFigure';
 import { useElementWidth } from './svg/useElementWidth';
-import { ViewNotice } from './svg/ViewNotice';
+import { GeometryNotices } from './svg/ViewNotice';
 import s from './svg/svg.module.css';
 import styles from './ProfileView.module.css';
 
@@ -166,6 +169,9 @@ const SectionDrawing = memo(function SectionDrawing({
   const overlap = upper !== null && layout.verticalGap < 0;
   const gapPx = Math.abs(layout.verticalGap) * fit.k;
   const { pivot, tip, arcR } = pair;
+  const critical = f.deg(layout.criticalProfileAngle, 1);
+  const critLabel = criticalLabel(scene, pair, layout, t.critical(critical), critical);
+  const thetaText = t.theta(f.deg(theta));
   return (
     <g>
       <path d={building.interior} className={styles.interior} />
@@ -196,7 +202,7 @@ const SectionDrawing = memo(function SectionDrawing({
       })}
 
       {/* Critical angle: 2D onset of shading (explanatory) */}
-      {pair.criticalEnd && (
+      {pair.criticalEnd && critLabel && (
         <g>
           <path d={pathD([pair.lowerTop, pair.criticalEnd])} className={s.criticalRay} />
           <AngleArc
@@ -204,8 +210,8 @@ const SectionDrawing = memo(function SectionDrawing({
             r={arcR + 8}
             a0={-toRad(layout.criticalProfileAngle)}
             a1={0}
-            label={t.critical(f.deg(layout.criticalProfileAngle, 1))}
-            labelR={arcR + 16}
+            label={critLabel.text}
+            labelAt={critLabel}
             className={styles.criticalArc}
             textClassName={s.criticalText}
           />
@@ -244,10 +250,10 @@ const SectionDrawing = memo(function SectionDrawing({
           tone={overlap ? 'bad' : 'default'}
         />
       )}
-      {layout.reach * fit.k > 14 && (
+      {pair.showReach && (
         <DimensionLine
-          a={{ x: x(lower.railN), y: tip.y + 14 }}
-          b={{ x: tip.x, y: tip.y + 14 }}
+          a={{ x: x(lower.railN), y: tip.y + REACH_DIM_DY }}
+          b={{ x: tip.x, y: tip.y + REACH_DIM_DY }}
           label={
             upper !== null || pair.panelPx >= 90
               ? fitLabel(t.reach(cm(layout.reach)), cm(layout.reach), layout.reach * fit.k + 60)
@@ -266,8 +272,8 @@ const SectionDrawing = memo(function SectionDrawing({
             r={arcR}
             a0={Math.PI / 2 - thetaRad}
             a1={Math.PI / 2}
-            label={t.theta(f.deg(theta))}
-            labelR={arcR + 10}
+            label={thetaText}
+            labelAt={thetaLabel(scene, pair, layout, thetaText)}
           />
         </g>
       )}
@@ -292,16 +298,14 @@ interface SunLayerProps {
   instant: InstantState;
   scene: Scene;
   pair: PairGeometry;
-  layout: PanelLayout;
   hatchId: string;
   f: Format;
 }
 
 /** Time-dependent part: exact shaded slope band per floor and the sun ray at the profile angle. */
-function SunLayer({ instant, scene, pair, layout, hatchId, f }: SunLayerProps) {
+function SunLayer({ instant, scene, pair, hatchId, f }: SunLayerProps) {
   const { sun, profileAngle } = instant;
-  const { lower, upper } = scene;
-  const L = layout.length;
+  const { lower } = scene;
   const bands = scene.shown.flatMap((p) => {
     const fl = instant.floors[p.floor];
     if (!fl || fl.state !== 'lit' || fl.shade.rects.length === 0) return [];
@@ -311,13 +315,7 @@ function SunLayer({ instant, scene, pair, layout, hatchId, f }: SunLayerProps) {
   });
   const ray =
     sun.altitude > 0 && profileAngle !== null
-      ? sunRay(
-          pair.upperBottom ?? pair.P(lower, L / 2),
-          profileAngle,
-          scene.box,
-          scene.fit.x(0),
-          upper ? pair.lowerSeg : null,
-        )
+      ? sunRay(pair.rayOrigin, profileAngle, scene.box, scene.fit.x(0), pair.rayObstacles)
       : null;
   const lit = instant.floors.some((fl) => fl.state === 'lit');
   const lowerBlocked = instant.floors[lower.floor]?.state === 'horizon';
@@ -389,7 +387,9 @@ export function ProfileView() {
   const partial = scene.shown.length < placements.length && upper !== null;
   if (partial) lines.push(t.onlyPair(floorLabel(lower.storey, lang), floorLabel(upper.storey, lang)));
   const reserved = Math.max(lines.length, (width < 440 ? 4 : 3) + (partial ? 1 : 0));
-  const statusTop = scene.bottom + 22;
+  // Below the reach dimension's label (baseline 2·REACH_DIM_DY under the tip) with room for its descent and
+  // the status text's cap height.
+  const statusTop = Math.max(scene.bottom + 22, pair.showReach ? pair.tip.y + 2 * REACH_DIM_DY + 16 : 0);
 
   const legendItems: LegendItem[] = [];
   if (pair.criticalEnd) {
@@ -428,7 +428,7 @@ export function ProfileView() {
 
   return (
     <ViewCard title={t.title} subtitle={t.subtitle} exportName="seitenansicht" minHeight={280}>
-      {overlap && <ViewNotice>{vt.overlap(cm(-layout.verticalGap))}</ViewNotice>}
+      <GeometryNotices />
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(time)} desc={desc}>
           <defs>
@@ -443,7 +443,7 @@ export function ProfileView() {
             t={t}
             f={f}
           />
-          <SunLayer instant={instant} scene={scene} pair={pair} layout={layout} hatchId={hatchId} f={f} />
+          <SunLayer instant={instant} scene={scene} pair={pair} hatchId={hatchId} f={f} />
           <TextLines x={PAD} y={statusTop} lines={lines} className={`${s.label} ${s.num}`} />
           <SvgLegend layout={legend} />
         </SvgFigure>

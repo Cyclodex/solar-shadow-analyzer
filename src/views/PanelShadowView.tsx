@@ -4,7 +4,7 @@ import { ViewCard } from '../components/ViewCard';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
 import { useFloorPlacements, useFocusFloor, useInstant, useLayout, useSelectedUtc } from '../hooks/useModel';
-import { SUBSTRINGS_PER_MODULE, panelsOverlap, substringBeamLoss } from '../model/geometry';
+import { SUBSTRINGS_PER_MODULE, substringBeamLoss } from '../model/geometry';
 import type { FacadeVector, InstantState } from '../model/types';
 import { angleDiff } from '../model/units';
 import { useConfig } from '../state/configStore';
@@ -16,11 +16,19 @@ import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { relativeDirection, useViewText, type ViewText } from './svg/messages';
 import { FONT, LINE, PAD } from './svg/constants';
-import { INSET, buildRow, clippedRect, hitSubstrings, type RowGeometry } from './svg/panelShadowLayout';
+import {
+  INSET,
+  boxesD,
+  buildRow,
+  clippedBox,
+  hitSubstrings,
+  railLabel,
+  type RowGeometry,
+} from './svg/panelShadowLayout';
 import { Arrow, HatchPattern, SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
 import { SvgFigure } from './svg/SvgFigure';
 import { useElementWidth } from './svg/useElementWidth';
-import { ViewNotice } from './svg/ViewNotice';
+import { GeometryNotices } from './svg/ViewNotice';
 import s from './svg/svg.module.css';
 import styles from './PanelShadowView.module.css';
 
@@ -175,7 +183,7 @@ function SunInset({ x, y, sun, dim, t }: SunInsetProps) {
         ])}
         className={s.railTop}
       />
-      <text x={px(c.x)} y={px(y + 13)} textAnchor="middle" className={s.small}>
+      <text x={px(c.x)} y={px(y + 13)} textAnchor="middle" className={styles.insetWallLabel}>
         {t.facade}
       </text>
       <text x={px(x + INSET / 2)} y={px(y + INSET + 13)} textAnchor="middle" className={s.small}>
@@ -271,14 +279,15 @@ export function PanelShadowView() {
   const shadeD = rects.map(toRect).join('');
   const hitD = substringModel ? hitSubstrings(layout, rects).map(toRect).join('') : '';
   // Whole shadow of the row above (row translated by −du, −dv), clipped to the plot area.
-  const cast =
+  const castBoxes =
     fl?.state === 'lit' && !isTop && shade && (shade.du !== 0 || shade.dv !== 0)
-      ? layout.modules
-          .map((m) => clippedRect(row, m.u0 - shade.du, m.u1 - shade.du, -shade.dv, layout.length - shade.dv))
-          .join('')
-      : '';
-  // Railing label on the side the cast shadow does not cover (the shadow shifts by −du).
-  const railLabelRight = cast !== '' && (shade?.du ?? 0) > 0;
+      ? layout.modules.flatMap(
+          (m) => clippedBox(row, m.u0 - shade.du, m.u1 - shade.du, -shade.dv, layout.length - shade.dv) ?? [],
+        )
+      : [];
+  const cast = boxesD(castBoxes);
+  // Railing label clear of the cast shadow (preferably on the side it leaves free: it shifts by −du).
+  const rail = railLabel(row, layout.rowWidth, t.railing, castBoxes, (shade?.du ?? 0) > 0);
 
   // Per-module labels below the row (two lines with the substring loss when there is room); "–" when the
   // sun does not reach the row (night, behind the facade, below the horizon profile).
@@ -287,7 +296,9 @@ export function PanelShadowView() {
   const twoLines = substringModel && row.colW >= Math.max(textWidth(t.loss('100 %'), FONT), 44) + 4;
   const oneLine = row.colW >= textWidth('100 %', FONT) + 4;
   const labelsTop = row.bottom + 16;
-  const stripTop = labelsTop + (oneLine ? (twoLines ? 2 : 1) : 0) * 14 + 8;
+  // Per-module labels only below a row that can be shaded (not on the top floor or a single floor).
+  const moduleLabels = oneLine && !isTop;
+  const stripTop = labelsTop + (moduleLabels ? (twoLines ? 2 : 1) : 0) * 14 + 8;
 
   // Status next to the inset (reserved line count so the figure keeps its height while animating).
   const tz = f.tzName(location.timezone, utcMs);
@@ -303,23 +314,28 @@ export function PanelShadowView() {
   const reserved = Math.max(wrapped.length, width < 440 ? 7 : 5);
   const stripH = Math.max(INSET + 16, reserved * LINE + 4);
 
+  // Shadow items only where the row can be shaded (no panels above the top floor or a single floor).
   const legendItems: LegendItem[] = [
     { key: 'module', label: t.legendModule, kind: 'area', className: s.panel },
-    {
-      key: 'shade',
-      label: t.legendShade,
-      kind: 'area',
-      baseClassName: s.panel,
-      className: s.shade,
-      patternId: hatchId,
-    },
-    { key: 'cast', label: t.legendCast, kind: 'area', className: styles.cast },
   ];
-  if (substringModel)
-    legendItems.push({ key: 'hit', label: t.legendHit, kind: 'area', className: styles.hitSwatch });
+  if (!isTop) {
+    legendItems.push(
+      {
+        key: 'shade',
+        label: t.legendShade,
+        kind: 'area',
+        baseClassName: s.panel,
+        className: s.shade,
+        patternId: hatchId,
+      },
+      { key: 'cast', label: t.legendCast, kind: 'area', className: styles.cast },
+    );
+    if (substringModel)
+      legendItems.push({ key: 'hit', label: t.legendHit, kind: 'area', className: styles.hitSwatch });
+  }
   const legendTop = stripTop + stripH + 6;
   const legend = layoutLegend(legendItems, PAD, width - PAD, legendTop);
-  const noteLines = substringModel ? wrapText(t.lossNote, width - 2 * PAD, 10) : [];
+  const noteLines = substringModel && !isTop ? wrapText(t.lossNote, width - 2 * PAD, 10) : [];
   const height = legendTop + legend.height + (noteLines.length ? noteLines.length * 13 + 2 : 0) + PAD;
 
   /** Metres → "176.2 cm" (one decimal only when needed). */
@@ -342,7 +358,6 @@ export function PanelShadowView() {
   ]
     .filter(Boolean)
     .join(' ');
-  const overlap = n > 1 && panelsOverlap(layout);
 
   return (
     <ViewCard
@@ -352,9 +367,7 @@ export function PanelShadowView() {
       exportName="panel-schatten"
       minHeight={260}
     >
-      {overlap && (
-        <ViewNotice>{vt.overlap(f.unit((layout.drop - layout.floorHeight) * 100, 'cm'))}</ViewNotice>
-      )}
+      <GeometryNotices />
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(floorName, time)} desc={desc}>
           <defs>
@@ -365,16 +378,11 @@ export function PanelShadowView() {
           {shadeD && <path d={shadeD} className={s.shade} />}
           {shadeD && <path d={shadeD} fill={`url(#${hatchId})`} />}
           {hitD && <path d={hitD} className={styles.hit} />}
-          <text
-            x={px(row.ux(((railLabelRight ? 1 : -1) * layout.rowWidth) / 2))}
-            y={px(row.railY - 8)}
-            textAnchor={railLabelRight ? 'end' : 'start'}
-            className={`${s.small} ${s.halo}`}
-          >
+          {rail.leader && <path d={pathD(rail.leader)} className={s.guide} />}
+          <text x={px(rail.x)} y={px(rail.y)} textAnchor={rail.anchor} className={`${s.small} ${s.halo}`}>
             {t.railing}
           </text>
-          {oneLine &&
-            !isTop &&
+          {moduleLabels &&
             layout.modules.map((m, i) => {
               const cx = row.ux((m.u0 + m.u1) / 2);
               return (

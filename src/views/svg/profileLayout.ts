@@ -1,14 +1,20 @@
 import type { FloorPlacement, PanelLayout } from '../../model/types';
 import { toRad } from '../../model/units';
 import {
+  boxesOverlap,
+  clampLabelX,
   fitUniform,
+  labelBox,
   pathD,
   rayExit,
   raySegment,
   rectD,
+  segmentHitsBox,
   textWidth,
+  type PlacedText,
   type Box,
   type Pt,
+  type Segment,
   type UniformFit,
 } from './geometry2d';
 import { SUN_GLYPH_EXTENT } from './primitives';
@@ -79,7 +85,9 @@ export function buildScene(
     shown,
     lower,
     upper,
-    labelX: fit.x(nMin) - 8,
+    // Floor labels end left of the rotated floor-height label, which reaches ~15 px left of its line at
+    // n = −WALL_T − INTERIOR/2 (at most 11 px further left than usual: within the margin's 12 px spare).
+    labelX: Math.min(fit.x(nMin) - 8, fit.x(-WALL_T - INTERIOR / 2) - 19),
     bottom: fit.box.y1,
     panelWidth: Math.max(3, Math.min(6, 0.035 * fit.k)),
   };
@@ -148,13 +156,17 @@ export interface RayGeometry {
   origin: Pt;
 }
 
-/** Sun ray through `origin` at profile angle `p`: outward part to the drawing edge, inward part to the lower panel/wall. */
+/**
+ * Sun ray through `origin` at profile angle `p`. Outward part: to the drawing edge (where the sun glyph
+ * sits). Inward part (towards the facade): to the nearest of `obstacles` (panels, slabs, railings), else to
+ * the facade wall or the drawing edge. `obstacles` null = the ray ends at `origin` (absorbed there).
+ */
 export function sunRay(
   origin: Pt,
   profileDeg: number,
   box: Box,
   wallX: number,
-  lowerPanel: [Pt, Pt] | null,
+  obstacles: readonly Segment[] | null,
 ): RayGeometry | null {
   const a = toRad(profileDeg);
   const dir = { x: Math.cos(a), y: -Math.sin(a) };
@@ -163,16 +175,25 @@ export function sunRay(
   const out = rayExit(origin, dir, inner);
   if (!out) return null;
   const back = { x: -dir.x, y: -dir.y };
-  let to: Pt | null = null;
-  if (lowerPanel) {
-    const hit = raySegment(origin, back, lowerPanel[0], lowerPanel[1]);
-    if (hit) to = { x: origin.x + back.x * hit.t, y: origin.y + back.y * hit.t };
+  let to = origin;
+  if (obstacles) {
+    let tMin = Infinity;
+    for (const [p, q] of obstacles) {
+      const hit = raySegment(origin, back, p, q);
+      if (hit && hit.t < tMin) tMin = hit.t;
+    }
+    const facade: Box = { x0: Math.max(box.x0, wallX), y0: box.y0, x1: box.x1, y1: box.y1 };
+    to = Number.isFinite(tMin)
+      ? { x: origin.x + back.x * tMin, y: origin.y + back.y * tMin }
+      : (rayExit(origin, back, facade) ?? origin);
   }
-  to ??= rayExit(origin, back, { x0: Math.max(box.x0, wallX), y0: box.y0, x1: box.x1, y1: box.y1 });
   const sun = out;
   const from = { x: out.x - dir.x * glyph, y: out.y - dir.y * glyph };
-  return { from, to: to ?? origin, sun, origin };
+  return { from, to, sun, origin };
 }
+
+/** Vertical offset of the reach dimension line below the lower panel's tip, px. */
+export const REACH_DIM_DY = 14;
 
 /** Screen geometry of the analysed pair (static per config and width). */
 export interface PairGeometry {
@@ -194,6 +215,15 @@ export interface PairGeometry {
   gapX: number;
   panelPx: number;
   showBeta: boolean;
+  /** Reach dimension below the lower panel (only when it is long enough to read). */
+  showReach: boolean;
+  /** Where the drawn sun ray meets the panels: lower edge of the upper panel, or the single panel's middle. */
+  rayOrigin: Pt;
+  /**
+   * Opaque segments the inward part of the sun ray ends on: slab tops, slab fronts with the railings and the
+   * panels below the ray origin. Null for a single floor: the ray ends on the panel it lights.
+   */
+  rayObstacles: Segment[] | null;
 }
 
 export function buildPair(scene: Scene, layout: PanelLayout): PairGeometry {
@@ -212,6 +242,14 @@ export function buildPair(scene: Scene, layout: PanelLayout): PairGeometry {
   // Panel normal (n, z) = (cos θ, sin θ); on screen y points down.
   const { n: cosT, z: sinT } = layout.normal;
   const panelPx = L * fit.k;
+  // The ray only runs down towards the facade, so slab undersides and the ceiling never stop it; the upper
+  // panel is left out because the ray starts on it.
+  const obstacles: Segment[] = [];
+  for (const p of scene.shown) {
+    obstacles.push([fit.p(0, p.slabZ), fit.p(p.railN, p.slabZ)]);
+    obstacles.push([fit.p(p.railN, p.slabZ - SLAB_T), fit.p(p.railN, p.railTopZ)]);
+    if (p.floor !== upper?.floor) obstacles.push([P(p, 0), P(p, L)]);
+  }
   return {
     P,
     lowerTop,
@@ -227,5 +265,116 @@ export function buildPair(scene: Scene, layout: PanelLayout): PairGeometry {
     panelPx,
     // β sits at the lower panel's tip; skip it where it would crowd the θ label (short single panel).
     showBeta: layout.tiltFromHorizontal >= 2 && (upper !== null ? panelPx >= 40 : panelPx >= 90),
+    showReach: layout.reach * fit.k > 14,
+    rayOrigin: upperBottom ?? P(lower, L / 2),
+    rayObstacles: upper ? obstacles : null,
   };
+}
+
+/** Estimated screen box of a placed label (FONT). */
+export function placedBox(l: PlacedText): Box {
+  return labelBox(l.x, l.y, textWidth(l.text, FONT), l.anchor, FONT);
+}
+
+/**
+ * θ label: on the wall side of the vertical guide below the pivot (inside the balcony, clear of the panel
+ * it measures), kept above the balcony floor. Without room between wall and railing (shallow balcony) it
+ * goes in front of the panel, next to the arc.
+ */
+export function thetaLabel(scene: Scene, pair: PairGeometry, layout: PanelLayout, text: string): PlacedText {
+  const { fit } = scene;
+  const { pivot, arcR } = pair;
+  const floor = scene.upper ?? scene.lower;
+  // Clear of the railing stroke and of a near-vertical panel's thickness (drawn towards the railing).
+  const inside: PlacedText = {
+    x: pivot.x - scene.panelWidth - 3,
+    y: Math.min(pivot.y + arcR + 4, fit.y(floor.slabZ) - 5),
+    anchor: 'end',
+    text,
+  };
+  if (placedBox(inside).x0 >= fit.x(0) + 4) return inside;
+  // Point on the panel at the arc radius (down the slope: n += sin θ, z −= cos θ), pushed off its front face.
+  const onPanel = { x: pivot.x + layout.normal.z * arcR, y: pivot.y + layout.normal.n * arcR };
+  return {
+    x: onPanel.x + pair.front.x * 1.5,
+    y: onPanel.y + pair.front.y * 1.5 + 4,
+    anchor: 'start',
+    text,
+  };
+}
+
+/**
+ * Critical-angle label, clear of the gap dimension, the wall, the upper floor and the drawing edge: on the
+ * arc's bisector when that is free, else on the other side of the critical ray (in the air above the lower
+ * railing), with the bare value (`short`) where the long text does not fit. Null without a critical ray.
+ */
+export function criticalLabel(
+  scene: Scene,
+  pair: PairGeometry,
+  layout: PanelLayout,
+  long: string,
+  short: string,
+): PlacedText | null {
+  const { fit, upper, box } = scene;
+  if (!pair.criticalEnd || !upper || !pair.upperBottom) return null;
+  const c = toRad(layout.criticalProfileAngle);
+  const lt = pair.lowerTop;
+  const lr = pair.arcR + 16;
+  const blocked: Box[] = [
+    // Gap dimension: line with ±3 px ticks, rotated label right of it, extension lines at both ends.
+    { x0: pair.gapX - 6, y0: pair.upperBottom.y - 3, x1: pair.gapX + 18, y1: lt.y + 3 },
+    // Upper balcony slab.
+    {
+      x0: fit.x(-WALL_T - INTERIOR),
+      y0: fit.y(upper.slabZ) - 2,
+      x1: fit.x(upper.railN) + 2,
+      y1: fit.y(upper.slabZ - SLAB_T) + 2,
+    },
+  ];
+  const segments: Segment[] = [
+    [fit.p(upper.railN, upper.slabZ), fit.p(upper.railN, upper.railTopZ)],
+    [pair.P(upper, 0), pair.upperBottom],
+    // Extension lines of the gap dimension.
+    [pair.upperBottom, { x: pair.gapX, y: pair.upperBottom.y }],
+    [lt, { x: pair.gapX, y: lt.y }],
+  ];
+  const free = (l: PlacedText): boolean => {
+    const b = placedBox(l);
+    if (b.x0 < Math.max(box.x0, fit.x(0) + 4) || b.x1 > box.x1 || b.y0 < box.y0) return false;
+    return !blocked.some((o) => boxesOverlap(b, o)) && !segments.some((sg) => segmentHitsBox(sg, b));
+  };
+  const mid = -c / 2;
+  const onBisector = (text: string): PlacedText => ({
+    x: lt.x + Math.cos(mid) * lr,
+    y: lt.y + Math.sin(mid) * lr + 4,
+    anchor: 'start',
+    text,
+  });
+  // Other side of the ray: the text's bottom-right corner stays 5 px left of the dashed ray.
+  const fy = lt.y - lr * Math.sin(c) + 4;
+  const flipped = (text: string): PlacedText => ({
+    x: lt.x + (lt.y - (fy + 3)) / Math.tan(c) - 5,
+    y: fy,
+    anchor: 'end',
+    text,
+  });
+  // Last choice: beside the ray beyond the upper panel's lower edge (open air on the sun side).
+  const q = { x: pair.upperBottom.x + Math.cos(c) * 24, y: pair.upperBottom.y - Math.sin(c) * 24 };
+  const beyond = (text: string): PlacedText => ({
+    x: q.x + 6 / Math.tan(c) + 5,
+    y: q.y + 4,
+    anchor: 'start',
+    text,
+  });
+  const best = [
+    onBisector(long),
+    flipped(long),
+    flipped(short),
+    onBisector(short),
+    beyond(long),
+    beyond(short),
+  ].find(free);
+  if (best) return best;
+  const last = flipped(short);
+  return { ...last, x: clampLabelX(last.x, textWidth(short, FONT), 'end', box.x0, box.x1) };
 }
