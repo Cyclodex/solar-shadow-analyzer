@@ -1,0 +1,27 @@
+.hoverLayer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+.overlay {
+  z-index: 1;
+}
+
+/* Total of all floors: neutral ink, slightly heavier than the floor lines */
+.total {
+  stroke-width: 2.5;
+}
+
+/* Optimum: sun-coloured point and drop line */
+.optLine {
+  stroke: var(--sun);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+.optDot {
+  fill: var(--sun);
+}

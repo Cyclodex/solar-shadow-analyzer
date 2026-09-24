@@ -1,0 +1,18 @@
+/* The chart SVG is positioned so that it paints above the (earlier) highlight layer. */
+.svg {
+  position: relative;
+}
+
+.highlightLayer {
+  position: absolute;
+  pointer-events: none;
+}
+
+.highlight {
+  fill: var(--surface-2);
+}
+
+.overlay {
+  z-index: 1;
+  cursor: default;
+}

@@ -1,0 +1,67 @@
+.canvas {
+  display: block;
+}
+
+.overlay {
+  z-index: 1;
+}
+
+.select {
+  min-width: 9rem;
+}
+
+/* Markers over the canvas (not part of the PNG export). Positions come in as --x/--y/--w/--h. */
+.markers {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.selDay,
+.selCell,
+.crossX,
+.crossY,
+.cursor {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+}
+
+/* Selected date (vertical line) and time (ring) */
+.selDay {
+  height: var(--h);
+  border-left: 1px solid var(--text);
+  opacity: 0.45;
+}
+
+.selCell {
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border: 2px solid var(--text);
+  border-radius: 50%;
+  box-shadow:
+    0 0 0 2px var(--surface),
+    inset 0 0 0 1px var(--surface);
+}
+
+/* Hover / keyboard cursor */
+.crossX {
+  width: var(--w);
+  border-top: 1px solid var(--text);
+  opacity: 0.3;
+}
+
+.crossY {
+  height: var(--h);
+  border-left: 1px solid var(--text);
+  opacity: 0.3;
+}
+
+.cursor {
+  width: var(--w);
+  height: var(--h);
+  border: 2px solid var(--text);
+  border-radius: 2px;
+  box-shadow: 0 0 0 1px var(--surface);
+}
