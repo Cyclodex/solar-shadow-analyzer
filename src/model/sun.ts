@@ -141,7 +141,8 @@ function crossing(g: (t: number) => number, lo: number, hi: number, rising: bool
   const loNegative = glo < 0;
   while (hi - lo > 500) {
     const mid = (lo + hi) / 2;
-    if ((g(mid) < 0) === loNegative) lo = mid;
+    const midNegative = g(mid) < 0;
+    if (midNegative === loNegative) lo = mid;
     else hi = mid;
   }
   return (lo + hi) / 2;
@@ -171,7 +172,8 @@ export function sunTimes(date: string, latitude: number, longitude: number, time
   const solarNoon = toLocal(noon);
 
   if (g(noon) < 0) return { sunrise: null, solarNoon, sunset: null, polar: 'night' };
-  if (g(noon - half) >= 0 && g(noon + half) >= 0) return { sunrise: null, solarNoon, sunset: null, polar: 'day' };
+  if (g(noon - half) >= 0 && g(noon + half) >= 0)
+    return { sunrise: null, solarNoon, sunset: null, polar: 'day' };
   const rise = crossing(g, noon - half, noon, true);
   const set = crossing(g, noon, noon + half, false);
   return {
@@ -202,7 +204,8 @@ export function solarPath(
   timeZone: string,
   stepMinutes = 10,
 ): SolarPathPoint[] {
-  if (!(stepMinutes > 0) || !Number.isFinite(stepMinutes)) throw new RangeError(`Invalid step: ${stepMinutes}`);
+  if (!(stepMinutes > 0) || !Number.isFinite(stepMinutes))
+    throw new RangeError(`Invalid step: ${stepMinutes}`);
   const t0 = localToUtc(date, 0, timeZone);
   const tNoon = localToUtc(date, 720, timeZone);
   const t1 = localToUtc(date, 1440, timeZone);

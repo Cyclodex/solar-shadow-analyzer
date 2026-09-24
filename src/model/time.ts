@@ -127,7 +127,11 @@ function isLeapYear(year: number): boolean {
 }
 
 function daysInMonth(year: number, month: number): number {
-  return month === 2 ? (isLeapYear(year) ? 29 : 28) : [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+  return month === 2
+    ? isLeapYear(year)
+      ? 29
+      : 28
+    : [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
 }
 
 /** True if Intl accepts `tz` as a time zone (IANA names, case-insensitive; "UTC"). */

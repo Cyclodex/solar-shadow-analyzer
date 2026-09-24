@@ -31,7 +31,10 @@ const RAD = Math.PI / 180;
 function osmWorldPixel(lon: number, lat: number, z: number): { x: number; y: number } {
   const n = 2 ** z * 256;
   const phi = lat * RAD;
-  return { x: ((lon + 180) / 360) * n, y: ((1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2) * n };
+  return {
+    x: ((lon + 180) / 360) * n,
+    y: ((1 - Math.log(Math.tan(phi) + 1 / Math.cos(phi)) / Math.PI) / 2) * n,
+  };
 }
 
 type V3 = [number, number, number];
@@ -70,7 +73,12 @@ function haversine(lat1: number, lon1: number, lat2: number, lon2: number): numb
 const drop = (d: number): number => ((d * d) / (2 * EARTH_RADIUS_M)) * (1 - REFRACTION_K);
 
 /** Flat terrain at `base` plus a cone (height H, base radius rc) centred at `apex`. */
-function coneSampler(base: number, apex: { lat: number; lon: number }, H: number, rc: number): ElevationSampler {
+function coneSampler(
+  base: number,
+  apex: { lat: number; lon: number },
+  H: number,
+  rc: number,
+): ElevationSampler {
   return (lat, lon) => base + H * Math.max(0, 1 - haversine(apex.lat, apex.lon, lat, lon) / rc);
 }
 
@@ -168,7 +176,8 @@ describe('createTileSampler', () => {
   const plane = (gi: number, gj: number): number => 0.5 * (gi - x0 * 256) - 0.25 * (gj - y0 * 256) + 1000;
   const planeTile = (x: number, y: number): TerrainTile => {
     const heights = new Float32Array(256 * 256);
-    for (let j = 0; j < 256; j++) for (let i = 0; i < 256; i++) heights[j * 256 + i] = plane(x * 256 + i, y * 256 + j);
+    for (let j = 0; j < 256; j++)
+      for (let i = 0; i < 256; i++) heights[j * 256 + i] = plane(x * 256 + i, y * 256 + j);
     return { z, x, y, heights };
   };
   const constTile = (tz: number, x: number, y: number, h: number): TerrainTile => ({
@@ -308,7 +317,11 @@ describe('computeHorizon', () => {
   it('uses the given site elevation instead of the DEM value', () => {
     const D = horizonSampleDistances().find((d) => d >= 3000) as number;
     const apex = destination(SITE.latitude, SITE.longitude, 180, D);
-    const r = computeHorizon(coneSampler(500, apex, 1500, 1000), { ...SITE, observerHeight: 2, elevation: 800 });
+    const r = computeHorizon(coneSampler(500, apex, 1500, 1000), {
+      ...SITE,
+      observerHeight: 2,
+      elevation: 800,
+    });
     expect(r.siteElevation).toBe(800);
     // Observer at 802 m (above the 500 m plain → plain contributes < 0), apex at 2000 m.
     expect(r.profile.elevations[180]).toBeCloseTo(Math.atan((2000 - drop(D) - 802) / D) / RAD, 6);
@@ -317,7 +330,9 @@ describe('computeHorizon', () => {
 
   it('adjusts the azimuth step so the profile closes', () => {
     const flat: ElevationSampler = () => 0;
-    expect(computeHorizon(flat, { ...SITE, observerHeight: 0 }, { stepDeg: 7.5 }).profile.elevations).toHaveLength(48);
+    expect(
+      computeHorizon(flat, { ...SITE, observerHeight: 0 }, { stepDeg: 7.5 }).profile.elevations,
+    ).toHaveLength(48);
     const p = computeHorizon(flat, { ...SITE, observerHeight: 0 }, { stepDeg: 0.7 }).profile;
     expect(p.elevations).toHaveLength(514); // round(360 / 0.7)
     expect(p.stepDeg).toBeCloseTo(360 / 514, 12);
@@ -325,7 +340,8 @@ describe('computeHorizon', () => {
   });
 
   it('skips samples without data and throws without a site elevation', () => {
-    const onlySite: ElevationSampler = (lat, lon) => (lat === SITE.latitude && lon === SITE.longitude ? 700 : null);
+    const onlySite: ElevationSampler = (lat, lon) =>
+      lat === SITE.latitude && lon === SITE.longitude ? 700 : null;
     const r = computeHorizon(onlySite, { ...SITE, observerHeight: 0 }, { minElevationDeg: -3 });
     expect(r.profile.elevations.every((e) => e === -3)).toBe(true);
     expect(() => computeHorizon(() => null, { ...SITE, observerHeight: 0 })).toThrow(/No elevation data/);
@@ -340,7 +356,9 @@ describe('planTerrainTiles', () => {
     const site12 = lonLatToTilePixel(SITE.longitude, SITE.latitude, 12);
     expect(plan).toContainEqual({ z: 12, x: site12.tileX, y: site12.tileY });
     // Tile value = its zoom → the sampler reports which band served each sample.
-    const sampler = createTileSampler(plan.map((t) => ({ ...t, heights: new Float32Array(65536).fill(t.z) })));
+    const sampler = createTileSampler(
+      plan.map((t) => ({ ...t, heights: new Float32Array(65536).fill(t.z) })),
+    );
     const distances = horizonSampleDistances();
     let checked = 0;
     let nulls = 0;
@@ -442,7 +460,11 @@ describe('fetchTerrainHorizon', () => {
     const first = await fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: f.impl });
     expect(f.calls).toHaveLength(total);
     // Same tiles from memory (result cache bypassed): no new downloads.
-    await fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: f.impl, cache: false, observerHeight: 20 });
+    await fetchTerrainHorizon(SITE.latitude, SITE.longitude, {
+      fetchImpl: f.impl,
+      cache: false,
+      observerHeight: 20,
+    });
     expect(f.calls).toHaveLength(total);
     // Result from localStorage even without tiles in memory.
     clearTerrainTileCache();
@@ -570,7 +592,8 @@ describe('fetchTerrainHorizon', () => {
   it('keeps the most recently used results in localStorage, not the first downloaded ones', async () => {
     const f = mockFetch(png);
     // Sites 1e-4° apart share the tiles in memory; each has its own result cache entry.
-    const site = (i: number) => fetchTerrainHorizon(SITE.latitude + i * 1e-4, SITE.longitude, { fetchImpl: f.impl });
+    const site = (i: number) =>
+      fetchTerrainHorizon(SITE.latitude + i * 1e-4, SITE.longitude, { fetchImpl: f.impl });
     const cached = (): number =>
       Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((k) =>
         k?.startsWith('ssa.terrain'),

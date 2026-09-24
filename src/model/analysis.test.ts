@@ -84,7 +84,11 @@ describe('sunGrid / shadeHeatmapFromGrid', () => {
       [172, 13],
       [300, 40],
     ]) {
-      const sun = sunPosition(localToUtc(dateFromDayOfYear(2024, doy), (s + 0.5) * 30, timezone), latitude, longitude);
+      const sun = sunPosition(
+        localToUtc(dateFromDayOfYear(2024, doy), (s + 0.5) * 30, timezone),
+        latitude,
+        longitude,
+      );
       expect(g.altitude[(doy - 1) * 48 + s]).toBe(sun.altitude);
       expect(g.azimuth[(doy - 1) * 48 + s]).toBe(sun.azimuth);
     }

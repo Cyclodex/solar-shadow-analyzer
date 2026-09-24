@@ -113,7 +113,11 @@ function scene(c: Config) {
   const spans = Array.from({ length: count }, (_, i) => -rowW / 2 + i * (w + gap));
   const slope = add(mul(N, Math.sin(th) * L), mul(UP, -Math.cos(th) * L)); // top edge → bottom edge
   const row = (z: number): Quad[] =>
-    spans.map((u0) => ({ corner: add(add(mul(U, u0), mul(N, railN)), mul(UP, z)), e1: mul(U, w), e2: slope }));
+    spans.map((u0) => ({
+      corner: add(add(mul(U, u0), mul(N, railN)), mul(UP, z)),
+      e1: mul(U, w),
+      e2: slope,
+    }));
   return { N, U, L, w, H, spans, lower: row(zr), upper: row(zr + H) };
 }
 
@@ -279,10 +283,14 @@ describe('panelLayout', () => {
   });
 
   it('panels longer than the floor height overlap; critical angle ≤ 0', () => {
-    const vertical = panelLayout(cfg({ panels: { length: 250, tiltFromVertical: 0 }, building: { floorHeight: 200 } }));
+    const vertical = panelLayout(
+      cfg({ panels: { length: 250, tiltFromVertical: 0 }, building: { floorHeight: 200 } }),
+    );
     expect(panelsOverlap(vertical)).toBe(true);
     expect(vertical.criticalProfileAngle).toBe(-90);
-    const tilted = panelLayout(cfg({ panels: { length: 250, tiltFromVertical: 20 }, building: { floorHeight: 200 } }));
+    const tilted = panelLayout(
+      cfg({ panels: { length: 250, tiltFromVertical: 20 }, building: { floorHeight: 200 } }),
+    );
     expect(panelsOverlap(tilted)).toBe(true);
     const drop = 2.5 * Math.cos(20 * D);
     expect(tilted.criticalProfileAngle).toBeCloseTo(Math.atan((2 - drop) / (2.5 * Math.sin(20 * D))) / D, 10);
@@ -349,7 +357,10 @@ describe('profileAngle & cosIncidence', () => {
 // ── shading ──────────────────────────────────
 
 function rectArea(rects: ShadeRect[], m: { u0: number; u1: number }): number {
-  return rects.reduce((a, r) => a + Math.max(0, Math.min(r.u1, m.u1) - Math.max(r.u0, m.u0)) * (r.v1 - r.v0), 0);
+  return rects.reduce(
+    (a, r) => a + Math.max(0, Math.min(r.u1, m.u1) - Math.max(r.u0, m.u0)) * (r.v1 - r.v0),
+    0,
+  );
 }
 
 describe('shadeFromAbove — analytic cases', () => {
@@ -427,7 +438,13 @@ describe('shadeFromAbove — analytic cases', () => {
 
   it('sun behind the facade (s_n ≤ 0) or below the horizon → no shade', () => {
     const l = panelLayout(DEFAULT_CONFIG);
-    for (const sun of [sunAt(60, 22), sunAt(80, 202 + 95), sunAt(30, 202 + 180), sunAt(-5, 202), sunAt(0, 202)]) {
+    for (const sun of [
+      sunAt(60, 22),
+      sunAt(80, 202 + 95),
+      sunAt(30, 202 + 180),
+      sunAt(-5, 202),
+      sunAt(0, 202),
+    ]) {
       const s = shadeFromAbove(sunInFacade(sun, 202), l);
       expect(s.fraction).toBe(0);
       expect(s.rects).toEqual([]);
@@ -551,7 +568,9 @@ describe('shadeFromAbove — brute-force 3D ray casting', () => {
       const sf = sunInFacade(sun, g);
       const s = shadeFromAbove(sf, l);
       // Internal consistency: perModule = rect area / module area, fraction = mean.
-      l.modules.forEach((m, i) => expect(s.perModule[i]).toBeCloseTo(rectArea(s.rects, m) / l.moduleArea, 10));
+      l.modules.forEach((m, i) =>
+        expect(s.perModule[i]).toBeCloseTo(rectArea(s.rects, m) / l.moduleArea, 10),
+      );
       expect(s.fraction).toBeCloseTo(s.perModule.reduce((a, b) => a + b, 0) / l.count, 12);
       if (sf.n <= 0) {
         expect(s.fraction).toBe(0); // blocked by the wall by definition
@@ -625,7 +644,10 @@ describe('shadeFromAbove — rows further up', () => {
       const s1 = shadeFromAbove(sf, l1);
       for (const j of [2, 3]) {
         const H = c1.building.floorHeight * j;
-        const sj = shadeFromAbove(sf, panelLayout(cfg({ ...over, building: { ...over.building, floorHeight: H } })));
+        const sj = shadeFromAbove(
+          sf,
+          panelLayout(cfg({ ...over, building: { ...over.building, floorHeight: H } })),
+        );
         if (sj.rects.length > 0) nonEmpty++;
         expect(inside(sj.rects, s1.rects)).toBe(true);
       }
@@ -648,7 +670,10 @@ describe('shadeFromAbove — rows further up', () => {
     expect(s1.perModule[1]).toBeCloseTo(0.1875, 12);
     // Two floors up: row − 0.9 = [−1.65, −1.05] ∪ [−0.75, −0.15], band [0, 0.5] → the whole left module width,
     // including the strip [−0.6, −0.3] that the row directly above leaves lit (its gap). True union: 0.5 + 0.25·0.5.
-    const s2 = shadeFromAbove(sf, panelLayout(cfg({ ...over, building: { facadeAzimuth: 180, floorHeight: 600 } })));
+    const s2 = shadeFromAbove(
+      sf,
+      panelLayout(cfg({ ...over, building: { facadeAzimuth: 180, floorHeight: 600 } })),
+    );
     expect(s2.perModule[0]).toBeCloseTo(0.5, 12);
     expect(inside(s2.rects, s1.rects)).toBe(false);
   });
@@ -668,8 +693,14 @@ describe('substringBeamLoss', () => {
 
   it('no rects → no loss; full coverage → 1', () => {
     expect(substringBeamLoss(shadeWith(land, []), land)).toEqual([0]);
-    expect(substringBeamLoss(shadeWith(land, [{ u0: -0.9, u1: 0.9, v0: 0, v1: 1.2 }]), land)[0]).toBeCloseTo(1, 12);
-    expect(substringBeamLoss(shadeWith(port, [{ u0: -0.6, u1: 0.6, v0: 0, v1: 1.8 }]), port)[0]).toBeCloseTo(1, 12);
+    expect(substringBeamLoss(shadeWith(land, [{ u0: -0.9, u1: 0.9, v0: 0, v1: 1.2 }]), land)[0]).toBeCloseTo(
+      1,
+      12,
+    );
+    expect(substringBeamLoss(shadeWith(port, [{ u0: -0.6, u1: 0.6, v0: 0, v1: 1.8 }]), port)[0]).toBeCloseTo(
+      1,
+      12,
+    );
   });
 
   it('landscape: thin sliver on top only hits the top substring, limited by its most shaded cell', () => {
@@ -771,7 +802,10 @@ describe('substringBeamLoss', () => {
       });
       const l = panelLayout(c);
       const pLo = Math.min(80, Math.max(1, l.criticalProfileAngle - 5));
-      const sf: FacadeVector = sunInFacade(sunFromProfile(pLo + rnd() * (89.5 - pLo), rnd() * 150 - 75, 180), 180);
+      const sf: FacadeVector = sunInFacade(
+        sunFromProfile(pLo + rnd() * (89.5 - pLo), rnd() * 150 - 75, 180),
+        180,
+      );
       const s = shadeFromAbove(sf, l);
       const got = substringBeamLoss(s, l);
       const ref = naive(s, l);

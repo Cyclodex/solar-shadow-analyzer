@@ -222,9 +222,7 @@ function sanitizeHorizonPoints(v: unknown): HorizonPoint[] {
     const prev = byAz.get(a);
     byAz.set(a, prev === undefined ? e : Math.max(prev, e));
   }
-  return [...byAz.entries()]
-    .sort((p, q) => p[0] - q[0])
-    .map(([az, el]) => ({ azimuth: az, elevation: el }));
+  return [...byAz.entries()].sort((p, q) => p[0] - q[0]).map(([az, el]) => ({ azimuth: az, elevation: el }));
 }
 
 // ── v1 migration ─────────────────────────────
@@ -369,7 +367,11 @@ function sanitizeRecord(raw: Rec): Config {
         D.economics.feedInTariff,
         ROUNDING_OVERRIDES.economics.feedInTariff,
       ),
-      selfConsumptionPct: num(eco.selfConsumptionPct, L.economics.selfConsumptionPct, D.economics.selfConsumptionPct),
+      selfConsumptionPct: num(
+        eco.selfConsumptionPct,
+        L.economics.selfConsumptionPct,
+        D.economics.selfConsumptionPct,
+      ),
       investmentPerFloor: num(
         eco.investmentPerFloor,
         L.economics.investmentPerFloor,
@@ -409,10 +411,30 @@ export const SHARE_VERSION: number = 1;
 export const SHARE_BASES: Readonly<Record<number, Config>> = deepFreeze({
   1: {
     version: 2,
-    location: { name: '47.100° N, 7.450° E', latitude: 47.1, longitude: 7.45, timezone: 'Europe/Zurich', elevation: 486 },
-    building: { facadeAzimuth: 202, floorHeight: 280, railingHeight: 100, balconyDepth: 150, numFloors: 2, lowestFloor: 1 },
+    location: {
+      name: '47.100° N, 7.450° E',
+      latitude: 47.1,
+      longitude: 7.45,
+      timezone: 'Europe/Zurich',
+      elevation: 486,
+    },
+    building: {
+      facadeAzimuth: 202,
+      floorHeight: 280,
+      railingHeight: 100,
+      balconyDepth: 150,
+      numFloors: 2,
+      lowestFloor: 1,
+    },
     panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 45, powerWp: 430 },
-    system: { inverterLimitW: 800, lossesPct: 14, tempCoeffPct: -0.35, noct: 45, albedo: 0.2, shadingModel: 'substring' },
+    system: {
+      inverterLimitW: 800,
+      lossesPct: 14,
+      tempCoeffPct: -0.35,
+      noct: 45,
+      albedo: 0.2,
+      shadingModel: 'substring',
+    },
     horizon: { terrainEnabled: true, obstacles: [], manual: [] },
     weather: { source: 'open-meteo', year: 2025 },
     economics: {
@@ -440,12 +462,29 @@ const ALIASES: AliasTable = {
   location: { key: 'l', fields: { name: 'n', latitude: 'a', longitude: 'o', timezone: 'z', elevation: 'e' } },
   building: {
     key: 'b',
-    fields: { facadeAzimuth: 'a', floorHeight: 'h', railingHeight: 'r', balconyDepth: 'd', numFloors: 'f', lowestFloor: 'l' },
+    fields: {
+      facadeAzimuth: 'a',
+      floorHeight: 'h',
+      railingHeight: 'r',
+      balconyDepth: 'd',
+      numFloors: 'f',
+      lowestFloor: 'l',
+    },
   },
-  panels: { key: 'p', fields: { length: 'l', width: 'w', count: 'c', gap: 'g', tiltFromVertical: 't', powerWp: 'p' } },
+  panels: {
+    key: 'p',
+    fields: { length: 'l', width: 'w', count: 'c', gap: 'g', tiltFromVertical: 't', powerWp: 'p' },
+  },
   system: {
     key: 's',
-    fields: { inverterLimitW: 'i', lossesPct: 'l', tempCoeffPct: 't', noct: 'n', albedo: 'a', shadingModel: 'm' },
+    fields: {
+      inverterLimitW: 'i',
+      lossesPct: 'l',
+      tempCoeffPct: 't',
+      noct: 'n',
+      albedo: 'a',
+      shadingModel: 'm',
+    },
   },
   horizon: { key: 'h', fields: { terrainEnabled: 't', obstacles: 'o', manual: 'm' } },
   weather: { key: 'w', fields: { source: 's', year: 'y' } },

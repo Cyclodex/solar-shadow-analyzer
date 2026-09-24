@@ -18,8 +18,14 @@ export const CLEAR_SKY_TEMPERATURE_C = 15;
  * from 00:00 UTC on 1 January, each evaluated at its midpoint. Temperature is constant
  * CLEAR_SKY_TEMPERATURE_C. An upper bound of the yield ("theoretical maximum on clear days").
  */
-export function clearSkyYear(latitude: number, longitude: number, year: number, stepMinutes = 60): WeatherSeries {
-  if (!(stepMinutes > 0) || !Number.isFinite(stepMinutes)) throw new RangeError(`Invalid step: ${stepMinutes}`);
+export function clearSkyYear(
+  latitude: number,
+  longitude: number,
+  year: number,
+  stepMinutes = 60,
+): WeatherSeries {
+  if (!(stepMinutes > 0) || !Number.isFinite(stepMinutes))
+    throw new RangeError(`Invalid step: ${stepMinutes}`);
   const start = Date.UTC(year, 0, 1);
   const n = Math.floor((daysInYear(year) * 1440) / stepMinutes + 1e-9);
   const stepMs = stepMinutes * MS_PER_MINUTE;
@@ -56,7 +62,12 @@ export function clearSkyYear(latitude: number, longitude: number, year: number, 
 export const OPEN_METEO_ARCHIVE_URL = 'https://archive-api.open-meteo.com/v1/archive';
 
 /** Hourly variables requested, in the order of the WeatherSeries fields ghi, dni, dhi, temperature. */
-const HOURLY_VARS = ['shortwave_radiation', 'direct_normal_irradiance', 'diffuse_radiation', 'temperature_2m'] as const;
+const HOURLY_VARS = [
+  'shortwave_radiation',
+  'direct_normal_irradiance',
+  'diffuse_radiation',
+  'temperature_2m',
+] as const;
 
 /** More missing radiation hours than this share → the year is treated as incomplete (error). */
 export const MAX_MISSING_SHARE = 0.01;
@@ -109,7 +120,8 @@ function fillTemperature(a: (number | null)[]): number[] {
   for (let i = 0; i < a.length; i++) {
     const x = a[i];
     if (x === null) continue;
-    for (let j = prev + 1; j < i; j++) out[j] = prev < 0 ? x : prevX + ((x - prevX) * (j - prev)) / (i - prev);
+    for (let j = prev + 1; j < i; j++)
+      out[j] = prev < 0 ? x : prevX + ((x - prevX) * (j - prev)) / (i - prev);
     out[i] = x;
     prev = i;
     prevX = x;
@@ -123,7 +135,12 @@ function fillTemperature(a: (number | null)[]): number[] {
  * Radiation values are means over the PRECEDING hour, so each timestamp t becomes the midpoint t − 30 min.
  * Throws if the payload is malformed or more than MAX_MISSING_SHARE of the GHI hours are missing.
  */
-export function parseOpenMeteo(json: unknown, latitude: number, longitude: number, year: number): WeatherSeries {
+export function parseOpenMeteo(
+  json: unknown,
+  latitude: number,
+  longitude: number,
+  year: number,
+): WeatherSeries {
   const root = json as { hourly?: Record<string, unknown>; error?: unknown; reason?: unknown } | null;
   if (root && root.error) throw new Error(`Open-Meteo: ${String(root.reason ?? 'error')}`);
   const h = root?.hourly;
@@ -193,7 +210,15 @@ function readCache(key: string, lat: number, lon: number, year: number): Weather
     const { g, b, d, T, t0, step } = s;
     const ok = (a: unknown): a is number[] =>
       Array.isArray(a) && a.every((x) => typeof x === 'number' && Number.isFinite(x));
-    if (!ok(g) || !ok(b) || !ok(d) || !ok(T) || typeof t0 !== 'number' || typeof step !== 'number' || !(step > 0)) {
+    if (
+      !ok(g) ||
+      !ok(b) ||
+      !ok(d) ||
+      !ok(T) ||
+      typeof t0 !== 'number' ||
+      typeof step !== 'number' ||
+      !(step > 0)
+    ) {
       return null;
     }
     const n = g.length;

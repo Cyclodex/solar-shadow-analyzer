@@ -68,7 +68,8 @@ describe('parsePvgisHorizon', () => {
 
   it('accepts decimal commas with ; or tab separators (regression: "-172,5;14,1" gave A = −172, H = 5)', () => {
     // Same rows as JSON_RESPONSE, re-saved by a spreadsheet with a German locale.
-    const semicolon = 'A;H_hor\n-180,0;16,8\n-172,5;14,1\n-90,0;24,1\n0,0;32,8\n90,0;9,9\n172,5;17,6\n180,0;16,8\n';
+    const semicolon =
+      'A;H_hor\n-180,0;16,8\n-172,5;14,1\n-90,0;24,1\n0,0;32,8\n90,0;9,9\n172,5;17,6\n180,0;16,8\n';
     expect(parsePvgisHorizon(semicolon)).toEqual(EXPECTED);
     expect(parsePvgisHorizon(semicolon.replace(/;/g, '\t'))).toEqual(EXPECTED);
   });

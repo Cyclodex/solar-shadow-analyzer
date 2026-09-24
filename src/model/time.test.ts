@@ -73,7 +73,8 @@ describe('isValidTimeZone / isValidDate', () => {
   it('accepts IANA zones and rejects garbage', () => {
     for (const tz of ['Europe/Zurich', 'Australia/Sydney', 'Asia/Kolkata', 'America/New_York', 'UTC'])
       expect(isValidTimeZone(tz)).toBe(true);
-    for (const tz of ['', 'Europe/Zurichh', 'Mars/Olympus_Mons', 'not a zone']) expect(isValidTimeZone(tz)).toBe(false);
+    for (const tz of ['', 'Europe/Zurichh', 'Mars/Olympus_Mons', 'not a zone'])
+      expect(isValidTimeZone(tz)).toBe(false);
   });
 
   it('validates calendar dates', () => {
@@ -163,7 +164,10 @@ describe('localToUtc', () => {
     expect(localToUtc('2025-09-28', 180, 'Pacific/Chatham')).toBe(utc('2025-09-27T14:15:00Z')); // gap 02:45–03:45
     expect(localToUtc('2025-04-06', 180, 'Pacific/Chatham')).toBe(utc('2025-04-05T13:15:00Z')); // 02:45–03:45 twice
     expect(localToUtc('2025-09-07', 0, 'America/Santiago')).toBe(utc('2025-09-07T04:00:00Z'));
-    expect(utcToLocal(utc('2025-09-07T04:00:00Z'), 'America/Santiago')).toEqual({ date: '2025-09-07', minutes: 60 });
+    expect(utcToLocal(utc('2025-09-07T04:00:00Z'), 'America/Santiago')).toEqual({
+      date: '2025-09-07',
+      minutes: 60,
+    });
     expect(localToUtc('2025-04-05', 1410, 'America/Santiago')).toBe(utc('2025-04-06T02:30:00Z')); // 23:00–24:00 twice
     expect(localToUtc('2025-04-06', 0, 'America/Santiago')).toBe(utc('2025-04-06T04:00:00Z'));
     // Minute by minute ±1 day around each transition: exactly the repeated minutes map to their first occurrence.
@@ -192,7 +196,8 @@ describe('localToUtc', () => {
   it('round-trips with utcToLocal across the whole year', () => {
     // 97 min is co-prime to 60, so the samples cover every minute-of-hour phase. Kolkata/UTC have no repeated
     // hour; elsewhere a 97 min step can land at most once in the single repeated hour.
-    for (const tz of ['Asia/Kolkata', 'UTC']) expect(roundTripMisses(tz, '2025-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 97)).toBe(0);
+    for (const tz of ['Asia/Kolkata', 'UTC'])
+      expect(roundTripMisses(tz, '2025-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 97)).toBe(0);
     for (const tz of ['Europe/Zurich', 'Australia/Sydney', 'America/New_York'])
       expect(roundTripMisses(tz, '2025-01-01T00:00:00Z', '2026-01-01T00:00:00Z', 97)).toBeLessThanOrEqual(1);
   });
@@ -200,10 +205,22 @@ describe('localToUtc', () => {
 
 describe('utcToLocal / localClockMinutes / todayInTimeZone', () => {
   it('returns local date and clock minutes', () => {
-    expect(utcToLocal(utc('2025-03-30T01:00:00Z'), 'Europe/Zurich')).toEqual({ date: '2025-03-30', minutes: 180 });
-    expect(utcToLocal(utc('2025-12-31T23:30:00Z'), 'Europe/Zurich')).toEqual({ date: '2026-01-01', minutes: 30 });
-    expect(utcToLocal(utc('2025-06-01T20:00:00Z'), 'Asia/Kolkata')).toEqual({ date: '2025-06-02', minutes: 90 });
-    expect(utcToLocal(utc('2025-01-01T03:00:00Z'), 'America/New_York')).toEqual({ date: '2024-12-31', minutes: 1320 });
+    expect(utcToLocal(utc('2025-03-30T01:00:00Z'), 'Europe/Zurich')).toEqual({
+      date: '2025-03-30',
+      minutes: 180,
+    });
+    expect(utcToLocal(utc('2025-12-31T23:30:00Z'), 'Europe/Zurich')).toEqual({
+      date: '2026-01-01',
+      minutes: 30,
+    });
+    expect(utcToLocal(utc('2025-06-01T20:00:00Z'), 'Asia/Kolkata')).toEqual({
+      date: '2025-06-02',
+      minutes: 90,
+    });
+    expect(utcToLocal(utc('2025-01-01T03:00:00Z'), 'America/New_York')).toEqual({
+      date: '2024-12-31',
+      minutes: 1320,
+    });
     expect(utcToLocal(utc('2025-01-01T00:00:30Z'), 'UTC')).toEqual({ date: '2025-01-01', minutes: 0.5 });
   });
 
@@ -284,9 +301,30 @@ describe('dayOffsetsForYear', () => {
   it('handles 30 min DST, :45 offsets and midnight transitions (2025)', () => {
     // Index runs from Python zoneinfo (tzdata 2025b), offset at local noon with fold=0.
     const runs: [string, [number, number, number][]][] = [
-      ['Australia/Lord_Howe', [[0, 94, 660], [95, 276, 630], [277, 364, 660]]],
-      ['Pacific/Chatham', [[0, 94, 825], [95, 269, 765], [270, 364, 825]]],
-      ['America/Santiago', [[0, 94, -180], [95, 248, -240], [249, 364, -180]]],
+      [
+        'Australia/Lord_Howe',
+        [
+          [0, 94, 660],
+          [95, 276, 630],
+          [277, 364, 660],
+        ],
+      ],
+      [
+        'Pacific/Chatham',
+        [
+          [0, 94, 825],
+          [95, 269, 765],
+          [270, 364, 825],
+        ],
+      ],
+      [
+        'America/Santiago',
+        [
+          [0, 94, -180],
+          [95, 248, -240],
+          [249, 364, -180],
+        ],
+      ],
     ];
     for (const [tz, r] of runs) {
       const o = dayOffsetsForYear(2025, tz);

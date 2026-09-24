@@ -131,7 +131,10 @@ async function loadSampler(lat: number, lon: number, bands?: readonly ZoomBand[]
   return { sampler: createTileSampler(tiles), tiles: plan.length, bytes };
 }
 
-async function pvgisRows(lat: number, lon: number): Promise<{ text: string; rows: { A: number; H: number }[] }> {
+async function pvgisRows(
+  lat: number,
+  lon: number,
+): Promise<{ text: string; rows: { A: number; H: number }[] }> {
   const file = refDir ? join(refDir, `pvgis_horizon_${lat}_${lon}.json`) : undefined;
   let text: string;
   if (file && existsSync(file)) text = readFileSync(file, 'utf8');
@@ -177,7 +180,12 @@ function stats(ours: number[], ref: number[]) {
     saa += (ours[i] - ma) ** 2;
     sbb += (ref[i] - mb) ** 2;
   }
-  return { rms: Math.sqrt(s2 / n), max, bias: s / n, r: saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN };
+  return {
+    rms: Math.sqrt(s2 / n),
+    max,
+    bias: s / n,
+    r: saa > 0 && sbb > 0 ? sab / Math.sqrt(saa * sbb) : NaN,
+  };
 }
 
 const CONVENTIONS: [string, (a: number) => number][] = [
@@ -204,7 +212,8 @@ async function main(): Promise<void> {
   const results: SiteResult[] = [];
   for (const [lat, lon, name] of sites) {
     const { text, rows } = await pvgisRows(lat, lon);
-    const pvgisElev = (JSON.parse(text) as { inputs: { location: { elevation: number } } }).inputs.location.elevation;
+    const pvgisElev = (JSON.parse(text) as { inputs: { location: { elevation: number } } }).inputs.location
+      .elevation;
 
     clearTerrainTileCache();
     const counter = { tiles: 0, bytes: 0 };
@@ -235,7 +244,9 @@ async function main(): Promise<void> {
         rows.map((r) => Math.max(0, at(res.profile, toNorth(r.A)))),
         H,
       );
-      console.log(`    ${label.padEnd(40)} r = ${s.r.toFixed(3).padStart(6)}   RMS ${f2(s.rms).padStart(5)}°`);
+      console.log(
+        `    ${label.padEnd(40)} r = ${s.r.toFixed(3).padStart(6)}   RMS ${f2(s.rms).padStart(5)}°`,
+      );
     }
     // The parser's conversion must equal the documented convention.
     const parsed = parsePvgisHorizon(text);
@@ -289,7 +300,11 @@ async function offsetScan(results: SiteResult[]): Promise<void> {
       const rms = results.map((r, i) => {
         const lat = r.lat + dn / M_PER_DEG;
         const lon = r.lon + de / (M_PER_DEG * Math.cos((r.lat * Math.PI) / 180));
-        const h = computeHorizon(samplers[i], { latitude: lat, longitude: lon, observerHeight }, { stepDeg: 7.5 });
+        const h = computeHorizon(
+          samplers[i],
+          { latitude: lat, longitude: lon, observerHeight },
+          { stepDeg: 7.5 },
+        );
         return stats(
           r.rows.map((row) => Math.max(0, at(h.profile, row.A + 180))),
           r.rows.map((row) => row.H),
@@ -338,7 +353,8 @@ async function georef(): Promise<void> {
   const need = new Set<string>();
   for (const p of peaks) {
     const t = lonLatToTilePixel(p.lon, p.lat, z);
-    for (let dx = -1; dx <= 1; dx++) for (let dy = -1; dy <= 1; dy++) need.add(`${t.tileX + dx}/${t.tileY + dy}`);
+    for (let dx = -1; dx <= 1; dx++)
+      for (let dy = -1; dy <= 1; dy++) need.add(`${t.tileX + dx}/${t.tileY + dy}`);
   }
   const keys = [...need];
   for (let i = 0; i < keys.length; i += 8) {
@@ -353,7 +369,9 @@ async function georef(): Promise<void> {
     );
   }
   const pixel = (gx: number, gy: number): number =>
-    (heights.get(`${Math.floor(gx / 256)}/${Math.floor(gy / 256)}`) as Float32Array)[(gy % 256) * 256 + (gx % 256)];
+    (heights.get(`${Math.floor(gx / 256)}/${Math.floor(gy / 256)}`) as Float32Array)[
+      (gy % 256) * 256 + (gx % 256)
+    ];
   const M_PER_DEG = (Math.PI / 180) * 6_371_008.8;
   const dN: number[] = [];
   const dE: number[] = [];
@@ -374,7 +392,13 @@ async function georef(): Promise<void> {
       }
     }
     if (Math.abs(bx - gx0) === r || Math.abs(by - gy0) === r) continue; // not a local summit
-    const c = tilePixelToLonLat(Math.floor(bx / 256), Math.floor(by / 256), (bx % 256) + 0.5, (by % 256) + 0.5, z);
+    const c = tilePixelToLonLat(
+      Math.floor(bx / 256),
+      Math.floor(by / 256),
+      (bx % 256) + 0.5,
+      (by % 256) + 0.5,
+      z,
+    );
     dN.push((c.lat - p.lat) * M_PER_DEG);
     dE.push((c.lon - p.lon) * M_PER_DEG * Math.cos((p.lat * Math.PI) / 180));
     dH.push(best - p.ele);

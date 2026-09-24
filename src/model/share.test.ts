@@ -119,8 +119,38 @@ function expectValid(c: Config): void {
   });
 }
 
-const STRING_ALPHABET = ['a', 'Z', '0', 'ü', 'é', 'ß', ' ', '"', '\\', '/', '&', '#', '=', '%', '+', '🌞', '漢', "'", '-', '_', '.'];
-const TIMEZONES = ['Europe/Zurich', 'Europe/Berlin', 'America/New_York', 'Asia/Kolkata', 'Australia/Sydney', 'UTC', 'Pacific/Chatham'];
+const STRING_ALPHABET = [
+  'a',
+  'Z',
+  '0',
+  'ü',
+  'é',
+  'ß',
+  ' ',
+  '"',
+  '\\',
+  '/',
+  '&',
+  '#',
+  '=',
+  '%',
+  '+',
+  '🌞',
+  '漢',
+  "'",
+  '-',
+  '_',
+  '.',
+];
+const TIMEZONES = [
+  'Europe/Zurich',
+  'Europe/Berlin',
+  'America/New_York',
+  'Asia/Kolkata',
+  'Australia/Sydney',
+  'UTC',
+  'Pacific/Chatham',
+];
 
 function randomString(rnd: () => number, maxLen: number): string {
   let s = '';
@@ -257,7 +287,8 @@ describe('sanitizeConfig', () => {
   });
 
   it('wraps azimuths and longitudes instead of clamping', () => {
-    const az = (v: number): number => sanitizeConfig({ building: { facadeAzimuth: v } }).building.facadeAzimuth;
+    const az = (v: number): number =>
+      sanitizeConfig({ building: { facadeAzimuth: v } }).building.facadeAzimuth;
     expect(az(-22)).toBe(338); // −22 + 360
     expect(az(725)).toBe(5); // 725 − 2·360
     expect(az(359.6)).toBe(0); // rounds to 360 ≡ 0
@@ -304,10 +335,14 @@ describe('sanitizeConfig', () => {
   });
 
   it('derives a coordinate name when the location name is missing, trims and truncates names', () => {
-    expect(sanitizeConfig({ location: { latitude: 46, longitude: -8.5 } }).location.name).toBe('46.000° N, 8.500° W');
+    expect(sanitizeConfig({ location: { latitude: 46, longitude: -8.5 } }).location.name).toBe(
+      '46.000° N, 8.500° W',
+    );
     expect(sanitizeConfig({ location: { name: '  Bern \n' } }).location.name).toBe('Bern');
     const long = 'x'.repeat(MAX_LOCATION_NAME_LENGTH + 20);
-    expect(sanitizeConfig({ location: { name: long } }).location.name).toBe('x'.repeat(MAX_LOCATION_NAME_LENGTH));
+    expect(sanitizeConfig({ location: { name: long } }).location.name).toBe(
+      'x'.repeat(MAX_LOCATION_NAME_LENGTH),
+    );
     expect(sanitizeConfig({ location: { name: 'a\u0000b\u0007c' } }).location.name).toBe('a b c');
   });
 
@@ -367,7 +402,9 @@ describe('sanitizeConfig', () => {
     const pts = Array.from({ length: 1000 }, (_, i) => [i * 0.3, 1]);
     expect(sanitizeConfig({ horizon: { manual: pts } }).horizon.manual).toHaveLength(MAX_HORIZON_POINTS);
     const huge = new Array<unknown>(200_000).fill([12, 3]);
-    expect(sanitizeConfig({ horizon: { manual: huge } }).horizon.manual).toEqual([{ azimuth: 12, elevation: 3 }]);
+    expect(sanitizeConfig({ horizon: { manual: huge } }).horizon.manual).toEqual([
+      { azimuth: 12, elevation: 3 },
+    ]);
   });
 
   it('migrates flat v1 configs', () => {
@@ -389,7 +426,13 @@ describe('sanitizeConfig', () => {
     expect(c).toEqual({
       ...DEFAULT_CONFIG,
       location: { ...DEFAULT_CONFIG.location, name: '46.950° N, 7.440° E', latitude: 46.95, longitude: 7.44 },
-      building: { ...DEFAULT_CONFIG.building, facadeAzimuth: 180, floorHeight: 300, railingHeight: 110, numFloors: 4 },
+      building: {
+        ...DEFAULT_CONFIG.building,
+        facadeAzimuth: 180,
+        floorHeight: 300,
+        railingHeight: 110,
+        numFloors: 4,
+      },
       panels: { ...DEFAULT_CONFIG.panels, length: 100, width: 170, count: 3, tiltFromVertical: 30 },
       horizon: { ...DEFAULT_CONFIG.horizon, obstacles: [], manual: [] },
     });
@@ -413,7 +456,10 @@ describe('sanitizeConfig', () => {
       building: Object.assign(Object.create({ facadeAzimuth: 90 }) as Rec, { floorHeight: 300 }),
       horizon: {
         obstacles: [Object.assign(Object.create({ height: 99 }) as Rec, { id: 'a' })],
-        manual: [Object.assign(Object.create({ elevation: 30 }) as Rec, { azimuth: 10 }), { azimuth: 20, elevation: 5 }],
+        manual: [
+          Object.assign(Object.create({ elevation: 30 }) as Rec, { azimuth: 10 }),
+          { azimuth: 20, elevation: 5 },
+        ],
       },
     };
     expect(sanitizeConfig(input)).toEqual({
@@ -427,7 +473,13 @@ describe('sanitizeConfig', () => {
     });
     // A polluted Object.prototype must not leak into the result (before the fix: latitude 33, shadingModel 'linear').
     const proto = Object.prototype as Rec;
-    const polluted: Rec = { location: { latitude: 33 }, latitude: 12, shadingModel: 'linear', obstacles: [{ id: 'x' }], version: 1 };
+    const polluted: Rec = {
+      location: { latitude: 33 },
+      latitude: 12,
+      shadingModel: 'linear',
+      obstacles: [{ id: 'x' }],
+      version: 1,
+    };
     try {
       for (const [k, v] of Object.entries(polluted)) proto[k] = v;
       expect(sanitizeConfig({})).toEqual(DEFAULT_CONFIG);
@@ -488,12 +540,16 @@ describe('encodeConfig / decodeConfig', () => {
       ...DEFAULT_CONFIG,
       horizon: {
         terrainEnabled: false,
-        obstacles: [{ id: 'o1', name: 'Haus', offsetAlong: -5, distance: 20, width: 15, depth: 10, height: 12 }],
+        obstacles: [
+          { id: 'o1', name: 'Haus', offsetAlong: -5, distance: 20, width: 15, depth: 10, height: 12 },
+        ],
         manual: [{ azimuth: 90, elevation: 4.5 }],
       },
     };
     expect(encodeConfig(d)).toBe(
-      refEncodeJson('{"h":{"t":false,"o":[{"i":"o1","n":"Haus","u":-5,"d":20,"w":15,"t":10,"h":12}],"m":[[90,4.5]]}}'),
+      refEncodeJson(
+        '{"h":{"t":false,"o":[{"i":"o1","n":"Haus","u":-5,"d":20,"w":15,"t":10,"h":12}],"m":[[90,4.5]]}}',
+      ),
     );
     expect(decodeConfig(encodeConfig(d))).toEqual(d);
   });
@@ -517,11 +573,18 @@ describe('encodeConfig / decodeConfig', () => {
   it('keeps a typical changed config short', () => {
     const c: Config = {
       ...DEFAULT_CONFIG,
-      location: { name: 'Bern', latitude: 46.9481, longitude: 7.4474, timezone: 'Europe/Zurich', elevation: 549 },
+      location: {
+        name: 'Bern',
+        latitude: 46.9481,
+        longitude: 7.4474,
+        timezone: 'Europe/Zurich',
+        elevation: 549,
+      },
       building: { ...DEFAULT_CONFIG.building, facadeAzimuth: 180, numFloors: 4 },
       panels: { ...DEFAULT_CONFIG.panels, tiltFromVertical: 30, powerWp: 425, width: 172.2 },
     };
-    const json = '{"l":{"n":"Bern","a":46.9481,"o":7.4474,"e":549},"b":{"a":180,"f":4},"p":{"w":172.2,"t":30,"p":425}}';
+    const json =
+      '{"l":{"n":"Bern","a":46.9481,"o":7.4474,"e":549},"b":{"a":180,"f":4},"p":{"w":172.2,"t":30,"p":425}}';
     const s = encodeConfig(c);
     expect(s).toBe(refEncodeJson(json));
     // ASCII JSON → base64 without padding has ⌈8·bytes/6⌉ chars
@@ -555,7 +618,9 @@ describe('encodeConfig / decodeConfig', () => {
   });
 
   it('accepts long keys, full configs and flat v1 configs', () => {
-    const long = decodeConfig(refEncodeJson('{"building":{"facadeAzimuth":135},"weather":{"source":"clear-sky"}}'));
+    const long = decodeConfig(
+      refEncodeJson('{"building":{"facadeAzimuth":135},"weather":{"source":"clear-sky"}}'),
+    );
     expect(long).toEqual({
       ...DEFAULT_CONFIG,
       building: { ...DEFAULT_CONFIG.building, facadeAzimuth: 135 },
@@ -574,7 +639,9 @@ describe('encodeConfig / decodeConfig', () => {
   });
 
   it('ignores __proto__ in payloads', () => {
-    const c = decodeConfig(refEncodeJson('{"__proto__":{"polluted":1},"b":{"__proto__":{"polluted":1},"a":90}}'));
+    const c = decodeConfig(
+      refEncodeJson('{"__proto__":{"polluted":1},"b":{"__proto__":{"polluted":1},"a":90}}'),
+    );
     expect(({} as Rec).polluted).toBeUndefined();
     expect(c?.building.facadeAzimuth).toBe(90);
   });
@@ -587,10 +654,30 @@ describe('share format versions', () => {
   it('pins share base 1 (the defaults of all links created before versioning)', () => {
     expect(SHARE_BASES[1]).toEqual({
       version: 2,
-      location: { name: '47.100° N, 7.450° E', latitude: 47.1, longitude: 7.45, timezone: 'Europe/Zurich', elevation: 486 },
-      building: { facadeAzimuth: 202, floorHeight: 280, railingHeight: 100, balconyDepth: 150, numFloors: 2, lowestFloor: 1 },
+      location: {
+        name: '47.100° N, 7.450° E',
+        latitude: 47.1,
+        longitude: 7.45,
+        timezone: 'Europe/Zurich',
+        elevation: 486,
+      },
+      building: {
+        facadeAzimuth: 202,
+        floorHeight: 280,
+        railingHeight: 100,
+        balconyDepth: 150,
+        numFloors: 2,
+        lowestFloor: 1,
+      },
       panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 45, powerWp: 430 },
-      system: { inverterLimitW: 800, lossesPct: 14, tempCoeffPct: -0.35, noct: 45, albedo: 0.2, shadingModel: 'substring' },
+      system: {
+        inverterLimitW: 800,
+        lossesPct: 14,
+        tempCoeffPct: -0.35,
+        noct: 45,
+        albedo: 0.2,
+        shadingModel: 'substring',
+      },
       horizon: { terrainEnabled: true, obstacles: [], manual: [] },
       weather: { source: 'open-meteo', year: 2025 },
       economics: {
@@ -669,7 +756,9 @@ describe('readConfigFromHash / buildShareUrl', () => {
   };
 
   it('builds a link from the base URL without its old hash', () => {
-    expect(buildShareUrl('https://example.org/app/?x=1#c=old', c)).toBe(`https://example.org/app/?x=1#c=${encodeConfig(c)}`);
+    expect(buildShareUrl('https://example.org/app/?x=1#c=old', c)).toBe(
+      `https://example.org/app/?x=1#c=${encodeConfig(c)}`,
+    );
     expect(buildShareUrl('https://example.org/', c)).toBe(`https://example.org/#c=${encodeConfig(c)}`);
   });
 
@@ -681,7 +770,8 @@ describe('readConfigFromHash / buildShareUrl', () => {
   });
 
   it('returns null when absent or invalid', () => {
-    for (const h of ['', '#', '#c=', '#x=e30', '#c=%E0%A4%A', '#c=!!!']) expect(readConfigFromHash(h)).toBeNull();
+    for (const h of ['', '#', '#c=', '#x=e30', '#c=%E0%A4%A', '#c=!!!'])
+      expect(readConfigFromHash(h)).toBeNull();
   });
 });
 
@@ -720,7 +810,9 @@ describe('configToJson / configFromJson', () => {
     expect(configFromJson(JSON.stringify({ state: { config: inner }, version: 2 }))).toEqual(custom);
     expect(configFromJson(JSON.stringify({ config: inner }))).toEqual(custom);
     // Persisted v1 value: a flat config inside the wrapper.
-    expect(configFromJson('{"state":{"config":{"panelTilt":20}},"version":1}')?.panels.tiltFromVertical).toBe(20);
+    expect(configFromJson('{"state":{"config":{"panelTilt":20}},"version":1}')?.panels.tiltFromVertical).toBe(
+      20,
+    );
     // A wrapper without a config is not a config.
     expect(configFromJson('{"state":{"lang":"de"},"version":2}')).toBeNull();
   });

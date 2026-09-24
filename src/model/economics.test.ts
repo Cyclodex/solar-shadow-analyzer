@@ -53,7 +53,12 @@ describe('economics', () => {
     // 600 kWh, 3 floors: self 480 kWh·0.30 = 144, export 120 kWh·0.08 = 9.6 → a = 153.6; I = 4500; q = 0.975.
     // Total ever saved a/(1 − q) = 6144 > I → finite. S(N) = a·(1 − q^N)/(1 − q) ≥ I ⇔ N ≥ ln(1 − I(1 − q)/a)/ln q
     // = ln(0.267578125)/ln(0.975) = 52.07… → 52 full years, then linear within year 53 (independent closed form).
-    const r = economics(600, 3, { ...E, selfConsumptionPct: 80, investmentPerFloor: 1500, degradationPct: 2.5 });
+    const r = economics(600, 3, {
+      ...E,
+      selfConsumptionPct: 80,
+      investmentPerFloor: 1500,
+      degradationPct: 2.5,
+    });
     const a = 153.6;
     const q = 0.975;
     const S = (n: number): number => (a * (1 - q ** n)) / (1 - q);

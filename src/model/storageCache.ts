@@ -53,7 +53,13 @@ export function touchCacheEntry(storage: Storage, key: string, entry: object): v
  * recently used ones are removed first. If the write still fails (storage full, e.g. by other data of this
  * origin), all other entries with `prefix` are removed and the write is retried once.
  */
-export function writeCacheEntry(storage: Storage, prefix: string, max: number, key: string, entry: object): void {
+export function writeCacheEntry(
+  storage: Storage,
+  prefix: string,
+  max: number,
+  key: string,
+  entry: object,
+): void {
   try {
     const json = JSON.stringify({ ...entry, t: cacheStamp() });
     const others = keysByLastUse(storage, prefix).filter((k) => k !== key);

@@ -57,7 +57,8 @@ describe('sunPosition', () => {
       ['2025-11-03T11:43:33.922Z', 16.4346],
       ['2025-12-25T12:00:10.545Z', -0.1757],
     ];
-    for (const [iso, eot] of refs) expect(Math.abs(sunPosition(utc(iso), 51.4769, 0).equationOfTime - eot)).toBeLessThan(EOT_TOL);
+    for (const [iso, eot] of refs)
+      expect(Math.abs(sunPosition(utc(iso), 51.4769, 0).equationOfTime - eot)).toBeLessThan(EOT_TOL);
   });
 
   it('applies NOAA refraction to the altitude only', () => {
@@ -93,8 +94,9 @@ describe('sunPosition', () => {
     expect(south.altitude).toBeCloseTo(-south.declination, 9);
     for (let i = 0; i < 2000; i++) {
       const lat = -90 + (180 * i) / 1999;
-      const s = sunPosition(t + i * 3_600_000 * 7.3, lat, -180 + (i * 37) % 360);
-      for (const v of [s.altitude, s.azimuth, s.declination, s.equationOfTime]) expect(Number.isFinite(v)).toBe(true);
+      const s = sunPosition(t + i * 3_600_000 * 7.3, lat, -180 + ((i * 37) % 360));
+      for (const v of [s.altitude, s.azimuth, s.declination, s.equationOfTime])
+        expect(Number.isFinite(v)).toBe(true);
       expect(s.azimuth).toBeGreaterThanOrEqual(0);
       expect(s.azimuth).toBeLessThan(360);
     }
@@ -191,19 +193,31 @@ describe('sunTimes', () => {
   it('puts the sun at −0.833° geometric altitude at sunrise/sunset', () => {
     const st = sunTimes('2025-06-21', 46.948, 7.447, 'Europe/Zurich');
     for (const m of [st.sunrise!, st.sunset!]) {
-      const s = sunPosition(localToUtc('2025-06-21', m, 'Europe/Zurich'), 46.948, 7.447, { refraction: false });
+      const s = sunPosition(localToUtc('2025-06-21', m, 'Europe/Zurich'), 46.948, 7.447, {
+        refraction: false,
+      });
       expect(s.altitude).toBeCloseTo(SUNRISE_ALTITUDE, 3); // 0.5 s bisection ≈ 0.001°
     }
   });
 
   it('flags polar day and polar night (Tromsø 69.65 N, McMurdo 77.85 S)', () => {
     // astronomy-engine finds no sunrise/sunset within 24 h of local midnight on these dates.
-    expect(sunTimes('2025-06-21', 69.65, 18.96, 'Europe/Oslo')).toMatchObject({ sunrise: null, sunset: null, polar: 'day' });
-    expect(sunTimes('2025-12-21', 69.65, 18.96, 'Europe/Oslo')).toMatchObject({ sunrise: null, sunset: null, polar: 'night' });
+    expect(sunTimes('2025-06-21', 69.65, 18.96, 'Europe/Oslo')).toMatchObject({
+      sunrise: null,
+      sunset: null,
+      polar: 'day',
+    });
+    expect(sunTimes('2025-12-21', 69.65, 18.96, 'Europe/Oslo')).toMatchObject({
+      sunrise: null,
+      sunset: null,
+      polar: 'night',
+    });
     expect(sunTimes('2025-12-21', -77.85, 166.67, 'Antarctica/McMurdo')).toMatchObject({ polar: 'day' });
     expect(sunTimes('2025-06-21', -77.85, 166.67, 'Antarctica/McMurdo')).toMatchObject({ polar: 'night' });
     // Solar noon is always defined (astronomy-engine transit: 766.0058 min).
-    expect(Math.abs(sunTimes('2025-06-21', 69.65, 18.96, 'Europe/Oslo').solarNoon - 766.0058)).toBeLessThan(EOT_TOL);
+    expect(Math.abs(sunTimes('2025-06-21', 69.65, 18.96, 'Europe/Oslo').solarNoon - 766.0058)).toBeLessThan(
+      EOT_TOL,
+    );
   });
 
   it('handles transition days with a single event (Tromsø)', () => {

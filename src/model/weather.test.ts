@@ -62,7 +62,10 @@ function payload(hours: number, over: Partial<Record<string, (number | null)[]>>
   };
 }
 
-function fakeFetch(body: unknown, status = 200): { fn: typeof fetch; calls: { url: string; init?: RequestInit }[] } {
+function fakeFetch(
+  body: unknown,
+  status = 200,
+): { fn: typeof fetch; calls: { url: string; init?: RequestInit }[] } {
   const calls: { url: string; init?: RequestInit }[] = [];
   const fn = (async (url: string | URL | Request, init?: RequestInit) => {
     calls.push({ url: String(url), init });
@@ -100,11 +103,13 @@ describe('parseOpenMeteo', () => {
 
   it('rejects incomplete years, API errors and malformed payloads', () => {
     // 3 of 200 missing = 1.5 % > 1 %.
-    const gappy = payload(200, { shortwave_radiation: [null, null, null, ...new Array<number>(197).fill(1)] });
+    const gappy = payload(200, {
+      shortwave_radiation: [null, null, null, ...new Array<number>(197).fill(1)],
+    });
     expect(() => parseOpenMeteo(gappy, 0, 0, 2023)).toThrow(/missing/);
-    expect(() => parseOpenMeteo({ error: true, reason: 'Parameter end_date out of range' }, 0, 0, 2023)).toThrow(
-      /end_date/,
-    );
+    expect(() =>
+      parseOpenMeteo({ error: true, reason: 'Parameter end_date out of range' }, 0, 0, 2023),
+    ).toThrow(/end_date/);
     expect(() => parseOpenMeteo({ hourly: { time: [1, 2] } }, 0, 0, 2023)).toThrow(/malformed/);
     expect(() => parseOpenMeteo(null, 0, 0, 2023)).toThrow(/malformed/);
     const irregular = payload(3) as { hourly: { time: number[] } };

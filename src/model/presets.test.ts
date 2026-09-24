@@ -47,19 +47,100 @@ const RAW_GEOCODING: Record<string, [number, number, number, string]> = {
 /** Real response of GET /v1/search?name=Bern&count=5&language=de (2026-09-23), postcodes/population removed. */
 const BERN_RESPONSE = {
   results: [
-    { id: 2661552, name: 'Bern', latitude: 46.94809, longitude: 7.44744, elevation: 549.0, feature_code: 'PPLC', country_code: 'CH', admin1_id: 2661551, timezone: 'Europe/Zurich', country: 'Schweiz', admin1: 'Kanton Bern' },
-    { id: 4918006, name: 'Berne', latitude: 40.65782, longitude: -84.95191, elevation: 258.0, feature_code: 'PPL', country_code: 'US', admin1_id: 4921868, timezone: 'America/Indiana/Indianapolis', country: 'Vereinigte Staaten', admin1: 'Indiana' },
-    { id: 4268179, name: 'Bern', latitude: 39.96222, longitude: -95.97194, elevation: 390.0, feature_code: 'PPL', country_code: 'US', admin1_id: 4273857, timezone: 'America/Chicago', country: 'Vereinigte Staaten', admin1: 'Kansas' },
-    { id: 2759053, name: 'Bern', latitude: 51.74833, longitude: 5.16528, elevation: 5.0, feature_code: 'PPL', country_code: 'NL', admin1_id: 2755634, timezone: 'Europe/Amsterdam', country: 'Niederlande', admin1: 'Gelderland' },
-    { id: 5585377, name: 'Bern', latitude: 42.33965, longitude: -111.38604, elevation: 1819.0, feature_code: 'PPL', country_code: 'US', admin1_id: 5596512, timezone: 'America/Boise', country: 'Vereinigte Staaten', admin1: 'Idaho' },
+    {
+      id: 2661552,
+      name: 'Bern',
+      latitude: 46.94809,
+      longitude: 7.44744,
+      elevation: 549.0,
+      feature_code: 'PPLC',
+      country_code: 'CH',
+      admin1_id: 2661551,
+      timezone: 'Europe/Zurich',
+      country: 'Schweiz',
+      admin1: 'Kanton Bern',
+    },
+    {
+      id: 4918006,
+      name: 'Berne',
+      latitude: 40.65782,
+      longitude: -84.95191,
+      elevation: 258.0,
+      feature_code: 'PPL',
+      country_code: 'US',
+      admin1_id: 4921868,
+      timezone: 'America/Indiana/Indianapolis',
+      country: 'Vereinigte Staaten',
+      admin1: 'Indiana',
+    },
+    {
+      id: 4268179,
+      name: 'Bern',
+      latitude: 39.96222,
+      longitude: -95.97194,
+      elevation: 390.0,
+      feature_code: 'PPL',
+      country_code: 'US',
+      admin1_id: 4273857,
+      timezone: 'America/Chicago',
+      country: 'Vereinigte Staaten',
+      admin1: 'Kansas',
+    },
+    {
+      id: 2759053,
+      name: 'Bern',
+      latitude: 51.74833,
+      longitude: 5.16528,
+      elevation: 5.0,
+      feature_code: 'PPL',
+      country_code: 'NL',
+      admin1_id: 2755634,
+      timezone: 'Europe/Amsterdam',
+      country: 'Niederlande',
+      admin1: 'Gelderland',
+    },
+    {
+      id: 5585377,
+      name: 'Bern',
+      latitude: 42.33965,
+      longitude: -111.38604,
+      elevation: 1819.0,
+      feature_code: 'PPL',
+      country_code: 'US',
+      admin1_id: 5596512,
+      timezone: 'America/Boise',
+      country: 'Vereinigte Staaten',
+      admin1: 'Idaho',
+    },
   ],
   generationtime_ms: 1.0532141,
 };
 
 const REQUIRED_CITIES = [
-  'Bern', 'Zürich', 'Basel', 'Genève', 'Lausanne', 'Luzern', 'St. Gallen', 'Lugano', 'Chur', 'Sion', 'Winterthur',
-  'Biel/Bienne', 'Thun', 'Fribourg', 'Wien', 'Innsbruck', 'Graz', 'München', 'Stuttgart', 'Freiburg im Breisgau',
-  'Berlin', 'Hamburg', 'Köln', 'Frankfurt am Main',
+  'Bern',
+  'Zürich',
+  'Basel',
+  'Genève',
+  'Lausanne',
+  'Luzern',
+  'St. Gallen',
+  'Lugano',
+  'Chur',
+  'Sion',
+  'Winterthur',
+  'Biel/Bienne',
+  'Thun',
+  'Fribourg',
+  'Wien',
+  'Innsbruck',
+  'Graz',
+  'München',
+  'Stuttgart',
+  'Freiburg im Breisgau',
+  'Berlin',
+  'Hamburg',
+  'Köln',
+  'Frankfurt am Main',
 ];
 
 describe('LOCATION_PRESETS', () => {
@@ -95,7 +176,9 @@ describe('LOCATION_PRESETS', () => {
   it('findLocationPreset finds presets by coordinates', () => {
     for (const p of LOCATION_PRESETS) expect(findLocationPreset(presetToLocation(p))).toBe(p);
     const bern = LOCATION_PRESETS.find((p) => p.id === 'bern')!;
-    expect(findLocationPreset({ latitude: bern.latitude + 4e-5, longitude: bern.longitude - 4e-5 })).toBe(bern);
+    expect(findLocationPreset({ latitude: bern.latitude + 4e-5, longitude: bern.longitude - 4e-5 })).toBe(
+      bern,
+    );
     expect(findLocationPreset({ latitude: bern.latitude + 1e-3, longitude: bern.longitude })).toBeUndefined();
     expect(findLocationPreset(DEFAULT_CONFIG.location)).toBeUndefined();
   });
@@ -148,21 +231,49 @@ describe('geocodingResultToLocation', () => {
     });
     expect(geocodingResultToLocation(bernKs)?.name).toBe('Bern, Kansas, US');
     // 51.74833 → 51.7483, 5.16528 → 5.1653
-    expect(geocodingResultToLocation(bernNl)).toMatchObject({ name: 'Bern, Gelderland, NL', latitude: 51.7483, longitude: 5.1653 });
+    expect(geocodingResultToLocation(bernNl)).toMatchObject({
+      name: 'Bern, Gelderland, NL',
+      latitude: 51.7483,
+      longitude: 5.1653,
+    });
   });
 
   it('omits a region that contains the place name as a word', () => {
-    const base = { latitude: 52.52437, longitude: 13.41053, elevation: 74, timezone: 'Europe/Berlin', country_code: 'DE' };
-    expect(geocodingResultToLocation({ ...base, name: 'Berlin', admin1: 'Land Berlin' })?.name).toBe('Berlin, DE');
-    expect(geocodingResultToLocation({ ...base, name: 'Hamburg', admin1: 'Freie und Hansestadt Hamburg' })?.name).toBe('Hamburg, DE');
-    expect(geocodingResultToLocation({ ...base, name: 'München', admin1: 'Bayern' })?.name).toBe('München, Bayern, DE');
-    expect(geocodingResultToLocation({ ...base, name: 'Baden', admin1: 'Baden-Württemberg' })?.name).toBe('Baden, Baden-Württemberg, DE');
+    const base = {
+      latitude: 52.52437,
+      longitude: 13.41053,
+      elevation: 74,
+      timezone: 'Europe/Berlin',
+      country_code: 'DE',
+    };
+    expect(geocodingResultToLocation({ ...base, name: 'Berlin', admin1: 'Land Berlin' })?.name).toBe(
+      'Berlin, DE',
+    );
+    expect(
+      geocodingResultToLocation({ ...base, name: 'Hamburg', admin1: 'Freie und Hansestadt Hamburg' })?.name,
+    ).toBe('Hamburg, DE');
+    expect(geocodingResultToLocation({ ...base, name: 'München', admin1: 'Bayern' })?.name).toBe(
+      'München, Bayern, DE',
+    );
+    expect(geocodingResultToLocation({ ...base, name: 'Baden', admin1: 'Baden-Württemberg' })?.name).toBe(
+      'Baden, Baden-Württemberg, DE',
+    );
     // CH with an unknown admin1 id → region name kept
-    expect(geocodingResultToLocation({ ...base, name: 'X', admin1: 'Kanton Y', admin1_id: 1, country_code: 'CH' })?.name).toBe('X, Kanton Y, CH');
+    expect(
+      geocodingResultToLocation({ ...base, name: 'X', admin1: 'Kanton Y', admin1_id: 1, country_code: 'CH' })
+        ?.name,
+    ).toBe('X, Kanton Y, CH');
   });
 
   it('returns sanitizeConfig fixed points: long / control-character labels are normalized (regression)', () => {
-    const base = { latitude: 48.1, longitude: 11.6, elevation: 520, timezone: 'Europe/Berlin', country_code: 'DE', admin1: 'Bayern' };
+    const base = {
+      latitude: 48.1,
+      longitude: 11.6,
+      elevation: 520,
+      timezone: 'Europe/Berlin',
+      country_code: 'DE',
+      admin1: 'Bayern',
+    };
     // Label 'a'×100 + ', Bayern, DE' (112 code points) → first MAX_LOCATION_NAME_LENGTH = 80 code points = 'a'×80.
     const long = geocodingResultToLocation({ ...base, name: 'a'.repeat(100) });
     expect(long?.name).toBe('a'.repeat(80));
@@ -200,7 +311,9 @@ describe('searchLocations', () => {
   }
 
   const json = (body: unknown, status = 200): Promise<Response> =>
-    Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }));
+    Promise.resolve(
+      new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } }),
+    );
 
   it('queries Open-Meteo with name, count, language and passes the signal', async () => {
     const { fetchImpl, calls } = mockFetch(() => json(BERN_RESPONSE));
@@ -221,15 +334,24 @@ describe('searchLocations', () => {
 
   it('drops invalid and duplicate results', async () => {
     const r0 = BERN_RESPONSE.results[0]!;
-    const { fetchImpl } = mockFetch(() => json({ results: [r0, { ...r0 }, { ...r0, timezone: 'Bad/Zone' }, 42] }));
+    const { fetchImpl } = mockFetch(() =>
+      json({ results: [r0, { ...r0 }, { ...r0, timezone: 'Bad/Zone' }, 42] }),
+    );
     expect(await searchLocations('Bern', 'de', { fetchImpl })).toHaveLength(1);
   });
 
   it('falls back to count=10 for a NaN count and clamps the count to 1…100 (regression)', async () => {
     const { fetchImpl, calls } = mockFetch(() => json({ results: [] }));
-    for (const count of [NaN, 0, 1e9, Infinity, 7.4]) await searchLocations('Bern', 'de', { fetchImpl, count });
+    for (const count of [NaN, 0, 1e9, Infinity, 7.4])
+      await searchLocations('Bern', 'de', { fetchImpl, count });
     // NaN → default 10 (before the fix: 'count=NaN'); 0 → 1; 1e9 / Infinity → 100; 7.4 → round → 7.
-    expect(calls.map((c) => new URL(c.url).searchParams.get('count'))).toEqual(['10', '1', '100', '100', '7']);
+    expect(calls.map((c) => new URL(c.url).searchParams.get('count'))).toEqual([
+      '10',
+      '1',
+      '100',
+      '100',
+      '7',
+    ]);
   });
 
   it('does not fetch for queries shorter than 2 characters', async () => {

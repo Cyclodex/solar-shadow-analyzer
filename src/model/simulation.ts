@@ -311,7 +311,16 @@ function runYear(
     sample.ghi = weather.ghi[i];
     sample.dni = weather.dni[i];
     sample.dhi = weather.dhi[i];
-    evaluateStep(model, track.altitude[j], track.azimuth[j], sf, sample, weather.temperature[i], out, withUnshaded);
+    evaluateStep(
+      model,
+      track.altitude[j],
+      track.azimuth[j],
+      sf,
+      sample,
+      weather.temperature[i],
+      out,
+      withUnshaded,
+    );
     const m = months ? months[i] : 0;
     for (let k = 0; k < n; k++) {
       totals.monthly[k][m] += out.acW[k] * hours;
@@ -384,7 +393,9 @@ export function simulateYear(
       skyViewFactor: model.skyView[k],
     });
   }
-  const totalMonthlyKwh = Array.from({ length: 12 }, (_, m) => floors.reduce((s, f) => s + f.monthlyKwh[m], 0));
+  const totalMonthlyKwh = Array.from({ length: 12 }, (_, m) =>
+    floors.reduce((s, f) => s + f.monthlyKwh[m], 0),
+  );
   return {
     source: weather.source,
     year: weather.year,

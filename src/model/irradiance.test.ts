@@ -31,7 +31,11 @@ function prng(seed: number): () => number {
   };
 }
 
-function cfg(tiltFromVertical: number, panels: Partial<Config['panels']> = {}, building: Partial<Config['building']> = {}): Config {
+function cfg(
+  tiltFromVertical: number,
+  panels: Partial<Config['panels']> = {},
+  building: Partial<Config['building']> = {},
+): Config {
   const c = structuredClone(DEFAULT_CONFIG);
   Object.assign(c.panels, { tiltFromVertical }, panels);
   Object.assign(c.building, building);
@@ -134,7 +138,7 @@ describe('poaIrradiance', () => {
     const p = poaIrradiance(sample, sf, layout, { beamFactor: 0.8, skyViewFactor: 0.7, albedo: 0.2 });
     expect(p.beam).toBeCloseTo(700 * ci * iam * 0.8, 9);
     expect(p.diffuse).toBeCloseTo(150 * 0.7, 12);
-    expect(p.ground).toBeCloseTo(600 * 0.2 * (1 - Math.cos(45 * D)) / 2, 9);
+    expect(p.ground).toBeCloseTo((600 * 0.2 * (1 - Math.cos(45 * D))) / 2, 9);
     expect(p.total).toBeCloseTo(p.beam + p.diffuse + p.ground, 12);
   });
 
@@ -158,9 +162,13 @@ describe('rowAboveBlockedFraction', () => {
     let nonZero = 0;
     for (let i = 0; i < 500; i++) {
       const layout = panelLayout(
-        cfg(rnd() * 90, { count: 1 + Math.floor(rnd() * 4), gap: rnd() * 30, width: 50 + rnd() * 150 }, {
-          floorHeight: 200 + rnd() * 200,
-        }),
+        cfg(
+          rnd() * 90,
+          { count: 1 + Math.floor(rnd() * 4), gap: rnd() * 30, width: 50 + rnd() * 150 },
+          {
+            floorHeight: 200 + rnd() * 200,
+          },
+        ),
       );
       const a = rnd() * 89.9 * D + 1e-4;
       const f = (rnd() - 0.5) * 179.8 * D;
@@ -211,7 +219,9 @@ describe('skyViewFactor', () => {
   it('a floor above reduces it (tilted rows)', () => {
     for (const t of [10, 45, 90]) {
       const layout = panelLayout(cfg(t));
-      expect(skyViewFactor(layout, null, 202, true)).toBeLessThan(skyViewFactor(layout, null, 202, false) - 0.001);
+      expect(skyViewFactor(layout, null, 202, true)).toBeLessThan(
+        skyViewFactor(layout, null, 202, false) - 0.001,
+      );
     }
     // Vertical rows are coplanar: nothing blocked.
     const v = panelLayout(cfg(0));
@@ -272,7 +282,10 @@ describe('skyViewFactor', () => {
 
   it('ignores negative horizons and converges with the grid step', () => {
     const layout = panelLayout(cfg(45));
-    expect(skyViewFactor(layout, uniformHorizon(-3), 180, true)).toBeCloseTo(skyViewFactor(layout, null, 180, true), 12);
+    expect(skyViewFactor(layout, uniformHorizon(-3), 180, true)).toBeCloseTo(
+      skyViewFactor(layout, null, 180, true),
+      12,
+    );
     const hz = uniformHorizon(12.3);
     const f1 = skyViewFactor(layout, hz, 200, true);
     const f05 = skyViewFactor(layout, hz, 200, true, { gridDeg: 0.5 });

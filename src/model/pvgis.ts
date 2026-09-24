@@ -32,7 +32,9 @@ function finish(raw: { a: number; h: number }[]): HorizonPoint[] {
     const key = az === 360 ? 0 : az;
     byAz.set(key, Math.max(byAz.get(key) ?? -Infinity, h));
   }
-  return [...byAz.entries()].sort((x, y) => x[0] - y[0]).map(([azimuth, elevation]) => ({ azimuth, elevation }));
+  return [...byAz.entries()]
+    .sort((x, y) => x[0] - y[0])
+    .map(([azimuth, elevation]) => ({ azimuth, elevation }));
 }
 
 function parseJson(text: string): HorizonPoint[] | null {
@@ -58,7 +60,9 @@ const NUMBER = /^[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?$/;
 /** Table fields. With `;`/tab separators a `,` is a decimal comma (spreadsheet re-save, as parseHorizonCsv). */
 function splitFields(line: string): string[] {
   const t = line.trim();
-  const parts = /[;\t]/.test(t) ? t.split(/[;\t]+/).map((f) => f.trim().replace(',', '.')) : t.split(/[\s,]+/);
+  const parts = /[;\t]/.test(t)
+    ? t.split(/[;\t]+/).map((f) => f.trim().replace(',', '.'))
+    : t.split(/[\s,]+/);
   return parts.filter(Boolean);
 }
 

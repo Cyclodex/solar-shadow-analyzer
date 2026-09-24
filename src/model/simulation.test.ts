@@ -76,7 +76,11 @@ function referenceAnnualKwh(config: Config, w: WeatherSeries, horizons: HorizonP
         const loss = config.system.shadingModel === 'substring' ? substringBeamLoss(s, layout) : s.perModule;
         beamFactor = 1 - loss.reduce((a, b) => a + b, 0) / loss.length;
       }
-      const poa = poaIrradiance(sample, sf, layout, { beamFactor, skyViewFactor: svf[k], albedo: config.system.albedo });
+      const poa = poaIrradiance(sample, sf, layout, {
+        beamFactor,
+        skyViewFactor: svf[k],
+        albedo: config.system.albedo,
+      });
       out[k] += (floorPowerW(poa.total, w.temperature[i], config).acW * w.stepMinutes) / 60 / 1000;
     }
   }
@@ -120,9 +124,9 @@ describe('simulateYear', () => {
     const hz = floorHorizons(c, null);
     const opts = { facade: false, skyGridDeg: 2 };
     const expected = simulateYear(c, w, hz, opts);
-    expect(simulateYear(c, w, hz, opts, { model: createFloorModel(c, hz, opts), track: sunTrack(c, w) })).toEqual(
-      expected,
-    );
+    expect(
+      simulateYear(c, w, hz, opts, { model: createFloorModel(c, hz, opts), track: sunTrack(c, w) }),
+    ).toEqual(expected);
     expect(simulateYear(c, w, hz, opts, { track: sunTrack(c, w) })).toEqual(expected);
     expect(simulateYear(c, w, hz, {}, { model: createFloorModel(c, hz) })).toEqual(simulateYear(c, w, hz));
   });
@@ -135,7 +139,11 @@ describe('simulateYear', () => {
       [70, 135],
       [90, 250],
     ]) {
-      const r = simulateYear(cfg({ building: { numFloors: 4, facadeAzimuth: az }, panels: { tiltFromVertical: tilt } }), w, flat(4));
+      const r = simulateYear(
+        cfg({ building: { numFloors: 4, facadeAzimuth: az }, panels: { tiltFromVertical: tilt } }),
+        w,
+        flat(4),
+      );
       const top = r.floors[3];
       expect(top.annualKwh).toBe(top.annualUnshadedKwh);
       expect(top.monthlyKwh).toEqual(top.monthlyUnshadedKwh);
@@ -180,8 +188,16 @@ describe('simulateYear', () => {
       expect(f.specificYield).toBeCloseTo(f.annualKwh / 0.86, 9);
       expect(f.storey).toBe(c.building.lowestFloor + f.floor);
     }
-    expect(r.totalAnnualKwh).toBeCloseTo(r.floors.reduce((s, f) => s + f.annualKwh, 0), 9);
-    r.totalMonthlyKwh.forEach((m, i) => expect(m).toBeCloseTo(r.floors.reduce((s, f) => s + f.monthlyKwh[i], 0), 9));
+    expect(r.totalAnnualKwh).toBeCloseTo(
+      r.floors.reduce((s, f) => s + f.annualKwh, 0),
+      9,
+    );
+    r.totalMonthlyKwh.forEach((m, i) =>
+      expect(m).toBeCloseTo(
+        r.floors.reduce((s, f) => s + f.monthlyKwh[i], 0),
+        9,
+      ),
+    );
     expect(r.source).toBe('open-meteo');
     expect(r.year).toBe(2023);
   });
@@ -196,7 +212,8 @@ describe('simulateYear', () => {
     const t = 30;
     const r = simulateYear(cfg({ building: { numFloors: 1 }, panels: { tiltFromVertical: t } }), w, flat(1));
     const D = Math.PI / 180;
-    const poa = 100 * (Math.cos(t * D) + Math.sin(t * D)) / 2 + 100 * 0.2 * (1 - Math.cos((90 - t) * D)) / 2;
+    const poa =
+      (100 * (Math.cos(t * D) + Math.sin(t * D))) / 2 + (100 * 0.2 * (1 - Math.cos((90 - t) * D))) / 2;
     expect(r.floors[0].poaKwhPerM2).toBeCloseTo(poa / 1000, 7);
   });
 

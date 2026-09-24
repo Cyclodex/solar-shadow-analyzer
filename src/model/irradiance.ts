@@ -20,7 +20,11 @@ export function extraterrestrialNormal(dayOfYear: number): number {
   const b = (2 * Math.PI * (dayOfYear - 1)) / 365;
   return (
     SOLAR_CONSTANT *
-    (1.00011 + 0.034221 * Math.cos(b) + 0.00128 * Math.sin(b) + 0.000719 * Math.cos(2 * b) + 0.000077 * Math.sin(2 * b))
+    (1.00011 +
+      0.034221 * Math.cos(b) +
+      0.00128 * Math.sin(b) +
+      0.000719 * Math.cos(2 * b) +
+      0.000077 * Math.sin(2 * b))
   );
 }
 
@@ -215,7 +219,8 @@ export function skyViewGrid(layout: PanelLayout, opts: SkyViewOptions = {}): Sky
         w = 0;
         for (let i = 0; i < KINK_SUBDIV; i++) {
           const a = a0 + (i + 0.5) * ha;
-          for (let j = 0; j < KINK_SUBDIV; j++) w += Math.max(0, dN(a, f0 + (j + 0.5) * hf)) * Math.cos(a) * ha * hf;
+          for (let j = 0; j < KINK_SUBDIV; j++)
+            w += Math.max(0, dN(a, f0 + (j + 0.5) * hf)) * Math.cos(a) * ha * hf;
         }
       }
       w /= Math.PI;

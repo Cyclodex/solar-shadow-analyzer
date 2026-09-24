@@ -49,8 +49,14 @@ describe('emptyHorizon & horizonAt', () => {
 
 describe('maxHorizon', () => {
   it('pointwise max, skipping missing profiles; resamples finer inputs', () => {
-    const a: HorizonProfile = { stepDeg: 1, elevations: Array.from({ length: 360 }, (_, i) => (i < 180 ? 5 : 0)) };
-    const b: HorizonProfile = { stepDeg: 0.5, elevations: Array.from({ length: 720 }, (_, i) => (i % 2 ? 9 : 2)) };
+    const a: HorizonProfile = {
+      stepDeg: 1,
+      elevations: Array.from({ length: 360 }, (_, i) => (i < 180 ? 5 : 0)),
+    };
+    const b: HorizonProfile = {
+      stepDeg: 0.5,
+      elevations: Array.from({ length: 720 }, (_, i) => (i % 2 ? 9 : 2)),
+    };
     const m = maxHorizon([a, null, b, undefined], 1);
     expect(m.elevations).toHaveLength(360);
     // At integer azimuths b is at its even samples (2).
@@ -211,7 +217,8 @@ describe('obstacleHorizon', () => {
       const g = rnd() * 360;
       const o = box(rnd() * 60 - 30, 0.5 + rnd() * 40, 0.5 + rnd() * 30, 0.5 + rnd() * 30, 0.5 + rnd() * 40);
       const ob = { u: rnd() * 10 - 5, n: rnd() * 5, z: rnd() * 20 };
-      const inside = ob.u > o.offsetAlong - o.width / 2 && ob.u < o.offsetAlong + o.width / 2 && ob.n > o.distance;
+      const inside =
+        ob.u > o.offsetAlong - o.width / 2 && ob.u < o.offsetAlong + o.width / 2 && ob.n > o.distance;
       if (inside && ob.n < o.distance + o.depth) continue;
       const p = obstacleHorizon([o], ob, g);
       p.elevations.forEach((e, i) => {
@@ -310,6 +317,8 @@ describe('CSV', () => {
     expect(csv.split('\n')[0]).toBe('azimuth,elevation');
     expect(csv.split('\n')[1]).toBe('0,5');
     const back = horizonFromPoints(parseHorizonCsv(csv));
-    back.elevations.forEach((e, i) => expect(Math.abs(e - p.elevations[i])).toBeLessThanOrEqual(0.005 + 1e-12));
+    back.elevations.forEach((e, i) =>
+      expect(Math.abs(e - p.elevations[i])).toBeLessThanOrEqual(0.005 + 1e-12),
+    );
   });
 });

@@ -40,7 +40,10 @@ export function horizonAt(profile: HorizonProfile, azimuth: number): number {
 }
 
 /** Pointwise maximum of profiles, resampled at `stepDeg`. Missing profiles are skipped; none → flat. */
-export function maxHorizon(profiles: readonly (HorizonProfile | null | undefined)[], stepDeg = 1): HorizonProfile {
+export function maxHorizon(
+  profiles: readonly (HorizonProfile | null | undefined)[],
+  stepDeg = 1,
+): HorizonProfile {
   const out = emptyHorizon(stepDeg);
   const valid = profiles.filter((p): p is HorizonProfile => p != null && p.elevations.length > 0);
   if (valid.length === 0) return out;
@@ -177,7 +180,8 @@ export function floorHorizons(config: Config, terrain: HorizonProfile | null): H
   if (terrainEnabled && terrain) shared.push(terrain);
   if (manual.length > 0) shared.push(horizonFromPoints(manual, step));
   return floorPlacements(config).map((p) => {
-    const own = obstacles.length > 0 ? obstacleHorizon(obstacles, p.center, config.building.facadeAzimuth, step) : null;
+    const own =
+      obstacles.length > 0 ? obstacleHorizon(obstacles, p.center, config.building.facadeAzimuth, step) : null;
     return maxHorizon([...shared, own], step);
   });
 }

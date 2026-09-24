@@ -324,7 +324,8 @@ export function computeHorizon(
   const minElevation = opts.minElevationDeg ?? 0;
   const ground = site.elevation ?? sampler(site.latitude, site.longitude);
   if (ground === null || !Number.isFinite(ground)) throw new Error('No elevation data at the site');
-  if (!Number.isFinite(site.observerHeight)) throw new RangeError(`Invalid observer height: ${site.observerHeight}`);
+  if (!Number.isFinite(site.observerHeight))
+    throw new RangeError(`Invalid observer height: ${site.observerHeight}`);
   const h0 = ground + site.observerHeight;
   const distances = horizonSampleDistances(opts.minDistanceM, opts.maxDistanceM);
   const drop = distances.map((d) => ((d * d) / (2 * EARTH_RADIUS_M)) * (1 - REFRACTION_K));
@@ -469,7 +470,11 @@ function sleep(ms: number, signal: AbortSignal): Promise<void> {
 }
 
 /** Downloads and decodes one tile, retrying transient failures with a linear backoff. */
-async function downloadTile(url: string, fetchImpl: typeof fetch, signal: AbortSignal): Promise<Float32Array> {
+async function downloadTile(
+  url: string,
+  fetchImpl: typeof fetch,
+  signal: AbortSignal,
+): Promise<Float32Array> {
   for (let attempt = 0; ; attempt++) {
     try {
       const res = await fetchImpl(url, { signal });

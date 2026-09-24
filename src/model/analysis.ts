@@ -128,7 +128,12 @@ export function shadeHeatmap(
   slotMinutes = 10,
 ): HeatmapData {
   const { latitude, longitude, timezone } = config.location;
-  return shadeHeatmapFromGrid(sunGrid(latitude, longitude, timezone, year, slotMinutes), config, horizons, floor);
+  return shadeHeatmapFromGrid(
+    sunGrid(latitude, longitude, timezone, year, slotMinutes),
+    config,
+    horizons,
+    floor,
+  );
 }
 
 /** Summary of a heatmap (hours from slot counts). */
@@ -146,7 +151,12 @@ export interface HeatmapStats {
 /** Lit / shaded hours of a heatmap, total and per month (a cell counts slotMinutes). */
 export function heatmapStats(h: HeatmapData): HeatmapStats {
   const hoursPerSlot = h.slotMinutes / 60;
-  const monthly = Array.from({ length: 12 }, (_, month) => ({ month, litHours: 0, shadedHours: 0, maxShade: 0 }));
+  const monthly = Array.from({ length: 12 }, (_, month) => ({
+    month,
+    litHours: 0,
+    shadedHours: 0,
+    maxShade: 0,
+  }));
   const start = Date.UTC(h.year, 0, 1);
   let lit = 0;
   let shaded = 0;

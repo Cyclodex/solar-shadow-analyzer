@@ -53,7 +53,10 @@ export function toFacade(v: Vec3, facadeAzimuth: number): FacadeVector {
 }
 
 /** Sun direction (from apparent altitude/azimuth) in the facade frame; equals toFacade(sunVectorEnu(sun)). */
-export function sunInFacade(sun: Pick<SunPosition, 'altitude' | 'azimuth'>, facadeAzimuth: number): FacadeVector {
+export function sunInFacade(
+  sun: Pick<SunPosition, 'altitude' | 'azimuth'>,
+  facadeAzimuth: number,
+): FacadeVector {
   const h = toRad(sun.altitude);
   const d = toRad(sun.azimuth - facadeAzimuth);
   const ch = Math.cos(h);
@@ -175,7 +178,8 @@ export function shadeFromAbove(sf: FacadeVector, layout: PanelLayout): ShadeResu
   // v-band = [0, L] ∩ ([0, L] − dv)
   const v0 = Math.max(0, -dv);
   const v1 = Math.min(L, L - dv);
-  if (v1 - v0 <= 0 || Math.abs(du) >= layout.rowWidth || count === 0 || !(w > 0)) return noShade(count, du, dv);
+  if (v1 - v0 <= 0 || Math.abs(du) >= layout.rowWidth || count === 0 || !(w > 0))
+    return noShade(count, du, dv);
 
   const bandShare = (v1 - v0) / L;
   const perModule = new Array<number>(count).fill(0);
