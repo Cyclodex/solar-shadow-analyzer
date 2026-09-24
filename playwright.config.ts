@@ -24,6 +24,9 @@ export default defineConfig({
   use: {
     baseURL: BASE_URL,
     trace: 'on-first-retry',
+    // page.route() does not see requests of a controlling service worker: the specs that block external
+    // services run without one. e2e/pwa.spec.ts allows it.
+    serviceWorkers: 'block',
   },
   projects: [
     {
