@@ -8,7 +8,9 @@ import { useEffect, useRef, useState, type MouseEvent, type PointerEvent } from 
 // touch-action: pan-y, so a vertical swipe scrolls the page: the browser then ends the touch with
 // pointercancel, and nothing it touched stays selected or shown. A touch therefore selects only as a tap
 // (the click the browser sends for a short press without movement, not for a long press or a tap that
-// stops a fling) or once it has moved sideways (drag, touchScrubSelects).
+// stops a fling) or once it has moved sideways (drag, touchScrubSelects). The browser sends that click to
+// whatever is under the finger when it lifts: an action the touch itself brought up there (the tooltip
+// placed over the tapped point, e.g. to keep its button above the control bar of phones) never gets it.
 // Escape closes the hover state from anywhere on the page.
 // ─────────────────────────────────────────────
 
@@ -60,6 +62,31 @@ export interface PlotPointer {
 
 /** Max. pointer travel (px) between down and up that still counts as a click/tap. */
 const CLICK_SLOP = 8;
+
+/** How long (ms) after a touch ends its click is expected at the latest. */
+const CLICK_WAIT_MS = 1000;
+
+/**
+ * Swallows the click that follows a touch ending at (x, y) (client px) when it would reach an action
+ * (CHART_ACTION_ATTR): the action appeared under the finger during the touch, the user did not tap it.
+ */
+function guardActionClick(x: number, y: number): void {
+  const guard = (e: globalThis.MouseEvent): void => {
+    stop();
+    const target = e.target instanceof Element ? e.target : null;
+    if (!target?.closest(`[${CHART_ACTION_ATTR}]`)) return;
+    if (Math.hypot(e.clientX - x, e.clientY - y) > CLICK_SLOP) return;
+    e.preventDefault();
+    e.stopPropagation();
+  };
+  // Capture on the document: before React's listeners on its root.
+  const stop = (): void => {
+    clearTimeout(timer);
+    document.removeEventListener('click', guard, true);
+  };
+  const timer = setTimeout(stop, CLICK_WAIT_MS);
+  document.addEventListener('click', guard, true);
+}
 
 function localPoint(e: PointerEvent<HTMLElement> | MouseEvent<HTMLElement>): [number, number] {
   const r = e.currentTarget.getBoundingClientRect();
@@ -173,6 +200,7 @@ export function usePlotPointer({
       const [x, y] = localPoint(e);
       const moved = Math.hypot(x - start.x, y - start.y) > CLICK_SLOP;
       if (start.touch) {
+        guardActionClick(e.clientX, e.clientY);
         if (!moved) tap.current = { x: e.clientX, y: e.clientY };
         // A vertical scroll ends in pointercancel, so this is a sideways scrub.
         else if (touchScrubSelects && !drag) select(locate(x, y));

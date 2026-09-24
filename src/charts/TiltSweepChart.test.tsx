@@ -180,6 +180,27 @@ describe('TiltSweepChart', () => {
     expect(screen.queryByRole('button', { name: /übernehmen/ })).not.toBeInTheDocument();
   });
 
+  it('touch: the click of the tap that opened the tooltip does not reach its button', () => {
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    renderChart();
+    const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
+    const x = (21 / 90) * PLOT_W;
+    const touch = { pointerId: 2, pointerType: 'touch' } as const;
+    fireEvent.pointerDown(slider, { ...touch, clientX: x, clientY: 40 });
+    fireEvent.pointerUp(slider, { ...touch, clientX: x, clientY: 40 });
+    // The tooltip was placed over the tapped point (e.g. to keep the button above the control bar): the
+    // browser sends the tap's click to the button now under the finger.
+    const apply = screen.getByRole('button', { name: 'Neigung 20° übernehmen' });
+    fireEvent.click(apply, { clientX: x, clientY: 40 });
+    expect(tilt()).toBe(45);
+    expect(apply).toBeInTheDocument();
+    // A tap on the button itself applies.
+    fireEvent.pointerDown(apply, { ...touch, clientX: x, clientY: 40 });
+    fireEvent.pointerUp(apply, { ...touch, clientX: x, clientY: 40 });
+    fireEvent.click(apply, { clientX: x, clientY: 40 });
+    expect(tilt()).toBe(20);
+  });
+
   it('touch: a tap outside closes the tooltip without applying', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
     renderChart();
