@@ -1,0 +1,58 @@
+name: Pages
+
+# Publishes the app on GitHub Pages: https://cyclodex.github.io/solar-shadow-analyzer/
+# One-time repository setting before the first run: Settings → Pages → Source "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a queued run waits instead of cancelling the one in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - run: npm ci
+
+      # The site is served under /solar-shadow-analyzer/ (project page): asset URLs, manifest and service worker
+      # scope use this base path.
+      - name: Build
+        run: npm run build
+        env:
+          BASE_PATH: /solar-shadow-analyzer/
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    name: Deploy
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5
