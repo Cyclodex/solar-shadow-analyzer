@@ -5,7 +5,7 @@ import { clamp, normalizeDeg, roundToStep } from './units';
 // ─────────────────────────────────────────────
 // CONFIG VALIDATION & SHARE LINKS
 // sanitizeConfig: untrusted input (URL, file, localStorage) → valid Config, never throws.
-// Share link: '#c=' + base64url(UTF-8(JSON of the diff vs DEFAULT_CONFIG, short keys)).
+// Share link: '#c=' + base64url(UTF-8(JSON of the diff vs the frozen share base SHARE_BASES[v], short keys)).
 // ─────────────────────────────────────────────
 
 /** Max. obstacles kept by sanitizeConfig. */
@@ -155,7 +155,11 @@ export function canonicalTimeZone(tz: unknown): string | null {
   return result;
 }
 
-/** Coordinate label in the style of the default location, e.g. "47.100° N, 7.450° E". */
+/**
+ * Coordinate label in the style of the default location, e.g. "47.100° N, 7.450° E". Language-neutral
+ * (always N/S/E/W): it is stored as location.name and ends up in share links and file names, so the UI
+ * localises it for display instead of storing a translated label.
+ */
 export function formatCoordinateName(latitude: number, longitude: number): string {
   const lat = `${Math.abs(latitude).toFixed(3)}° ${latitude < 0 ? 'S' : 'N'}`;
   const lon = `${Math.abs(longitude).toFixed(3)}° ${longitude < 0 ? 'W' : 'E'}`;
@@ -381,6 +385,54 @@ function sanitizeRecord(raw: Rec): Config {
 // ── Compact share format ─────────────────────
 // Short keys halve the link length. Decoding also accepts the long keys, so plain JSON diffs work too.
 // Manual horizon points are encoded as [azimuth, elevation] tuples.
+// A link stores only the fields that differ from a frozen, versioned base config (SHARE_BASES), never from
+// the live DEFAULT_CONFIG: changing a default must not change what existing (and printed) links mean.
+
+function deepFreeze<T>(o: T): T {
+  if (typeof o === 'object' && o !== null && !Object.isFrozen(o)) {
+    Object.freeze(o);
+    for (const v of Object.values(o)) deepFreeze(v);
+  }
+  return o;
+}
+
+/**
+ * Current share format version. Changing a default in DEFAULT_CONFIG requires a new base: add
+ * SHARE_BASES[n + 1] = literal copy of the new defaults and bump this; compactDiff then writes `v`.
+ */
+export const SHARE_VERSION: number = 1;
+
+/**
+ * Diff base of each share format version (literal snapshots; never edit an existing entry). Payloads without
+ * `v` — every link created before versioning — are version 1.
+ */
+export const SHARE_BASES: Readonly<Record<number, Config>> = deepFreeze({
+  1: {
+    version: 2,
+    location: { name: '47.100° N, 7.450° E', latitude: 47.1, longitude: 7.45, timezone: 'Europe/Zurich', elevation: 486 },
+    building: { facadeAzimuth: 202, floorHeight: 280, railingHeight: 100, balconyDepth: 150, numFloors: 2, lowestFloor: 1 },
+    panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 45, powerWp: 430 },
+    system: { inverterLimitW: 800, lossesPct: 14, tempCoeffPct: -0.35, noct: 45, albedo: 0.2, shadingModel: 'substring' },
+    horizon: { terrainEnabled: true, obstacles: [], manual: [] },
+    weather: { source: 'open-meteo', year: 2025 },
+    economics: {
+      currency: 'CHF',
+      electricityPrice: 0.3,
+      feedInTariff: 0.08,
+      selfConsumptionPct: 70,
+      investmentPerFloor: 900,
+      degradationPct: 0.5,
+      lifetimeYears: 25,
+    },
+  },
+});
+
+/** Base of payload version `v`: 1 when absent or unknown, the newest base for versions from a newer app. */
+function shareBase(v: unknown): Config {
+  if (typeof v !== 'number' || !Number.isInteger(v)) return SHARE_BASES[1];
+  if (v > SHARE_VERSION) return SHARE_BASES[SHARE_VERSION];
+  return hasOwn(SHARE_BASES, String(v)) ? SHARE_BASES[v] : SHARE_BASES[1];
+}
 
 type AliasTable = { [S in SectionKey]: { key: string; fields: { [F in keyof Config[S]]-?: string } } };
 
@@ -443,12 +495,15 @@ function unaliasKeys(o: Rec, table: Record<string, string>): Rec {
   return out;
 }
 
-/** Compact payload of the fields that differ from DEFAULT_CONFIG. */
+/** Compact payload of the fields that differ from SHARE_BASES[SHARE_VERSION] (`v` written from version 2 on). */
 function compactDiff(c: Config): Rec {
   const out: Rec = {};
+  // Version 1 omits `v`, so links (and the default config's 'e30') stay as they were before versioning.
+  if (SHARE_VERSION > 1) out.v = SHARE_VERSION;
+  const base = SHARE_BASES[SHARE_VERSION];
   for (const s of SECTION_KEYS) {
     const cur = c[s] as unknown as Rec;
-    const def = DEFAULT_CONFIG[s] as unknown as Rec;
+    const def = base[s] as unknown as Rec;
     const fields = ALIASES[s].fields as Record<string, string>;
     const sec: Rec = {};
     for (const [full, alias] of Object.entries(fields)) {
@@ -467,11 +522,15 @@ function compactDiff(c: Config): Rec {
   return out;
 }
 
-/** Inverse of compactDiff, merged onto DEFAULT_CONFIG (long keys accepted as well). Unknown keys are dropped. */
+/**
+ * Inverse of compactDiff, merged onto the base of the payload's version `v` (see shareBase; long keys accepted
+ * as well). Unknown keys are dropped.
+ */
 function expandPayload(o: Rec): Rec {
   const out: Rec = { version: 2 };
+  const base = shareBase(ownValue(o, 'v'));
   for (const s of SECTION_KEYS) {
-    const def = DEFAULT_CONFIG[s] as unknown as Rec;
+    const def = base[s] as unknown as Rec;
     const src = pick(o, ALIASES[s].key, s);
     const sec: Rec = { ...def };
     if (isRecord(src)) {
@@ -515,9 +574,10 @@ function base64UrlToUtf8(s: string): string {
 // ── Public share API ─────────────────────────
 
 /**
- * URL-safe share string: base64url (no padding) of the UTF-8 JSON of the fields that differ from DEFAULT_CONFIG,
- * with short keys. The config is sanitized first, so decodeConfig(encodeConfig(c)) deep-equals sanitizeConfig(c).
- * Note: unchanged fields follow DEFAULT_CONFIG at decode time.
+ * URL-safe share string: base64url (no padding) of the UTF-8 JSON of the fields that differ from the share base
+ * SHARE_BASES[SHARE_VERSION], with short keys. The config is sanitized first, so decodeConfig(encodeConfig(c))
+ * deep-equals sanitizeConfig(c). Unchanged fields are restored from the base the link was encoded against, not
+ * from the DEFAULT_CONFIG of the decoding app, so a link keeps its meaning when defaults change.
  */
 export function encodeConfig(config: Config): string {
   return utf8ToBase64Url(JSON.stringify(compactDiff(sanitizeConfig(config))));
@@ -561,17 +621,26 @@ export function configToJson(config: Config): string {
   return JSON.stringify(sanitizeConfig(config), null, 2);
 }
 
+/** The config inside a persisted store value ({state: {config}, version}) or {config}; else `o` itself. */
+function unwrapPersisted(o: Rec): Rec {
+  const state = ownValue(o, 'state');
+  const inner = isRecord(state) ? ownValue(state, 'config') : ownValue(o, 'config');
+  return isRecord(inner) ? inner : o;
+}
+
 /**
- * Parses a JSON export (v2 or flat v1). Returns null for invalid JSON or JSON that does not look like a config
- * (no version, no known section, no v1 key); otherwise the sanitized config.
+ * Parses a JSON export (v2 or flat v1; also the persisted store value {state: {config}}). Returns null for
+ * invalid JSON or JSON that does not look like a config (no known section object, no v1 key; a bare
+ * version number is not enough); otherwise the sanitized config.
  */
 export function configFromJson(textIn: string): Config | null {
   try {
     if (typeof textIn !== 'string' || textIn.length > MAX_JSON_LENGTH) return null;
     const parsed: unknown = JSON.parse(textIn.replace(/^\uFEFF/, ''));
     if (!isRecord(parsed)) return null;
-    const known = parsed.version === 2 || isV1(parsed) || SECTION_KEYS.some((k) => isRecord(parsed[k]));
-    return known ? sanitizeConfig(parsed) : null;
+    const o = unwrapPersisted(parsed);
+    const known = isV1(o) || SECTION_KEYS.some((k) => isRecord(ownValue(o, k)));
+    return known ? sanitizeConfig(o) : null;
   } catch {
     return null;
   }

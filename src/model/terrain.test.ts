@@ -4,6 +4,7 @@ import { encode } from 'fast-png';
 import {
   EARTH_RADIUS_M,
   REFRACTION_K,
+  TERRAIN_RESULT_CACHE_MAX,
   TERRARIUM_URL,
   TILE_CONCURRENCY,
   TILE_RETRIES,
@@ -564,6 +565,32 @@ describe('fetchTerrainHorizon', () => {
       fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: impl, cache: false }),
     ).rejects.toThrow(/HTTP 503/);
     expect(badCalls).toBe(1 + TILE_RETRIES);
+  });
+
+  it('keeps the most recently used results in localStorage, not the first downloaded ones', async () => {
+    const f = mockFetch(png);
+    // Sites 1e-4° apart share the tiles in memory; each has its own result cache entry.
+    const site = (i: number) => fetchTerrainHorizon(SITE.latitude + i * 1e-4, SITE.longitude, { fetchImpl: f.impl });
+    const cached = (): number =>
+      Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((k) =>
+        k?.startsWith('ssa.terrain'),
+      ).length;
+    for (let i = 0; i < TERRAIN_RESULT_CACHE_MAX; i++) await site(i);
+    expect(cached()).toBe(TERRAIN_RESULT_CACHE_MAX);
+    await site(0); // cache hit: marks site 0 as used
+    await site(TERRAIN_RESULT_CACHE_MAX); // evicts site 1, the least recently used one
+    expect(cached()).toBe(TERRAIN_RESULT_CACHE_MAX);
+    // Served from localStorage: a hit reports only the final progress.
+    clearTerrainTileCache();
+    const progress = (i: number) => {
+      const p: number[] = [];
+      return fetchTerrainHorizon(SITE.latitude + i * 1e-4, SITE.longitude, {
+        fetchImpl: f.impl,
+        onProgress: (done) => p.push(done),
+      }).then(() => p);
+    };
+    expect(await progress(0)).toEqual([total]);
+    expect((await progress(1))[0]).toBe(0); // recomputed
   });
 
   it('does not serve the cached result of a nearby location (regression: key was rounded to 0.001°)', async () => {

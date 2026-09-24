@@ -2,6 +2,7 @@ import type { WeatherSeries } from './types';
 import { MS_PER_DAY, MS_PER_MINUTE, daysInYear } from './time';
 import { sunPosition } from './sun';
 import { clearSkyIrradiance } from './irradiance';
+import { getStorage, touchCacheEntry, writeCacheEntry } from './storageCache';
 
 // ─────────────────────────────────────────────
 // WEATHER SERIES
@@ -161,10 +162,11 @@ export function parseOpenMeteo(json: unknown, latitude: number, longitude: numbe
 // ── localStorage cache ───────────────────────
 
 const CACHE_PREFIX = 'ssa.weather.v1:';
-/** Cached years (≈ 150 kB each). */
+/** Cached years (≈ 120 kB each; the least recently used one is evicted). */
 export const WEATHER_CACHE_MAX = 3;
 
 interface StoredSeries {
+  /** Last use (see storageCache). */
   t: number;
   /** First interval midpoint, UTC ms. */
   t0: number;
@@ -175,24 +177,18 @@ interface StoredSeries {
   T: number[];
 }
 
-function getStorage(): Storage | null {
-  try {
-    return globalThis.localStorage ?? null;
-  } catch {
-    return null;
-  }
-}
-
 function cacheKey(lat: number, lon: number, year: number, model: string | undefined): string {
   return `${CACHE_PREFIX}${lat.toFixed(COORD_DECIMALS)},${lon.toFixed(COORD_DECIMALS)},${year},${model ?? ''}`;
 }
 
 const round1 = (x: number): number => Math.round(x * 10) / 10;
 
+/** Cached series (refreshing its last-use stamp), or null if absent or invalid. */
 function readCache(key: string, lat: number, lon: number, year: number): WeatherSeries | null {
   try {
-    const raw = getStorage()?.getItem(key);
-    if (!raw) return null;
+    const storage = getStorage();
+    const raw = storage?.getItem(key);
+    if (!storage || !raw) return null;
     const s = JSON.parse(raw) as Partial<StoredSeries>;
     const { g, b, d, T, t0, step } = s;
     const ok = (a: unknown): a is number[] =>
@@ -202,6 +198,7 @@ function readCache(key: string, lat: number, lon: number, year: number): Weather
     }
     const n = g.length;
     if (n < 2 || b.length !== n || d.length !== n || T.length !== n) return null;
+    touchCacheEntry(storage, key, s);
     const stepMs = step * MS_PER_MINUTE;
     return {
       source: 'open-meteo',
@@ -221,36 +218,17 @@ function readCache(key: string, lat: number, lon: number, year: number): Weather
 }
 
 function writeCache(key: string, w: WeatherSeries): void {
-  try {
-    const storage = getStorage();
-    if (!storage) return;
-    const value: StoredSeries = {
-      t: Date.now(),
-      t0: w.timesUtc[0],
-      step: w.stepMinutes,
-      g: w.ghi.map(round1),
-      b: w.dni.map(round1),
-      d: w.dhi.map(round1),
-      T: w.temperature.map(round1),
-    };
-    storage.setItem(key, JSON.stringify(value));
-    const entries: { k: string; t: number }[] = [];
-    for (let i = 0; i < storage.length; i++) {
-      const k = storage.key(i);
-      if (!k?.startsWith(CACHE_PREFIX)) continue;
-      let t = 0;
-      try {
-        t = Number((JSON.parse(storage.getItem(k) ?? '{}') as { t?: unknown }).t) || 0;
-      } catch {
-        // corrupt entry → evicted first
-      }
-      entries.push({ k, t });
-    }
-    entries.sort((a, b) => a.t - b.t);
-    for (const { k } of entries.slice(0, Math.max(0, entries.length - WEATHER_CACHE_MAX))) storage.removeItem(k);
-  } catch {
-    // quota exceeded / storage disabled: caching is optional
-  }
+  const storage = getStorage();
+  if (!storage) return;
+  const value: Omit<StoredSeries, 't'> = {
+    t0: w.timesUtc[0],
+    step: w.stepMinutes,
+    g: w.ghi.map(round1),
+    b: w.dni.map(round1),
+    d: w.dhi.map(round1),
+    T: w.temperature.map(round1),
+  };
+  writeCacheEntry(storage, CACHE_PREFIX, WEATHER_CACHE_MAX, key, value);
 }
 
 /**
@@ -258,7 +236,8 @@ function writeCache(key: string, w: WeatherSeries): void {
  * Timestamps are requested in UTC; each value is the mean of the preceding hour, so timesUtc = t − 30 min.
  * The series covers 00:00–23:00 UTC stamps, i.e. the intervals from 31 Dec 23:00 (previous year) to
  * 31 Dec 23:00 — a one-hour shift at the year boundary. Coordinates are rounded to 0.01°.
- * The result is cached in localStorage (WEATHER_CACHE_MAX years, keyed by rounded lat/lon, year, model).
+ * The result is cached in localStorage (the WEATHER_CACHE_MAX most recently used years, keyed by rounded
+ * lat/lon, year, model).
  * Rejects on HTTP/API errors, malformed data, an incomplete year, or abort (signal's reason).
  */
 export async function fetchOpenMeteoYear(

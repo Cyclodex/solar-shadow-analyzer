@@ -53,7 +53,7 @@ export function toFacade(v: Vec3, facadeAzimuth: number): FacadeVector {
 }
 
 /** Sun direction (from apparent altitude/azimuth) in the facade frame; equals toFacade(sunVectorEnu(sun)). */
-export function sunInFacade(sun: SunPosition, facadeAzimuth: number): FacadeVector {
+export function sunInFacade(sun: Pick<SunPosition, 'altitude' | 'azimuth'>, facadeAzimuth: number): FacadeVector {
   const h = toRad(sun.altitude);
   const d = toRad(sun.azimuth - facadeAzimuth);
   const ch = Math.cos(h);

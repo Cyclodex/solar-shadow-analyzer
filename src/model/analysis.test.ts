@@ -7,9 +7,12 @@ import {
   dailyProfile,
   heatmapStats,
   shadeHeatmap,
+  shadeHeatmapFromGrid,
+  sunGrid,
   tiltSweep,
 } from './analysis';
-import { simulateYear, floorPowerW } from './simulation';
+import { simulateYear, floorPowerW, createFloorModel, sunTrack } from './simulation';
+import { sunPosition } from './sun';
 import { clearSkyYear, CLEAR_SKY_TEMPERATURE_C } from './weather';
 import { clearSkyIrradiance, poaIrradiance, skyViewFactor } from './irradiance';
 import { instantState, panelLayout, shadeFromAbove, sunInFacade } from './geometry';
@@ -69,6 +72,49 @@ describe('shadeHeatmap', () => {
   });
 });
 
+describe('sunGrid / shadeHeatmapFromGrid', () => {
+  it('holds the sun position at every local slot midpoint', () => {
+    const { latitude, longitude, timezone } = DEFAULT_CONFIG.location;
+    const g = sunGrid(latitude, longitude, timezone, 2024, 30);
+    expect([g.year, g.days, g.slotsPerDay, g.slotMinutes]).toEqual([2024, 366, 48, 30]);
+    expect(g.altitude).toHaveLength(366 * 48);
+    expect(g.azimuth).toHaveLength(366 * 48);
+    for (const [doy, s] of [
+      [15, 24],
+      [172, 13],
+      [300, 40],
+    ]) {
+      const sun = sunPosition(localToUtc(dateFromDayOfYear(2024, doy), (s + 0.5) * 30, timezone), latitude, longitude);
+      expect(g.altitude[(doy - 1) * 48 + s]).toBe(sun.altitude);
+      expect(g.azimuth[(doy - 1) * 48 + s]).toBe(sun.azimuth);
+    }
+    expect(() => sunGrid(latitude, longitude, timezone, 2024, 0)).toThrow(RangeError);
+  });
+
+  it('one grid reproduces shadeHeatmap exactly for any tilt, facade, geometry and floor', () => {
+    const base = cfg({ building: { numFloors: 3 } });
+    base.horizon.obstacles = [{ ...createObstacle('a', 'A'), offsetAlong: 25, distance: 12, height: 14 }];
+    const { latitude, longitude, timezone } = base.location;
+    const grid = sunGrid(latitude, longitude, timezone, 2025, 20);
+    const variants: Config[] = [
+      base,
+      { ...base, panels: { ...base.panels, tiltFromVertical: 0 } },
+      { ...base, panels: { ...base.panels, tiltFromVertical: 20, count: 4 } },
+      { ...base, panels: { ...base.panels, tiltFromVertical: 90 } },
+      { ...base, building: { ...base.building, facadeAzimuth: 135, floorHeight: 320 } },
+    ];
+    for (const c of variants) {
+      const hz = floorHorizons(c, null);
+      for (const floor of [0, 1, 2]) {
+        const a = shadeHeatmapFromGrid(grid, c, hz, floor);
+        const b = shadeHeatmap(c, hz, 2025, floor, 20);
+        expect(a).toEqual(b);
+        expect(a.values.every((v, i) => Object.is(v, b.values[i]))).toBe(true);
+      }
+    }
+  });
+});
+
 describe('heatmapStats', () => {
   it('counts lit/shaded hours per month (hand-built heatmap)', () => {
     const values = new Float32Array(365 * 2).fill(HEATMAP_NIGHT);
@@ -118,6 +164,8 @@ describe('tiltSweep', () => {
     }
     // Vertical rows do not shade each other.
     expect(sweep[0].floorsKwh[0]).toBe(sweep[0].floorsKwh[1]);
+    // A prebuilt sun track gives the same result.
+    expect(tiltSweep(c, w, hz, [0, 45], sunTrack(c, w))).toEqual([sweep[0], sweep[9]]);
   });
 
   it('accepts custom tilts and is fast', () => {
@@ -162,6 +210,14 @@ describe('dailyProfile', () => {
       if (pt.altitude <= 0) expect(pt.floorsW).toEqual([0, 0]);
     }
     expect(shaded).toBeGreaterThan(0);
+  });
+
+  it('gives the same result with a prebuilt floor model', () => {
+    const c = cfg({ building: { numFloors: 3 } });
+    c.horizon.obstacles = [{ ...createObstacle('a', 'A'), offsetAlong: -10, distance: 15, height: 12 }];
+    const hz = floorHorizons(c, null);
+    const date = '2025-02-10';
+    expect(dailyProfile(c, date, hz, 10, createFloorModel(c, hz))).toEqual(dailyProfile(c, date, hz, 10));
   });
 
   it('skips the missing hour on the spring-forward day', () => {
