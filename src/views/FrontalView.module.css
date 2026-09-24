@@ -1,0 +1,28 @@
+/* Front view: sky-window specifics (shared drawing classes: svg/svg.module.css). */
+
+.skyGrid {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-opacity: 0.4;
+  stroke-width: 1;
+  stroke-dasharray: 3 4;
+}
+
+/* Directions behind the facade plane (|relative azimuth| > 90°), plus a hatch overlay. */
+.behindZone {
+  fill: var(--bg);
+  fill-opacity: 0.5;
+}
+
+.horizonFill {
+  fill: var(--ground);
+  stroke: var(--wall-edge);
+  stroke-width: 1;
+}
+
+.lowHorizon {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 1.25;
+  stroke-dasharray: 4 3;
+}
