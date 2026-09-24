@@ -302,12 +302,18 @@ Reichweite, während 3D-Ansicht oder Ergebnisse im Bild sind:
   `quick`, `analysis` und `settings` (in diesem Layout mit `tabIndex={-1}`). `jumpTo()` (`app/jumpTo.ts`, auch
   vom Skip-Link benutzt) scrollt ohne Navigation zu `#id`, die den `#c=`-Teilen-Hash ersetzen und einen
   Verlaufseintrag anlegen würde, sanft ausser bei `prefers-reduced-motion`, und setzt den Fokus auf die Region.
+  Die Region steht oben am Bildschirm; läge ein mit `data-jump-reveal` markierter Teil (die Bühne der 3D-Ansicht
+  mit den Kameraknöpfen) dann hinter der Leiste, scrollt es weiter, bis er 8 px darüber endet, höchstens bis sein
+  oberer Rand den Bildschirmrand erreicht (niedrige Bildschirme, etwa iPhone SE und Handys quer).
   Escape schliesst das Menü und gibt den Fokus an den Knopf zurück; ein Druck ausserhalb und Tab aus dem Menü
   hinaus schliessen es ebenfalls.
 - Unter 600 px liegt die Leiste über die ganze Breite, der offene Regler über den Knöpfen; breiter schwebt sie als
   Dock (höchstens 48rem) mit dem Regler zwischen den Knöpfen. Sie hält die Safe Areas ein und veröffentlicht die
   Höhe, die sie verdeckt, als `--bottom-bar-h` auf `<html>`: `global.css` gibt dem Seitenende diesen Abstand (im
-  Druck 0) und hält fokussierte Elemente darüber (`scroll-padding-bottom`); `PwaToast` steht über der Leiste.
+  Druck 0) und hält fokussierte Elemente darüber (`scroll-padding-bottom`); `PwaToast` steht über der Leiste, der
+  Tooltip-Knopf des Neigungsvergleichs ebenfalls. Neu gemessen wird, wenn sich die Border-Box der Leiste ändert
+  (offener Regler, Safe-Area-Abstand unten auf Handys) oder der untere Safe-Area-Abstand allein (ein unsichtbarer
+  Messpunkt dieser Höhe; iOS Safari ändert ihn beim Einklappen seiner Leiste, das Dock rückt dabei nur hoch).
 
 ### Touch
 
@@ -334,7 +340,9 @@ und Hilfstechnologien wirken sofort.
 - **Neigungsvergleich** (`touchPreview`): Ein Tipp zeigt nur die Werte eines Punkts, denn die Neigung ist
   gespeichert und rechnet alle Ergebnisse neu. Übernommen wird sie mit dem Knopf «Neigung … übernehmen» im Tooltip
   (`ChartTooltip` mit `action`; der Knopf trägt `data-chart-action`, sein Tipp schliesst den Tooltip nicht, danach
-  geht der Fokus an den Regler des Diagramms).
+  geht der Fokus an den Regler des Diagramms). Dieser Tooltip bleibt im sichtbaren Teil des Diagramms über der
+  Steuerleiste, notfalls über dem angetippten Punkt; den `click` des Tipps, der ihn geöffnet hat, erhält ein
+  Element mit `data-chart-action` unter dem Finger nie (`usePlotPointer` fängt ihn ab).
 - `HorizonSparkline` entfernt bei `pointercancel` das Fadenkreuz. In der 3D-Ansicht scrollt senkrechtes Wischen
   mit einem Finger die Seite, waagrechtes dreht, zwei Finger zoomen.
 
@@ -357,15 +365,18 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
 - **3D-Ansicht:** Bis 520 px Breite zeigt die Legende nur die Ebenen-Schalter, die Erklärungen öffnet «Legende
   erklären» (gedruckt immer mit Erklärungen). Stockwerks- und Stundenbeschriftungen sind auf Touchscreens
   mindestens `TOUCH_LABEL_MIN_PX` = 22 px hoch (etwa 11 px Text; `Label` mit `minPx`, vor jedem gerenderten Frame
-  skaliert), die Kamera rahmt weiter mit der Weltgrösse. Unter 360 px bleibt die Kameraleiste einzeilig.
-- **Diagramme und 2D-Ansichten:** Der Tagesverlauf zeigt bei Sonnenauf- und -untergang nur die Zeiten, wenn
-  «Aufgang …» und «Untergang …» nicht zwischen die beiden Linien passen, und rückt die Legende nach links, damit
-  lange Einträge im Bild bleiben (`chartLegendX`). Frontalansicht und Sonnenbahn lassen Beschriftungen weg oder
-  weichen aus, die sich überdecken würden; in der Seitenansicht liegt die Beschriftung des kritischen Winkels über
-  dem Sonnenstrahl. Die Monatstabelle zeichnet ihre Zeilenlinien auch unter der fixierten Monatsspalte.
+  skaliert), die Kamera rahmt weiter mit der Weltgrösse. Die Kameraleiste bleibt einzeilig: auf Touchscreens unter
+  420 px und auf allen Bildschirmen unter 360 px mit engeren Abständen (unter 360 px auch näher am Rand).
+- **Diagramme und 2D-Ansichten:** Der Tagesverlauf zeigt bei Sonnenauf- und -untergang nur die Zeiten, wenn «Aufgang
+  …» und «Untergang …» nicht mit mindestens 4 px Abstand zwischen die beiden Linien passen, und rückt die Legende nach
+  links, damit lange Einträge im Bild bleiben (`chartLegendX`). Frontalansicht und Sonnenbahn lassen Beschriftungen
+  weg oder weichen aus, die sich überdecken würden; in der Seitenansicht liegt die Beschriftung des kritischen Winkels
+  über dem Sonnenstrahl. Die Monatstabelle zeichnet ihre Zeilenlinien auch unter der fixierten Monatsspalte.
+- **Kennzahlen und Wirtschaftlichkeit bei 320 px:** Eine lange Einheit («kWh/kWp») rückt in die nächste Zeile
+  statt über den Kartenrand; «Amortisationsdauer» trennt mit einem weichen Trennstrich.
 - **Einstellungen:** Das Horizont-Diagramm ist unter 1100 px höchstens 360 px breit, unter 600 px mit 12 px
-  Beschriftung. Unter 480 px entfällt die Beschriftung «Sichtbare Ansichten» vor den Ansichtsschaltern (die Gruppe
-  behält ihren Namen für Screenreader).
+  Beschriftung, unter 375 px mit 14 px (bei 320 px auf dem Bildschirm etwa 10.6 px). Unter 480 px entfällt die
+  Beschriftung «Sichtbare Ansichten» vor den Ansichtsschaltern (die Gruppe behält ihren Namen für Screenreader).
 
 ## Laden und Rechenlast
 
@@ -373,7 +384,9 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
   eingestellten Standorts und Jahres ist noch nicht in den Ergebnissen, oder das Gelände steht seit weniger als
   `PROVISIONAL_DELAY_MS` = 1.5 s aus), `'provisional'` (nur der Geländehorizont fehlt noch) oder `'final'`.
   Vorläufig zeigen die Jahreskennzahlen ihre ohne Gelände gerechneten Werte gedämpft mit «vorläufig –
-  Geländehorizont wird geladen», die Neigungskarte das Optimum gedämpft und ohne «Optimum … übernehmen». Diagramme,
+  Geländehorizont wird geladen», die Neigungskarte das Optimum gedämpft und ohne «Optimum … übernehmen». Die
+  Heatmap braucht kein Wetter, aber das Gelände: Solange es aussteht (`useTerrainPending`), zeigt ihre Karte die
+  Stunden gedämpft mit demselben Hinweis, und ihr CSV-Export wartet. Diagramme,
   Wirtschaftlichkeit, Monatstabelle, Export und die Optimum-Marke der Steuerleiste warten auf endgültige Eingaben
   (`useAnnualInputsPending`, `useResultsReady`). Ein schneller oder gecachter Geländehorizont geht so ohne
   vorläufigen Zwischenstand vom Platzhalter zum Ergebnis.
@@ -495,18 +508,19 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
   iPhone-User-Agent und geöffneter Anleitung des Knopfs «Installieren» (bleibt im Bild); 3D-Canvas zeichnet Inhalt
   (mehr als 20 Farben, kein Screenshot-Vergleich); Kamera-Preset «Aus Sonnenrichtung» bleibt nach einem Klick
   erhalten, folgt der Uhrzeit und weicht nachts der Übersicht; Teilen-Link stellt die Konfiguration wieder her;
-  Sprachumschaltung DE → EN. `mobile.spec.ts`: Auf einem iPhone 14 (Touch, in Chromium) schliesst die
-  Steuerleiste am unteren Bildschirmrand ab, −/+ ändern die Uhrzeit um 15 min (auch im Zeitregler der Seite),
-  «Springe zu» → «Einstellungen» scrollt dorthin und setzt den Fokus, ohne Hash in der URL, kein horizontales
-  Scrollen; bei 1440 px keine Steuerleiste. `pwa.spec.ts`: Manifest gültig und unter dem Basis-Pfad, `id` wie Chromiums
-  `Page.getAppId`, Icons ladbar (Grösse, `maskable`/`apple-touch-icon` deckend); Service Worker registriert sich,
-  kontrolliert die Seite nach einem Reload und hat den 3D-Chunk im Precache; offline (`context.setOffline`) lädt die
-  App mit Clear-Sky-Ergebnissen und 3D-Ansicht, ohne Konsolenfehler; eine neue Version (derselbe Worker als
-  `sw.js?next` registriert, weil Playwright die Update-Anfrage für `sw.js` nicht umleitet) wartet mit «Neue Version
-  verfügbar» und übernimmt erst nach «Neu laden» (schlägt mit `registerType: 'autoUpdate'` fehl). Nur dort laufen
-  Service Worker; die übrigen Specs blockieren sie (`serviceWorkers: 'block'`), damit `page.route()` jede Anfrage
-  sieht. Mit `BASE_PATH` laufen Build, `vite preview` und `baseURL` unter dem Pfad (die Specs navigieren relativ mit
-  `page.goto('./')`).
+  Sprachumschaltung DE → EN. `mobile.spec.ts`: Auf einem iPhone 14 (Touch, in Chromium) schliesst die Steuerleiste am
+  unteren Bildschirmrand ab, −/+ ändern die Uhrzeit um 15 min (auch im Zeitregler der Seite), «Springe zu» →
+  «Einstellungen» scrollt dorthin und setzt den Fokus, ohne Hash in der URL, kein horizontales Scrollen; «Springe zu»
+  → «Ansichten (3D)» zeigt die Kameraknöpfe (einzeilig) über der Leiste; auf einem iPhone SE (320 px) bleibt die
+  Kameraleiste einzeilig; bei 1440 px keine Steuerleiste. `pwa.spec.ts`: Manifest gültig und unter dem Basis-Pfad,
+  `id` wie Chromiums `Page.getAppId`, Icons ladbar (Grösse, `maskable`/`apple-touch-icon` deckend); Service Worker
+  registriert sich, kontrolliert die Seite nach einem Reload und hat den 3D-Chunk im Precache; offline
+  (`context.setOffline`) lädt die App mit Clear-Sky-Ergebnissen und 3D-Ansicht, ohne Konsolenfehler; eine neue Version
+  (derselbe Worker als `sw.js?next` registriert, weil Playwright die Update-Anfrage für `sw.js` nicht umleitet) wartet
+  mit «Neue Version verfügbar» und übernimmt erst nach «Neu laden» (schlägt mit `registerType: 'autoUpdate'` fehl).
+  Nur dort laufen Service Worker; die übrigen Specs blockieren sie (`serviceWorkers: 'block'`), damit `page.route()`
+  jede Anfrage sieht. Mit `BASE_PATH` laufen Build, `vite preview` und `baseURL` unter dem Pfad (die Specs navigieren
+  relativ mit `page.goto('./')`).
 - **CI** (`.github/workflows/ci.yml`, Node aus `.nvmrc`): Lint, `format:check`, Typecheck, Tests und Build; danach
   E2E mit dem von Playwright installierten Chromium, als Matrix unter `/` und unter `/solar-shadow-analyzer/`
   (`BASE_PATH`, Ergebnisse bei Fehlern als `playwright-results-<Index>`). Checkouts ohne gespeicherte Zugangsdaten

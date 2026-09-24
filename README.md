@@ -117,8 +117,8 @@ npm run dev   # http://localhost:5173
 - `npm run e2e` baut die App und startet `vite preview` auf Port 4173 (anpassbar mit `E2E_PORT`). Einmalig vorher
   `npx playwright install chromium` ausführen; mit `PLAYWRIGHT_CHROMIUM_PATH` lässt sich ein anderes Chromium
   verwenden. Die Tests blockieren alle externen Dienste und prüfen u. a. die 3D-Darstellung (WebGL über SwiftShader),
-  den Teilen-Link, die Sprachumschaltung, das Layout bei 360 px, die Steuerleiste auf einem iPhone 14, Manifest und
-  Icons sowie den Offline-Start über den Service Worker.
+  den Teilen-Link, die Sprachumschaltung, das Layout bei 360 px, die Steuerleiste auf einem iPhone 14, die
+  Kameraleiste auf einem iPhone SE, Manifest und Icons sowie den Offline-Start über den Service Worker.
 - Die App lässt sich unter einem Unterpfad bauen: `BASE_PATH=/solar-shadow-analyzer/ npm run build` wie für GitHub
   Pages (dort kommt der Pfad aus `actions/configure-pages`). Mit derselben Variable laufen auch die E2E-Tests unter diesem Pfad, z. B.
   `BASE_PATH=/solar-shadow-analyzer/ E2E_PORT=4811 npm run e2e`.
