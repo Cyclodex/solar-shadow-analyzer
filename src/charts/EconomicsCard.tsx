@@ -10,11 +10,12 @@ import type { EconomicsConfig, EconomicsResult } from '../model/types';
 import { clearSkyParts } from '../export/filenames';
 import { EXPORT_IGNORE } from '../export/png';
 import { useConfigSection } from '../state/configStore';
+import { floorColor } from '../styles/tokens';
 import { isFocusVisible } from './lib/focus';
-import { linePath } from './lib/paths';
+import { linePath } from '../components/svg/paths';
 import { stepValue } from './lib/sliderKeys';
-import { useElementWidth } from './lib/useElementWidth';
-import { useSvgId } from './lib/useSvgId';
+import { useElementWidth } from '../components/svg/useElementWidth';
+import { useSvgId } from '../components/svg/useSvgId';
 import styles from './EconomicsCard.module.css';
 
 const de = {
@@ -360,7 +361,7 @@ function FloorTable({
                 <span className={styles.floorName}>
                   <span
                     className={styles.swatch}
-                    style={cssVars({ '--c': `var(--floor-${r.floor % 8})` })}
+                    style={cssVars({ '--c': floorColor(r.floor) })}
                     aria-hidden="true"
                   />
                   {floorLabel(r.storey, lang)}

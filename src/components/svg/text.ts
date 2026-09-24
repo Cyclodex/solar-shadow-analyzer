@@ -1,9 +1,9 @@
-import { cssVar } from './canvasTheme';
+import { cssVar } from '../../styles/tokens';
 
 // ─────────────────────────────────────────────
 // TEXT LAYOUT HELPERS
-// SVG charts are laid out in JS before render (no DOM measuring pass), so label widths are estimated, or
-// measured with a canvas (measureTextWidth) where a collision check needs the real width.
+// SVG charts and views are laid out in JS before render (no DOM measuring pass), so label widths are
+// estimated, or measured with a canvas (measureTextWidth) where a collision check needs the real width.
 // ─────────────────────────────────────────────
 
 /** Width of a text in px, measured or estimated. */

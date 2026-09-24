@@ -1,3 +1,4 @@
+import { criticalAngleKind } from '../../model/geometry';
 import type { FloorPlacement, PanelLayout } from '../../model/types';
 import { toRad } from '../../model/units';
 import {
@@ -235,7 +236,7 @@ export function buildPair(scene: Scene, layout: PanelLayout): PairGeometry {
   const L = layout.length;
   const lowerTop = P(lower, 0);
   const upperBottom = upper ? P(upper, L) : null;
-  const meaningful = upperBottom !== null && layout.verticalGap >= 0 && layout.reach > 1e-6;
+  const meaningful = upperBottom !== null && criticalAngleKind(layout, true) === 'angle';
   const criticalEnd = meaningful
     ? rayExit(lowerTop, { x: upperBottom.x - lowerTop.x, y: upperBottom.y - lowerTop.y }, scene.box)
     : null;

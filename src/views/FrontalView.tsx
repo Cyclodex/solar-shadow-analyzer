@@ -1,6 +1,9 @@
 import { memo, useMemo } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { cssVars } from '../components/cssVars';
+import { HatchPattern } from '../components/svg/HatchPattern';
+import { useElementWidth } from '../components/svg/useElementWidth';
+import { useSvgId } from '../components/svg/useSvgId';
 import {
   compassPoint,
   floorLabel,
@@ -25,7 +28,8 @@ import type { FloorPlacement, InstantState, PanelLayout } from '../model/types';
 import { angleDiff } from '../model/units';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
-import { FONT, LINE, PAD } from './svg/constants';
+import { floorColor } from '../styles/tokens';
+import { FONT, HATCH, HATCH_LIGHT, LINE, PAD, VIEW_WIDTH } from './svg/constants';
 import {
   REL_MAX,
   SUN_R,
@@ -38,13 +42,11 @@ import {
   type Sky,
 } from './svg/frontalLayout';
 import { clampLabelX, pathD, px, rectD, textWidth, wrapText } from './svg/geometry2d';
-import { useSvgId } from './svg/ids';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { relativeDirection, useViewText, type ViewText } from './svg/messages';
-import { HatchPattern, SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
+import { SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
 import { SvgFigure } from './svg/SvgFigure';
-import { useElementWidth } from './svg/useElementWidth';
 import { GeometryNotices } from './svg/ViewNotice';
 import s from './svg/svg.module.css';
 import styles from './FrontalView.module.css';
@@ -192,7 +194,7 @@ const FacadeDrawing = memo(function FacadeDrawing({ facade, width }: { facade: F
             cy={px(fl.yMid)}
             r={4}
             className={s.swatchFloor}
-            style={cssVars({ '--c': `var(--floor-${fl.floor % 8})` })}
+            style={cssVars({ '--c': floorColor(fl.floor) })}
           />
           <text x={px(facade.leftX)} y={px(fl.yMid + 4)} textAnchor="end" className={s.label}>
             {fl.label}
@@ -309,8 +311,8 @@ export function FrontalView() {
   const path = useSolarPath();
   const june = useSolarPath(`${year}-06-21`);
   const december = useSolarPath(`${year}-12-21`);
-  const [frameRef, width] = useElementWidth<HTMLDivElement>();
-  const id = useSvgId();
+  const [frameRef, width] = useElementWidth<HTMLDivElement>(VIEW_WIDTH);
+  const id = useSvgId('v');
   const hatchId = `${id}-hatch`;
   const shadeHatchId = `${id}-shade`;
   const skyId = `${id}-sky`;
@@ -402,8 +404,8 @@ export function FrontalView() {
               <stop offset="0" className={s.skyTop} />
               <stop offset="1" className={s.skyBottom} />
             </linearGradient>
-            <HatchPattern id={hatchId} />
-            <HatchPattern id={shadeHatchId} tone="light" />
+            <HatchPattern id={hatchId} {...HATCH} />
+            <HatchPattern id={shadeHatchId} {...HATCH_LIGHT} />
           </defs>
           <SkyWindow sky={sky} width={width} skyId={skyId} hatchId={hatchId} f={f} />
           {sun.altitude > 0 && <SunGlyph x={sunX} y={sunY} r={sunR} dim={!lit || !inWindow} />}

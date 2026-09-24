@@ -151,6 +151,12 @@ describe('KpiBar', () => {
       expect(profile).not.toHaveTextContent(/−90|kritisch/);
     });
 
+    it('vertical panels never reach the critical angle', () => {
+      patch('panels', { tiltFromVertical: 0 });
+      render(<KpiBar />);
+      expect(dds(kpi('Profilwinkel'))[1]).toBe('Profilwinkel-Grenze wird nie erreicht');
+    });
+
     it('at night', () => {
       useTimeStore.setState({ minutes: 60 });
       render(<KpiBar />);

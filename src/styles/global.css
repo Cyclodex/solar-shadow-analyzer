@@ -14,6 +14,7 @@
      --warn        #fbbf24             11.28          10.28             8.90
      --bad         #fb8b8b              8.22           7.49             6.49
      --on-accent #ffffff on --accent-strong #4f46e5: 6.29
+     on --wall #3a4459 (SVG views): --text 8.16, --text-muted 4.51, --text-faint 3.39 (fails AA)
      --border-strong #61708c on surface: 3.44 (non-text ≥ 3:1: input borders, slider track)
    light theme                      bg #f3f5f9   surface #ffffff   surface-2 #eaeef5
      --text        #111827             16.25          17.74            15.25
@@ -25,8 +26,10 @@
      --bad         #b91c1c              5.93           6.47             5.56
      --sun-ink     #b45309              4.60           5.02             4.32 (use on bg/surface only)
      --on-accent #ffffff on --accent-strong #4338ca: 7.90
+     on --wall #d9d4ca (SVG views): --text 12.01, --text-muted 5.42, --text-faint 3.93 (fails AA)
      --border-strong #8793a8 on surface: 3.10
-   All text pairs ≥ 4.5:1 (AA normal text). --border is decorative (card outlines), not a control boundary.
+   All text pairs ≥ 4.5:1 (AA normal text) except --text-faint on --wall: text on the wall uses --text
+   (e.g. the "Fassade" label), never --text-faint. --border is decorative (card outlines), not a control boundary.
 
    Floor colours (--floor-0 … --floor-7): categorical palette of the dataviz reference instance, fixed order
    (never cycle, colour follows the floor index). Validated with its validator (OKLab ΔE, Machado 2009 CVD):

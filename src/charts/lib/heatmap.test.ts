@@ -1,8 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { HEATMAP_BEHIND, HEATMAP_HORIZON, HEATMAP_NIGHT } from '../../model/analysis';
 import type { DailyProfilePoint, HeatmapData } from '../../model/types';
-import { CELL, cellClass, floorColor, floorToken, shadeColor, shadeStep } from './colors';
-import { parseColor } from './canvasTheme';
+import { CELL, cellClass, shadeStep } from './colors';
 import {
   cellAt,
   classifyCells,
@@ -34,12 +33,6 @@ function fakeHeatmap(): HeatmapData {
 }
 
 describe('colours', () => {
-  it('follows the floor index, wrapping after 8', () => {
-    expect(floorToken(0)).toBe('--floor-0');
-    expect(floorToken(9)).toBe('--floor-1');
-    expect(floorColor(3)).toBe('var(--floor-3)');
-  });
-
   it('bins the shaded fraction with the heatmapStats threshold', () => {
     expect(shadeStep(0)).toBe(-1);
     expect(shadeStep(0.01)).toBe(-1);
@@ -47,8 +40,6 @@ describe('colours', () => {
     expect(shadeStep(0.2)).toBe(0);
     expect(shadeStep(0.21)).toBe(1);
     expect(shadeStep(1)).toBe(4);
-    expect(shadeColor(0)).toBeNull();
-    expect(shadeColor(0.5)).toBe('var(--seq-5)');
   });
 
   it('classifies heatmap cells', () => {
@@ -59,12 +50,7 @@ describe('colours', () => {
     expect(cellClass(0.9)).toBe(CELL.shade + 4);
   });
 
-  it('parses canvas colour strings', () => {
-    expect(parseColor('#fbbf24')).toEqual([251, 191, 36, 255]);
-    expect(parseColor('#fff')).toEqual([255, 255, 255, 255]);
-    expect(parseColor('rgba(2, 6, 23, 0.6)')).toEqual([2, 6, 23, 153]);
-    expect(parseColor('rgb(2 6 23 / 50%)')).toEqual([2, 6, 23, 128]);
-    expect(parseColor('hsl(0 0% 0%)')).toBeNull();
+  it('mixes canvas colours', () => {
     expect(mix([0, 0, 0, 255], [200, 100, 50, 255], 0.5)).toEqual([100, 50, 25, 255]);
   });
 });

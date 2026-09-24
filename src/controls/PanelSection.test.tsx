@@ -76,6 +76,12 @@ describe('PanelSection', () => {
     expect(screen.getByRole('note')).toHaveTextContent('Die Reihen überlappen um 50');
   });
 
+  it('says "nie" for vertical panels, like the KPI bar', () => {
+    act(() => useConfigStore.getState().patch('panels', { tiltFromVertical: 0 }));
+    render(<PanelSection />);
+    expect(derived(/^Kritischer Profilwinkel/)).toBe('nie');
+  });
+
   it('has no row above with a single floor', () => {
     act(() => useConfigStore.getState().patch('building', { numFloors: 1 }));
     render(<PanelSection />);

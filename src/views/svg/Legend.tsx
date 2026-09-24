@@ -1,10 +1,11 @@
+import { LEGEND_SQUARE, LEGEND_SWATCH_GAP, LEGEND_SWATCH_W } from '../../components/svg/legend';
+import legend from '../../components/svg/legend.module.css';
 import { px, rectD } from './geometry2d';
-import { LEGEND_SWATCH, type LegendLayout, type PlacedLegendItem } from './legend';
+import type { LegendLayout, PlacedLegendItem } from './legend';
 import { SunGlyph } from './primitives';
-import s from './svg.module.css';
 
 function Swatch({ item, x, y }: PlacedLegendItem) {
-  const w = LEGEND_SWATCH;
+  const w = LEGEND_SWATCH_W;
   switch (item.kind) {
     case 'line':
       return <path d={`M${px(x)} ${px(y)}h${w}`} className={item.className} />;
@@ -12,14 +13,16 @@ function Swatch({ item, x, y }: PlacedLegendItem) {
       return <circle cx={px(x + w / 2)} cy={px(y)} r={3.5} className={item.className} />;
     case 'sun':
       return <SunGlyph x={x + w / 2} y={y} r={4} />;
-    case 'area':
+    case 'area': {
+      const square = rectD(x + (w - LEGEND_SQUARE) / 2, y - LEGEND_SQUARE / 2, LEGEND_SQUARE, LEGEND_SQUARE);
       return (
         <g>
-          {item.baseClassName && <path d={rectD(x + 2, y - 6, w - 4, 12)} className={item.baseClassName} />}
-          <path d={rectD(x + 2, y - 6, w - 4, 12)} className={item.className} />
-          {item.patternId && <path d={rectD(x + 2, y - 6, w - 4, 12)} fill={`url(#${item.patternId})`} />}
+          {item.baseClassName && <path d={square} className={item.baseClassName} />}
+          <path d={square} className={item.className} />
+          {item.patternId && <path d={square} fill={`url(#${item.patternId})`} />}
         </g>
       );
+    }
   }
 }
 
@@ -30,7 +33,12 @@ export function SvgLegend({ layout }: { layout: LegendLayout }) {
       {layout.items.map((p) => (
         <g key={p.item.key}>
           <Swatch {...p} />
-          <text x={px(p.x + LEGEND_SWATCH + 6)} y={px(p.y + 4)} className={s.label}>
+          <text
+            x={px(p.x + LEGEND_SWATCH_W + LEGEND_SWATCH_GAP)}
+            y={px(p.y)}
+            dominantBaseline="central"
+            className={legend.text}
+          >
             {p.item.label}
           </text>
         </g>

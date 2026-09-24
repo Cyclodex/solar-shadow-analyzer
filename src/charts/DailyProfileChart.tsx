@@ -7,14 +7,15 @@ import { SHADED_THRESHOLD } from '../model/analysis';
 import type { DailyProfilePoint } from '../model/types';
 import { useConfigSection } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
+import { floorColor } from '../styles/tokens';
 import { AxisX, AxisY, type AxisTick } from './lib/Axes';
 import { ChartDataTable } from './lib/DataTable';
 import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
 import { ChartLegend } from './lib/ChartLegend';
-import { SHADE_STEP_TOKENS, floorColor } from './lib/colors';
+import { SHADE_STEP_TOKENS } from './lib/colors';
 import { topDown, useFloorLabels } from './lib/floors';
 import { LEGEND_TOP, layoutChartLegend, type ChartLegendItem, type ChartLegendLayout } from './lib/legend';
-import { linePath } from './lib/paths';
+import { linePath } from '../components/svg/paths';
 import {
   nearestIndex,
   niceTicks,
@@ -23,7 +24,7 @@ import {
   ticksInRange,
   type LinearScale,
 } from './lib/scale';
-import { estimateTextWidth } from './lib/text';
+import { estimateTextWidth } from '../components/svg/text';
 import {
   daylightWindow,
   hourTickStep,
@@ -33,12 +34,12 @@ import {
   shadedPeriods,
   type TimeWindow,
 } from './lib/timeAxis';
-import { useElementWidth } from './lib/useElementWidth';
+import { useElementWidth } from '../components/svg/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { HoverMarks, PlotSlider } from './lib/PlotSlider';
 import { stepValue } from './lib/sliderKeys';
 import { usePlotPointer } from './lib/usePlotPointer';
-import { useSvgId } from './lib/useSvgId';
+import { useSvgId } from '../components/svg/useSvgId';
 import chart from './lib/chart.module.css';
 import styles from './DailyProfileChart.module.css';
 

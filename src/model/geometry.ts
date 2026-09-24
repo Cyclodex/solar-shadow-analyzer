@@ -152,6 +152,20 @@ export function profileAngle(sf: FacadeVector): number | null {
   return sf.n <= 0 ? null : toDeg(Math.atan2(sf.z, sf.n));
 }
 
+/**
+ * What the 2D critical profile angle means for a row: 'none' without a row above, 'overlap' when the rows
+ * collide (there is no onset angle), 'never' when the row above cannot shade it (vertical panels,
+ * criticalProfileAngle = 90°), else 'angle': shading starts above layout.criticalProfileAngle.
+ */
+export type CriticalAngleKind = 'none' | 'overlap' | 'never' | 'angle';
+
+/** Classifies the critical profile angle (see CriticalAngleKind); `rowAbove`: a panel row above this one. */
+export function criticalAngleKind(layout: PanelLayout, rowAbove: boolean): CriticalAngleKind {
+  if (!rowAbove) return 'none';
+  if (panelsOverlap(layout)) return 'overlap';
+  return layout.criticalProfileAngle >= 90 ? 'never' : 'angle';
+}
+
 /** Cosine of the angle of incidence on the panel plane (≤ 0: sun behind the panel). */
 export function cosIncidence(sf: FacadeVector, layout: PanelLayout): number {
   const N = layout.normal;

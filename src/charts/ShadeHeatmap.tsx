@@ -19,10 +19,11 @@ import type { HeatmapData } from '../model/types';
 import { useConfigSection } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
+import { cssVar, useThemeKey } from '../styles/tokens';
 import { ChartDataTable } from './lib/DataTable';
 import { ChartStats } from './lib/ChartStats';
 import { ChartTooltip } from './lib/ChartTooltip';
-import { cssVar, resolveColor, useThemeKey } from './lib/canvasTheme';
+import { resolveColor } from './lib/canvasTheme';
 import {
   CELL,
   CELL_TOKENS,
@@ -46,11 +47,11 @@ import {
   type HeatmapPalette,
   type SlotRange,
 } from './lib/heatmap';
-import { measureTextWidth } from './lib/text';
-import { useElementWidth } from './lib/useElementWidth';
+import { measureTextWidth } from '../components/svg/text';
+import { useElementWidth } from '../components/svg/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { usePlotPointer } from './lib/usePlotPointer';
-import { useSvgId } from './lib/useSvgId';
+import { useSvgId } from '../components/svg/useSvgId';
 import chart from './lib/chart.module.css';
 import styles from './ShadeHeatmap.module.css';
 

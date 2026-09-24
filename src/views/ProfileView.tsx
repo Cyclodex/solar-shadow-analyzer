@@ -1,22 +1,25 @@
 import { memo, useMemo } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { cssVars } from '../components/cssVars';
+import { HatchPattern } from '../components/svg/HatchPattern';
+import { useElementWidth } from '../components/svg/useElementWidth';
+import { useSvgId } from '../components/svg/useSvgId';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Lang, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
 import { instantParts } from '../export/filenames';
 import { useFloorPlacements, useFocusFloor, useInstant, useLayout, useSelectedUtc } from '../hooks/useModel';
-import { panelsOverlap } from '../model/geometry';
+import { criticalAngleKind, panelsOverlap } from '../model/geometry';
 import type { InstantState, PanelLayout } from '../model/types';
 import { toRad } from '../model/units';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
+import { floorColor } from '../styles/tokens';
 import { pathD, px, stripD, textWidth, wrapText } from './svg/geometry2d';
-import { useSvgId } from './svg/ids';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { useViewText } from './svg/messages';
-import { AngleArc, DimensionLine, HatchPattern, SunGlyph, TextLines } from './svg/primitives';
-import { FONT, LINE, PAD } from './svg/constants';
+import { AngleArc, DimensionLine, SunGlyph, TextLines } from './svg/primitives';
+import { FONT, HATCH, LINE, PAD, VIEW_WIDTH } from './svg/constants';
 import {
   INTERIOR,
   REACH_DIM_DY,
@@ -33,7 +36,6 @@ import {
   type Scene,
 } from './svg/profileLayout';
 import { SvgFigure } from './svg/SvgFigure';
-import { useElementWidth } from './svg/useElementWidth';
 import { GeometryNotices } from './svg/ViewNotice';
 import s from './svg/svg.module.css';
 import styles from './ProfileView.module.css';
@@ -118,7 +120,7 @@ function statusLines(
   if (sun.altitude <= 0) out.push(c.sunStates.night);
   else if (profileAngle === null) out.push(c.sunStates.behind);
   else {
-    const showCritical = scene.upper && layout.reach > 1e-6 && layout.verticalGap >= 0;
+    const showCritical = criticalAngleKind(layout, scene.upper !== null) === 'angle';
     const crit = showCritical ? ` (${t.critical(f.deg(layout.criticalProfileAngle, 1))})` : '';
     out.push(`${t.profile(f.deg(profileAngle, 1))}${crit}`);
   }
@@ -193,7 +195,7 @@ const SectionDrawing = memo(function SectionDrawing({
               cy={px(yl - 4)}
               r={4}
               className={s.swatchFloor}
-              style={cssVars({ '--c': `var(--floor-${p.floor % 8})` })}
+              style={cssVars({ '--c': floorColor(p.floor) })}
             />
             <text x={px(scene.labelX)} y={px(yl)} textAnchor="end" className={s.label}>
               {labels[p.floor]}
@@ -367,8 +369,8 @@ export function ProfileView() {
   const utcMs = useSelectedUtc();
   const date = useTimeStore((st) => st.date);
   const minutes = useTimeStore((st) => st.minutes);
-  const [frameRef, width] = useElementWidth<HTMLDivElement>();
-  const hatchId = `${useSvgId()}-hatch`;
+  const [frameRef, width] = useElementWidth<HTMLDivElement>(VIEW_WIDTH);
+  const hatchId = `${useSvgId('v')}-hatch`;
 
   const labels = useMemo(() => placements.map((p) => floorLabel(p.storey, lang)), [placements, lang]);
   const labelWidth = Math.max(...labels.map((l) => textWidth(l, FONT))) + 12;
@@ -440,7 +442,7 @@ export function ProfileView() {
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(time)} desc={desc}>
           <defs>
-            <HatchPattern id={hatchId} />
+            <HatchPattern id={hatchId} {...HATCH} />
           </defs>
           <SectionDrawing
             scene={scene}

@@ -13,7 +13,7 @@ import {
 import type { InstantState, ShadeRect } from '../../model/types';
 import { facadeLocal, panelLocal, panelRotationX } from './coords';
 import { Label } from './Label';
-import { floorToken, type ScenePalette } from './palette';
+import { floorSceneToken, type ScenePalette } from './palette';
 import {
   MAX_OVERLAY_RECTS,
   MODULE_THICKNESS,
@@ -165,7 +165,7 @@ export function PanelRows({ palette, dims, floors, showModelShade, labels }: Pan
             })}
             height={dims.labelHeight}
             palette={palette}
-            dot={floorToken(row.floor)}
+            dot={floorSceneToken(row.floor)}
             anchor="right"
           />
         </group>

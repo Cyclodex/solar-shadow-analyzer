@@ -1,5 +1,6 @@
 import { useId, useState, type KeyboardEvent, type ReactNode } from 'react';
 import type { FieldLimit } from '../model/defaults';
+import { clamp } from '../model/units';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { InfoTip } from './InfoTip';
 import { Slider, type SliderMark } from './Slider';
@@ -49,8 +50,6 @@ const messages: Messages<typeof de> = {
     invalid: 'Please enter a number',
   },
 };
-
-const clampTo = (v: number, min: number, max: number): number => Math.min(max, Math.max(min, v));
 
 /** Plain text of a value for the input (no grouping, dot decimal, trailing zeros dropped). */
 const toInputText = (v: number, digits: number): string => String(Number(v.toFixed(digits)));
@@ -108,7 +107,7 @@ export function NumberField({
     setDraft(null);
     const v = parseNumberInput(draft);
     if (v === null) return;
-    const c = clampTo(v, min, max);
+    const c = clamp(v, min, max);
     if (c !== value) onChange(c);
   };
 
@@ -121,7 +120,7 @@ export function NumberField({
       e.preventDefault();
       const base = parsed ?? value;
       const delta = (e.key === 'ArrowUp' ? 1 : -1) * step * (e.shiftKey ? 10 : 1);
-      const next = clampTo(Number((base + delta).toFixed(Math.max(shownDigits, digitsOf(step)))), min, max);
+      const next = clamp(Number((base + delta).toFixed(Math.max(shownDigits, digitsOf(step)))), min, max);
       setDraft(null);
       if (next !== value) onChange(next);
     }

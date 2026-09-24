@@ -5,7 +5,7 @@ import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
-import { estimateTextWidth } from './lib/text';
+import { estimateTextWidth } from '../components/svg/text';
 import { TiltSweepChart } from './TiltSweepChart';
 
 // Focus in these tests stands for keyboard focus (jsdom's :focus-visible depends on earlier events).

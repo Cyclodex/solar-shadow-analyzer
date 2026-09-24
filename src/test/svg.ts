@@ -1,10 +1,10 @@
 import { expect } from 'vitest';
-import { DEFAULT_CONFIG } from '../../model/defaults';
-import type { Config } from '../../model/types';
-import { useConfigStore } from '../../state/configStore';
+import { DEFAULT_CONFIG } from '../model/defaults';
+import type { Config } from '../model/types';
+import { useConfigStore } from '../state/configStore';
 
 // ─────────────────────────────────────────────
-// TEST HELPERS FOR THE SVG VIEWS (used by src/views/*.test.tsx only)
+// TEST HELPERS FOR THE SVG VIEWS (tests of src/views only)
 // ─────────────────────────────────────────────
 
 type Patch = { [K in Exclude<keyof Config, 'version'>]?: Partial<Config[K]> };

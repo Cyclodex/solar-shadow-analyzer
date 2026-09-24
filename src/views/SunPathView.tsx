@@ -1,5 +1,8 @@
 import { memo, useMemo } from 'react';
 import { ViewCard } from '../components/ViewCard';
+import { HatchPattern } from '../components/svg/HatchPattern';
+import { useElementWidth } from '../components/svg/useElementWidth';
+import { useSvgId } from '../components/svg/useSvgId';
 import {
   compassPoint,
   floorLabel,
@@ -24,15 +27,13 @@ import {
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { pathD, px, wrapText } from './svg/geometry2d';
-import { useSvgId } from './svg/ids';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { useViewText } from './svg/messages';
-import { HatchPattern, SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
-import { FONT, LINE, PAD } from './svg/constants';
+import { SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
+import { FONT, HATCH, LINE, PAD, VIEW_WIDTH } from './svg/constants';
 import { RIM, RING_ALTITUDES, buildDiagram, hourLabels, type Diagram } from './svg/sunPathLayout';
 import { SvgFigure } from './svg/SvgFigure';
-import { useElementWidth } from './svg/useElementWidth';
 import s from './svg/svg.module.css';
 import styles from './SunPathView.module.css';
 
@@ -195,8 +196,8 @@ export function SunPathView() {
   const jun = useSolarPath(refDates[2]);
   const selected = useSolarPath();
   const times = useSunTimes();
-  const [frameRef, width] = useElementWidth<HTMLDivElement>();
-  const hatchId = `${useSvgId()}-hatch`;
+  const [frameRef, width] = useElementWidth<HTMLDivElement>(VIEW_WIDTH);
+  const hatchId = `${useSvgId('v')}-hatch`;
   const facadeAz = building.facadeAzimuth;
   const placement = placements[focus] ?? placements[0];
 
@@ -301,7 +302,7 @@ export function SunPathView() {
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(f.date(date))} desc={desc}>
           <defs>
-            <HatchPattern id={hatchId} />
+            <HatchPattern id={hatchId} {...HATCH} />
           </defs>
           <PolarDiagram diagram={diagram} hatchId={hatchId} f={f} />
           {sunAt && (

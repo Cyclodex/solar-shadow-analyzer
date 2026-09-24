@@ -309,6 +309,12 @@ describe('HorizonSection', () => {
       );
       render(<HorizonSection />);
       const plot = screen.getByRole('group', { name: 'Horizont vor der Fassade' });
+      // The effective horizon as a closed area, then one line per source over the 181 azimuths.
+      const [area, ...lines] = [...plot.querySelectorAll('path')].map((p) => p.getAttribute('d') ?? '');
+      expect(area).toMatch(/^M28 [\d.]+L.*Z$/);
+      expect(area.match(/[ML]/g)).toHaveLength(183);
+      expect(lines).toHaveLength(2);
+      for (const d of lines) expect(d.match(/[ML]/g)).toHaveLength(181);
       expect(plot).toHaveAccessibleDescription(/Höchste Werte: Hindernisse .*; Eigene Punkte 4\.0° bei/);
       expect(screen.getByText('Höchstwerte im Bereich')).toBeInTheDocument();
       fireEvent.focus(plot);

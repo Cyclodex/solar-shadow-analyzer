@@ -18,10 +18,11 @@ import { ResetIcon } from '../../components/icons';
 import { CANVAS_RENDER_EVENT, type CanvasRenderDetail } from '../../export/canvasRender';
 import { useFormat, useLang, useMessages } from '../../i18n';
 import { useCommon } from '../../i18n/common';
+import { floorColor } from '../../styles/tokens';
 import type { ActivePreset, CameraApi } from './CameraRig';
 import { renderForCapture } from './captureRender';
 import { sceneMessages } from './messages';
-import { floorToken, useScenePalette } from './palette';
+import { useScenePalette } from './palette';
 import { SceneContent } from './SceneContent';
 import { SceneErrorBoundary } from './SceneErrorBoundary';
 import { DEFAULT_FOV, SUN_VIEW_MIN_ALTITUDE, type CameraPreset } from './sceneLayout';
@@ -216,7 +217,7 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
           {instant.floors
             .map((fl, k) => (
               <li key={fl.floor} className={styles.floorItem}>
-                <span className={styles.dot} style={cssVars({ '--dot': `var(--${floorToken(k)})` })} />
+                <span className={styles.dot} style={cssVars({ '--dot': floorColor(k) })} />
                 <span className={styles.floorName}>{labels[k]}</span>
                 <span className={styles.floorValue}>{floorStatus[k]}</span>
               </li>

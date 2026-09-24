@@ -1,11 +1,11 @@
 import {
   LEGEND_ROW_HEIGHT,
+  LEGEND_SQUARE,
   LEGEND_SWATCH_GAP,
   LEGEND_SWATCH_W,
-  type ChartLegendItem,
-  type ChartLegendLayout,
-} from './legend';
-import styles from './chart.module.css';
+} from '../../components/svg/legend';
+import legend from '../../components/svg/legend.module.css';
+import type { ChartLegendItem, ChartLegendLayout } from './legend';
 
 // ─────────────────────────────────────────────
 // LEGEND INSIDE THE SVG
@@ -33,16 +33,25 @@ function Swatch({ item }: { item: ChartLegendItem }) {
     return (
       <rect
         x={0}
-        y={cy - 6}
+        y={cy - LEGEND_SQUARE / 2}
         width={LEGEND_SWATCH_W}
-        height={12}
+        height={LEGEND_SQUARE}
         rx={2}
         fill={item.color}
         fillOpacity={item.opacity ?? 0.35}
       />
     );
   }
-  return <rect x={2} y={cy - 6} width={12} height={12} rx={2} fill={item.fill ?? item.color} />;
+  return (
+    <rect
+      x={(LEGEND_SWATCH_W - LEGEND_SQUARE) / 2}
+      y={cy - LEGEND_SQUARE / 2}
+      width={LEGEND_SQUARE}
+      height={LEGEND_SQUARE}
+      rx={2}
+      fill={item.fill ?? item.color}
+    />
+  );
 }
 
 /** Renders a legend laid out by layoutChartLegend (legend.ts) with its top-left corner at (x, y). */
@@ -55,7 +64,7 @@ export function ChartLegend({ layout, x, y }: { layout: ChartLegendLayout; x: nu
           <g key={item.key} transform={`translate(${pos.x} ${pos.row * LEGEND_ROW_HEIGHT})`}>
             <Swatch item={item} />
             <text
-              className={styles.legendText}
+              className={legend.text}
               x={LEGEND_SWATCH_W + LEGEND_SWATCH_GAP}
               y={LEGEND_ROW_HEIGHT / 2}
               dominantBaseline="central"

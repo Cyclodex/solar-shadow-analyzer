@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   CELLS_ACROSS_SHORT_SIDE,
   cosIncidence,
+  criticalAngleKind,
   facadeFrame,
   floorPlacements,
   instantState,
@@ -302,6 +303,20 @@ describe('panelLayout', () => {
     const l = panelLayout(cfg({ panels: { count: 1, width: 100 } }));
     expect(l.modules).toEqual([{ u0: -0.5, u1: 0.5 }]);
     expect(l.rowWidth).toBe(1);
+  });
+
+  it('classifies the critical angle: no row above, overlapping rows, never shaded, or an onset angle', () => {
+    const tilted = panelLayout(DEFAULT_CONFIG);
+    expect(criticalAngleKind(tilted, false)).toBe('none');
+    expect(criticalAngleKind(tilted, true)).toBe('angle');
+    const vertical = panelLayout(cfg({ panels: { tiltFromVertical: 0 } }));
+    expect(criticalAngleKind(vertical, true)).toBe('never');
+    expect(criticalAngleKind(vertical, false)).toBe('none');
+    const long = panelLayout(
+      cfg({ panels: { length: 250, tiltFromVertical: 0 }, building: { floorHeight: 200 } }),
+    );
+    expect(criticalAngleKind(long, true)).toBe('overlap');
+    expect(criticalAngleKind(long, false)).toBe('none');
   });
 });
 
