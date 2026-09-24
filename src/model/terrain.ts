@@ -14,6 +14,9 @@ import { getStorage, touchCacheEntry, writeCacheEntry } from './storageCache';
 // deep Alpine valleys. The residual is mostly PVGIS itself: its profiles match ours best ~105 m S / 45 m W
 // of the requested point (our DEM is registered within 5 m, checked on 208 summits; shifted RMS 0.5–0.6°),
 // and it quantizes heights to 1/150 rad ≈ 0.38°. EU-DEM flattens sharp summits (median −55 m).
+// Several observer heights share one download and one pass over the ray samples (fetchTerrainHorizons,
+// computeHorizons). The app runs the download, PNG decoding and computation (computeTerrainHorizons) in a
+// Web Worker (workers/terrainClient.ts); the localStorage result cache stays on the page.
 // ─────────────────────────────────────────────
 
 /** AWS Terrain Tiles, Terrarium encoding ({z}/{x}/{y} template, CORS *). */
