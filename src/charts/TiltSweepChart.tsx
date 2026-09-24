@@ -10,7 +10,7 @@ import { useConfigSection, usePatch } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { floorColor } from '../styles/tokens';
 import { AxisX, AxisY, type AxisTick } from './lib/Axes';
-import { ChartDataTable } from './lib/DataTable';
+import { ChartDataTable, ColumnHeader } from './lib/DataTable';
 import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
 import { ChartLegend } from './lib/ChartLegend';
 import { topDown, useFloorLabels } from './lib/floors';
@@ -437,8 +437,14 @@ export function TiltSweepChart() {
       columns: [
         { key: 'tilt', header: t.colTilt },
         { key: 'beta', header: t.colBeta, numeric: true },
-        ...Array.from({ length: n }, (_, k) => ({ key: `f${k}`, header: labels[k], numeric: true })),
-        ...(n > 1 ? [{ key: 'total', header: c.total, numeric: true }] : []),
+        ...Array.from({ length: n }, (_, k) => ({
+          key: `f${k}`,
+          header: <ColumnHeader name={labels[k] ?? String(k)} unit="kWh" color={floorColor(k)} />,
+          numeric: true,
+        })),
+        ...(n > 1
+          ? [{ key: 'total', header: <ColumnHeader name={c.total} unit="kWh" />, numeric: true }]
+          : []),
       ],
       rows: sweep.points.map((p) => ({
         key: String(p.tiltFromVertical),
@@ -446,8 +452,8 @@ export function TiltSweepChart() {
         cells: [
           f.deg(p.tiltFromVertical),
           f.deg(90 - p.tiltFromVertical),
-          ...p.floorsKwh.map((v) => f.kwh(v)),
-          ...(n > 1 ? [f.kwh(p.totalKwh)] : []),
+          ...p.floorsKwh.map((v) => f.num(v)),
+          ...(n > 1 ? [f.num(p.totalKwh)] : []),
         ],
       })),
     };

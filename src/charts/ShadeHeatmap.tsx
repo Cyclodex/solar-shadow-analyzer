@@ -20,7 +20,7 @@ import { useConfigSection } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { cssVar, useThemeKey } from '../styles/tokens';
-import { ChartDataTable } from './lib/DataTable';
+import { ChartDataTable, ColumnHeader } from './lib/DataTable';
 import { ChartStats } from './lib/ChartStats';
 import { ChartTooltip } from './lib/ChartTooltip';
 import { resolveColor } from './lib/canvasTheme';
@@ -523,15 +523,16 @@ function HeatmapCard({ floor, heatmap, stats }: CardProps) {
     ) : undefined;
 
   const hours = (v: number): string => t.hours(f.num(v));
+  // Units in the column headers only (narrower table).
   const table = {
     columns: [
       { key: 'm', header: t.colMonth },
-      { key: 'lit', header: t.colLit, numeric: true },
+      { key: 'lit', header: <ColumnHeader name={t.colLit} unit="h" />, numeric: true },
       ...(hasAbove
         ? [
-            { key: 'sh', header: t.colShaded, numeric: true },
-            { key: 'pct', header: t.colShare, numeric: true },
-            { key: 'max', header: t.colMax, numeric: true },
+            { key: 'sh', header: <ColumnHeader name={t.colShaded} unit="h" />, numeric: true },
+            { key: 'pct', header: <ColumnHeader name={t.colShare} unit="%" />, numeric: true },
+            { key: 'max', header: <ColumnHeader name={t.colMax} unit="%" />, numeric: true },
           ]
         : []),
     ],
@@ -539,12 +540,12 @@ function HeatmapCard({ floor, heatmap, stats }: CardProps) {
       key: String(m.month),
       cells: [
         months[m.month],
-        hours(m.litHours),
+        f.num(m.litHours),
         ...(hasAbove
           ? [
-              hours(m.shadedHours),
-              f.pct(m.litHours > 0 ? (m.shadedHours / m.litHours) * 100 : 0, 1),
-              f.pct(m.maxShade * 100),
+              f.num(m.shadedHours),
+              f.num(m.litHours > 0 ? (m.shadedHours / m.litHours) * 100 : 0, 1),
+              f.num(m.maxShade * 100),
             ]
           : []),
       ],
@@ -554,8 +555,8 @@ function HeatmapCard({ floor, heatmap, stats }: CardProps) {
         key: 'total',
         cells: [
           t.total,
-          hours(stats.litHours),
-          ...(hasAbove ? [hours(stats.shadedHours), f.pct(stats.shadedPct, 1), ''] : []),
+          f.num(stats.litHours),
+          ...(hasAbove ? [f.num(stats.shadedHours), f.num(stats.shadedPct, 1), ''] : []),
         ],
       },
     ],

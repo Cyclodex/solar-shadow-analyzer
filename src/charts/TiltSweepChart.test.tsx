@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG, createObstacle } from '../model/defaults';
 import { clearSkyYear } from '../model/weather';
@@ -59,6 +59,31 @@ describe('TiltSweepChart', () => {
     expect(screen.getByText('θ 45°')).toBeInTheDocument();
     expect(screen.getByText(/^Optimum \d+°$/)).toBeInTheDocument();
     expect(screen.getByText(/Gerechnet in 5°-Schritten\./)).toBeInTheDocument();
+  });
+
+  it('lists θ, β = 90° − θ and the yields per row in the data table (units in the headers)', () => {
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    render(<TiltSweepChart />);
+    const details = screen.getByText('Werte als Tabelle').closest('details');
+    if (!details) throw new Error('disclosure expected');
+    act(() => {
+      details.open = true;
+      details.dispatchEvent(new Event('toggle'));
+    });
+    const table = screen.getByRole('table', { name: 'Jahresertrag je Neigung θ' });
+    expect(within(table).getByRole('columnheader', { name: 'β ab Horizontal' })).toBeInTheDocument();
+    expect(
+      within(table)
+        .getAllByRole('columnheader')
+        .map((h) => h.textContent),
+    ).toEqual(['θ ab Senkrechte', 'β ab Horizontal', '1. OGkWh', '2. OGkWh', 'TotalkWh']);
+    // θ = 30°: β = 60° (at the default 45° both would read the same).
+    const row = within(table).getByRole('rowheader', { name: '30°' }).closest('tr');
+    if (!row) throw new Error('row expected');
+    const [beta, ...yields] = within(row).getAllByRole('cell');
+    expect(beta).toHaveTextContent('60°');
+    expect(yields).toHaveLength(3);
+    for (const cell of yields) expect(cell.textContent).toMatch(/^[\d’']+$/);
   });
 
   it('is busy while annual inputs load and while the sweep updates after another input changed', () => {

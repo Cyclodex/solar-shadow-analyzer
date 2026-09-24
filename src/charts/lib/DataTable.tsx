@@ -1,4 +1,5 @@
 import { useId, useState, type ReactNode } from 'react';
+import { cssVars } from '../../components/cssVars';
 import { useMessages, type Messages } from '../../i18n';
 import styles from './table.module.css';
 
@@ -7,7 +8,9 @@ import styles from './table.module.css';
 // Accessible table (caption, column headers, row headers in the first column, optional totals footer)
 // inside a keyboard-scrollable region, so wide tables scroll inside the card and never the page. The
 // region is named by the caption, which is unique per table (unlike a generic label).
-// ChartDataTable wraps it in a <details> disclosure: the table twin of a chart.
+// ChartDataTable wraps it in a <details> disclosure: the table twin of a chart. Units belong in the column
+// header (ColumnHeader), not in every cell, and headers may wrap: tables then fit their card before they
+// have to scroll.
 // ─────────────────────────────────────────────
 
 export interface DataTableColumn {
@@ -34,6 +37,22 @@ export interface DataTableProps {
   /** Rows in <tfoot> (totals). */
   footer?: readonly DataTableRow[];
   className?: string;
+}
+
+/**
+ * Column header: name and the unit on a second line. With a colour swatch (a floor's) the name is a short key
+ * that stays on one line; other names may wrap.
+ */
+export function ColumnHeader({ name, unit, color }: { name: string; unit: string; color?: string }) {
+  return (
+    <span className={styles.head}>
+      <span className={color ? `${styles.headName} ${styles.headKey}` : styles.headName}>
+        {color && <span className={styles.swatch} style={cssVars({ '--c': color })} aria-hidden="true" />}
+        {name}
+      </span>
+      <span className={styles.headUnit}>{unit}</span>
+    </span>
+  );
 }
 
 function Row({ row, columns }: { row: DataTableRow; columns: readonly DataTableColumn[] }) {

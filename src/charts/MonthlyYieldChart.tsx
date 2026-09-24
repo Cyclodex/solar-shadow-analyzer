@@ -392,16 +392,15 @@ export function MonthlyYieldChart() {
   const months = monthNames(lang, 'long');
   const shortMonths = monthNames(lang, 'short');
 
+  // No legend for a single floor (like the other charts): one bar colour and no floor above to shade it.
   const legendItems = useMemo<ChartLegendItem[]>(() => {
-    const items: ChartLegendItem[] =
-      numFloors > 1
-        ? Array.from({ length: numFloors }, (_, k) => ({
-            key: `f${k}`,
-            label: labels[k] ?? String(k),
-            swatch: 'rect',
-            color: floorColor(k),
-          }))
-        : [];
+    if (numFloors <= 1) return [];
+    const items: ChartLegendItem[] = Array.from({ length: numFloors }, (_, k) => ({
+      key: `f${k}`,
+      label: labels[k] ?? String(k),
+      swatch: 'rect',
+      color: floorColor(k),
+    }));
     items.push({
       key: 'loss',
       label: t.loss,

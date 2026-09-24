@@ -46,6 +46,41 @@
   font-weight: 600;
   vertical-align: bottom;
   border-bottom-color: var(--border-strong);
+  /* Long headers wrap before the table has to scroll. */
+  white-space: normal;
+}
+
+/* ColumnHeader: name (optional swatch) and unit on a second line. */
+.head {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 1px;
+}
+
+.headName {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  color: var(--text);
+}
+
+.headKey {
+  white-space: nowrap;
+}
+
+.headUnit {
+  font-weight: 400;
+  color: var(--text-faint);
+}
+
+.swatch {
+  flex: none;
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  background: var(--c);
 }
 
 .table tbody th,

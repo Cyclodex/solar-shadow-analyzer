@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { Button } from '../components/Button';
 import { DownloadIcon } from '../components/icons';
-import { cssVars } from '../components/cssVars';
 import { monthNames, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useAnnualInputsPending, useHeatmapStats, useShadedFloor, useSimulation } from '../hooks/useModel';
@@ -11,12 +10,11 @@ import { downloadCsv, monthlyResultsCsv, userCsvFormat } from '../export/results
 import { useConfigSection } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { floorColor } from '../styles/tokens';
-import { DataTable, type DataTableColumn, type DataTableRow } from './lib/DataTable';
+import { ColumnHeader, DataTable, type DataTableColumn, type DataTableRow } from './lib/DataTable';
 import { useFloorLabels } from './lib/floors';
 import { monthlyRows, type MonthlyRow } from './lib/monthlyTable';
 import { useSourceLabel } from './lib/sourceLabel';
 import chart from './lib/chart.module.css';
-import styles from './MonthlyTable.module.css';
 
 const de = {
   title: 'Monatstabelle',
@@ -59,21 +57,6 @@ const messages: Messages<Texts> = {
   },
 };
 
-/** Column header: name with an optional floor swatch and the unit on a second line. */
-function Header({ name, unit, floor }: { name: string; unit: string; floor?: number }) {
-  return (
-    <span className={styles.head}>
-      <span className={styles.name}>
-        {floor !== undefined && (
-          <span className={styles.swatch} style={cssVars({ '--c': floorColor(floor) })} aria-hidden="true" />
-        )}
-        {name}
-      </span>
-      <span className={styles.unit}>{unit}</span>
-    </span>
-  );
-}
-
 /** Monthly numbers per floor (simulation) with loss, shaded hours (heatmap statistics) and CSV export. */
 export function MonthlyTable() {
   const t = useMessages(messages);
@@ -107,15 +90,15 @@ export function MonthlyTable() {
     { key: 'month', header: t.month },
     ...Array.from({ length: n }, (_, k) => ({
       key: `f${k}`,
-      header: <Header name={labels[k] ?? String(k)} unit={t.kwh} floor={k} />,
+      header: <ColumnHeader name={labels[k] ?? String(k)} unit={t.kwh} color={floorColor(k)} />,
       numeric: true,
     })),
     ...(multi
       ? [
-          { key: 'total', header: <Header name={c.total} unit={t.kwh} />, numeric: true },
-          { key: 'loss', header: <Header name={t.loss} unit={t.kwh} />, numeric: true },
-          { key: 'lossPct', header: <Header name={t.loss} unit="%" />, numeric: true },
-          { key: 'shaded', header: <Header name={t.shaded(floorName)} unit={t.h} />, numeric: true },
+          { key: 'total', header: <ColumnHeader name={c.total} unit={t.kwh} />, numeric: true },
+          { key: 'loss', header: <ColumnHeader name={t.loss} unit={t.kwh} />, numeric: true },
+          { key: 'lossPct', header: <ColumnHeader name={t.loss} unit="%" />, numeric: true },
+          { key: 'shaded', header: <ColumnHeader name={t.shaded(floorName)} unit={t.h} />, numeric: true },
         ]
       : []),
   ];

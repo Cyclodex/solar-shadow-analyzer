@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { clearSkyYear } from '../model/weather';
@@ -124,7 +124,10 @@ describe('MonthlyYieldChart', () => {
       useConfigStore.getState().patch('building', { numFloors: 1 });
     });
     render(<MonthlyYieldChart />);
-    expect(screen.getByRole('img', { name: 'Monthly yield' })).toBeInTheDocument();
+    const svg = screen.getByRole('img', { name: 'Monthly yield' });
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
+    // No legend: no floor entry, and no loss entry without a floor above.
+    expect(within(svg).queryByText('Floor 1')).not.toBeInTheDocument();
+    expect(within(svg).queryByText('Shading loss')).not.toBeInTheDocument();
   });
 });
