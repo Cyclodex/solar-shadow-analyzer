@@ -1,5 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { Button } from '../../components/Button';
+import { InfoIcon } from '../../components/icons';
 import { useFormat, useMessages } from '../../i18n';
 import { sceneMessages } from './messages';
 import { HORIZON_RING_RADIUS } from './sceneLayout';
@@ -47,7 +48,8 @@ function LegendItem({ swatch, label, pressed, onToggle, children }: LegendItemPr
 
 /**
  * The WebGL part of the 3D view (code-split: three.js and R3F load only when WebGL 2 is available):
- * scene stage and the legend, whose entries toggle the layers.
+ * scene stage and the legend, whose entries toggle the layers. On phones the legend shows only the toggles;
+ * their explanations open with «Legende erklären» (Scene3D.module.css).
  */
 export default function SceneView() {
   const t = useMessages(sceneMessages);
@@ -56,6 +58,8 @@ export default function SceneView() {
   const [showModelShade, setShowModelShade] = useState(true);
   const [castShadows, setCastShadows] = useState(true);
   const [showSunPath, setShowSunPath] = useState(true);
+  const [explain, setExplain] = useState(false);
+  const listId = useId();
 
   return (
     <>
@@ -65,37 +69,54 @@ export default function SceneView() {
         castShadows={castShadows}
         showSunPath={showSunPath}
       />
-      <ul className={styles.legend} aria-label={t.layers}>
-        <LegendItem
-          swatch={styles.swatchModel}
-          label={t.modelShade}
-          pressed={showModelShade}
-          onToggle={() => setShowModelShade((v) => !v)}
+      <div className={styles.legendBar}>
+        <ul
+          id={listId}
+          className={`${styles.legend} ${explain ? styles.explained : ''}`}
+          aria-label={t.layers}
         >
-          {t.legendModel}
-        </LegendItem>
-        <LegendItem
-          swatch={styles.swatchCast}
-          label={t.castShadows}
-          pressed={castShadows}
-          onToggle={() => setCastShadows((v) => !v)}
-        >
-          {t.legendCast}
-        </LegendItem>
-        <LegendItem
-          swatch={styles.swatchPath}
-          label={t.sunPath}
-          pressed={showSunPath}
-          onToggle={() => setShowSunPath((v) => !v)}
-        >
-          {t.legendPath(f.date(data.date))}
-        </LegendItem>
-        {data.farHorizon && (
-          <LegendItem swatch={styles.swatchHorizon} label={t.horizon}>
-            {t.legendHorizon(f.unit(HORIZON_RING_RADIUS, 'm'))}
+          <LegendItem
+            swatch={styles.swatchModel}
+            label={t.modelShade}
+            pressed={showModelShade}
+            onToggle={() => setShowModelShade((v) => !v)}
+          >
+            {t.legendModel}
           </LegendItem>
-        )}
-      </ul>
+          <LegendItem
+            swatch={styles.swatchCast}
+            label={t.castShadows}
+            pressed={castShadows}
+            onToggle={() => setCastShadows((v) => !v)}
+          >
+            {t.legendCast}
+          </LegendItem>
+          <LegendItem
+            swatch={styles.swatchPath}
+            label={t.sunPath}
+            pressed={showSunPath}
+            onToggle={() => setShowSunPath((v) => !v)}
+          >
+            {t.legendPath(f.date(data.date))}
+          </LegendItem>
+          {data.farHorizon && (
+            <LegendItem swatch={styles.swatchHorizon} label={t.horizon}>
+              {t.legendHorizon(f.unit(HORIZON_RING_RADIUS, 'm'))}
+            </LegendItem>
+          )}
+        </ul>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<InfoIcon />}
+          className={styles.explainToggle}
+          aria-expanded={explain}
+          aria-controls={listId}
+          onClick={() => setExplain((v) => !v)}
+        >
+          {explain ? t.legendHelpHide : t.legendHelpShow}
+        </Button>
+      </div>
     </>
   );
 }

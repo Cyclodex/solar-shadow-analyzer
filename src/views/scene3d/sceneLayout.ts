@@ -45,6 +45,12 @@ export const OVERLAY_OFFSET = 0.004;
 /** Largest / smallest distance of the sun marker and sun path from the orbit target (4 × scene radius), m. */
 export const SUN_DISTANCE = 60;
 export const SUN_DISTANCE_MIN = 30;
+/**
+ * Minimum on-screen height of the floor and hour labels on touch devices, CSS px (≈ 11 px text): small phone
+ * canvases push the camera back and would shrink the floor labels to ≈ 5 px text. Framing keeps using the
+ * world size (labelHeight).
+ */
+export const TOUCH_LABEL_MIN_PX = 22;
 /** Floor label width relative to its height (typical "1. OG" / "Floor 1" pill), for framing. */
 const LABEL_ASPECT = 3.3;
 /** Radius of the horizon silhouette ring, m. */
@@ -550,6 +556,15 @@ export function fitBoxFov(
  */
 export function equivalentDistance(distance: number, fromFov: number, toFov: number): number {
   return (distance * Math.tan(toRad(fromFov) / 2)) / Math.tan(toRad(toFov) / 2);
+}
+
+/**
+ * Sprite height (scale) that appears `px` CSS px tall in a perspective view `viewHeight` px high with vertical
+ * field of view `fov` (degrees): at view depth `depth` for a world-size sprite, 1 for a screen-size one
+ * (sizeAttenuation off, whose scale is its size at distance 1).
+ */
+export function spriteHeightForPx(px: number, fov: number, viewHeight: number, depth = 1): number {
+  return (px * 2 * Math.tan(toRad(fov) / 2) * depth) / Math.max(1, viewHeight);
 }
 
 function normalize(v: Tuple3): Tuple3 {

@@ -1,10 +1,11 @@
 import { useEffect, useMemo } from 'react';
 import { BufferGeometry, Float32BufferAttribute, type Texture } from 'three';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type { Format } from '../../i18n';
 import { offsetAlong, type Tuple3 } from './coords';
 import { Label } from './Label';
 import type { ScenePalette } from './palette';
-import type { HourMark, SunPathSegment } from './sceneLayout';
+import { TOUCH_LABEL_MIN_PX, type HourMark, type SunPathSegment } from './sceneLayout';
 
 // ─────────────────────────────────────────────
 // SUN MARKER AND SUN PATH
@@ -36,12 +37,14 @@ export interface SunMarkerProps {
   format: Format;
 }
 
-/** Line pieces (pairs of points) along a path segment, for <lineSegments>. */
-function pathGeometry(segment: SunPathSegment, centre: Tuple3, distance: number): BufferGeometry {
+/**
+ * Line pieces (pairs of unit direction vectors) along a path segment, for <lineSegments> in a group at the
+ * centre scaled by the distance: independent of the scene size, so tilt or size changes keep the geometry.
+ */
+function pathGeometry(segment: SunPathSegment): BufferGeometry {
   const pos: number[] = [];
   for (let i = 1; i < segment.dirs.length; i++) {
-    pos.push(...offsetAlong(centre, segment.dirs[i - 1], distance));
-    pos.push(...offsetAlong(centre, segment.dirs[i], distance));
+    pos.push(...segment.dirs[i - 1], ...segment.dirs[i]);
   }
   const g = new BufferGeometry();
   g.setAttribute('position', new Float32BufferAttribute(pos, 3));
@@ -61,26 +64,31 @@ export function SunMarker({
   format,
 }: SunMarkerProps) {
   const lines = useMemo(
-    () => segments.map((s) => ({ front: s.front, geometry: pathGeometry(s, centre, distance) })),
-    [segments, centre, distance],
+    () => segments.map((s) => ({ front: s.front, geometry: pathGeometry(s) })),
+    [segments],
   );
   useEffect(() => () => lines.forEach((l) => l.geometry.dispose()), [lines]);
   const sunPos = offsetAlong(centre, sunDir, distance);
+  // Touch devices: readable on the small phone canvas (TOUCH_LABEL_MIN_PX, like the floor labels).
+  const coarse = useMediaQuery('(pointer: coarse)');
 
   return (
     <group>
-      {showPath &&
-        lines.map((l, i) => (
-          <lineSegments key={i} geometry={l.geometry}>
-            <lineBasicMaterial
-              color={palette.color(l.front ? 'sun' : 'text-muted')}
-              transparent
-              opacity={l.front ? 0.95 : 0.4}
-              toneMapped={false}
-              fog={false}
-            />
-          </lineSegments>
-        ))}
+      {showPath && (
+        <group position={centre} scale={distance}>
+          {lines.map((l, i) => (
+            <lineSegments key={i} geometry={l.geometry}>
+              <lineBasicMaterial
+                color={palette.color(l.front ? 'sun' : 'text-muted')}
+                transparent
+                opacity={l.front ? 0.95 : 0.4}
+                toneMapped={false}
+                fog={false}
+              />
+            </lineSegments>
+          ))}
+        </group>
+      )}
       {showPath &&
         hours.map((h) => {
           const p = offsetAlong(centre, h.dir, distance);
@@ -103,6 +111,7 @@ export function SunMarker({
                   position={[p[0], p[1] + 0.04 * distance, p[2]]}
                   height={HOUR_LABEL}
                   screenSize
+                  minPx={coarse ? TOUCH_LABEL_MIN_PX : 0}
                   palette={palette}
                 />
               )}

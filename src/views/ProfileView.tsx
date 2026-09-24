@@ -14,7 +14,7 @@ import { toRad } from '../model/units';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { floorColor } from '../styles/tokens';
-import { pathD, px, stripD, textWidth, wrapText } from './svg/geometry2d';
+import { pathD, px, stripD, textWidth, wrapText, type PlacedText } from './svg/geometry2d';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { useViewText } from './svg/messages';
@@ -150,17 +150,23 @@ interface SectionDrawingProps {
   pair: PairGeometry;
   layout: PanelLayout;
   labels: readonly string[];
+  /** Placed label of the critical angle (drawn by ProfileView above the sun ray); null: no critical angle. */
+  critLabel: PlacedText | null;
   t: ProfileText;
   f: Format;
 }
 
-/** Static part of the section: building, panels, floor labels, critical angle, dimensions and angles. */
+/**
+ * Static part of the section: building, panels, floor labels, critical angle (ray and arc; its label is drawn
+ * above the time-dependent sun ray), dimensions and angles.
+ */
 const SectionDrawing = memo(function SectionDrawing({
   scene,
   building,
   pair,
   layout,
   labels,
+  critLabel,
   t,
   f,
 }: SectionDrawingProps) {
@@ -173,8 +179,6 @@ const SectionDrawing = memo(function SectionDrawing({
   const overlap = upper !== null && layout.verticalGap < 0;
   const gapPx = Math.abs(layout.verticalGap) * fit.k;
   const { pivot, tip, arcR } = pair;
-  const critical = f.deg(layout.criticalProfileAngle, 1);
-  const critLabel = criticalLabel(scene, pair, layout, t.critical(critical), critical);
   const thetaText = t.theta(f.deg(theta));
   const reach = pair.showReach
     ? reachLabel(
@@ -223,10 +227,7 @@ const SectionDrawing = memo(function SectionDrawing({
             r={arcR + 8}
             a0={-toRad(layout.criticalProfileAngle)}
             a1={0}
-            label={critLabel.text}
-            labelAt={critLabel}
             className={styles.criticalArc}
-            textClassName={s.criticalText}
           />
         </g>
       )}
@@ -387,6 +388,11 @@ export function ProfileView() {
   );
   const building = useMemo(() => buildBuilding(scene, layout), [scene, layout]);
   const pair = useMemo(() => buildPair(scene, layout), [scene, layout]);
+  const criticalValue = f.deg(layout.criticalProfileAngle, 1);
+  const critLabel = useMemo(
+    () => criticalLabel(scene, pair, layout, t.critical(criticalValue), criticalValue),
+    [scene, pair, layout, t, criticalValue],
+  );
   const { lower, upper } = scene;
   const overlap = upper !== null && panelsOverlap(layout);
   const cm = (m: number): string => f.unit(m * 100, 'cm');
@@ -457,10 +463,22 @@ export function ProfileView() {
             pair={pair}
             layout={layout}
             labels={labels}
+            critLabel={critLabel}
             t={t}
             f={f}
           />
           <SunLayer instant={instant} scene={scene} pair={pair} hatchId={hatchId} f={f} />
+          {/* Above the sun ray: its halo keeps the value readable where the ray crosses it. */}
+          {pair.criticalEnd && critLabel && (
+            <text
+              x={px(critLabel.x)}
+              y={px(critLabel.y)}
+              textAnchor={critLabel.anchor}
+              className={`${s.label} ${s.num} ${s.halo} ${s.criticalText}`}
+            >
+              {critLabel.text}
+            </text>
+          )}
           <TextLines x={PAD} y={statusTop} lines={lines} className={`${s.label} ${s.num}`} />
           <SvgLegend layout={legend} />
         </SvgFigure>

@@ -38,6 +38,9 @@ const de = {
   castShadows: 'Schattenwurf',
   sunPath: 'Sonnenbahn',
   horizon: 'Horizont',
+  /** Phones: the legend shows only the layer toggles until the explanations are opened. */
+  legendHelpShow: 'Legende erklären',
+  legendHelpHide: 'Erklärungen ausblenden',
   legendModel:
     'Schraffiert: Flächen ohne direkte Sonne laut Modell – der Schatten des Stockwerks darüber; die ganze Reihe, wenn die Sonne hinter der Fassade oder unter dem Horizont des Stockwerks steht.',
   legendCast:
@@ -96,6 +99,8 @@ export const sceneMessages: Messages<SceneMessages> = {
     castShadows: 'Cast shadows',
     sunPath: 'Sun path',
     horizon: 'Horizon',
+    legendHelpShow: 'Explain legend',
+    legendHelpHide: 'Hide explanations',
     legendModel:
       'Hatched: areas without direct sun according to the model – the shade of the floor above; the whole row when the sun is behind the facade or below that floor’s horizon.',
     legendCast:

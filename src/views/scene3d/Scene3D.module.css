@@ -120,13 +120,18 @@
 }
 
 /* Legend: toggle chip + explanation per layer; spans the card like the ViewCard footer. */
+.legendBar {
+  margin: var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
 .legend {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   gap: var(--space-2) var(--space-5);
-  margin: var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
@@ -198,6 +203,11 @@
   display: none;
 }
 
+/* «Legende erklären»: phones only (below); .legendBar outranks the Button's display in any stylesheet order. */
+.legendBar .explainToggle {
+  display: none;
+}
+
 /*
  * Touch devices: vertical one-finger swipes scroll the page (the view is tall on phones), horizontal swipes
  * rotate, two fingers zoom. !important beats the inline touch-action: none set by OrbitControls.
@@ -234,6 +244,44 @@
 
   .short {
     display: inline;
+  }
+}
+
+/*
+ * Phones: the legend would be taller than the 3D view. Only the layer toggles show (wrapped side by side), so
+ * the view and all toggles fit on one screen; the explanations open with the toggle below. Screen only: the
+ * printed report keeps the explanations.
+ */
+@media screen and (max-width: 520px) {
+  .legend:not(.explained) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .legend:not(.explained) .legendText {
+    display: none;
+  }
+
+  .legendBar .explainToggle {
+    display: inline-flex;
+    margin-top: var(--space-2);
+  }
+}
+
+/*
+ * Smallest phones (320 px, e.g. iPhone Display Zoom): the reset button and the four short presets need about
+ * 282 px with the default spacing and would wrap onto a second row over the model. Tighter spacing keeps one
+ * row; the touch targets stay ≥ var(--touch) (.cameraBar button outranks the Button size's padding).
+ */
+@media (max-width: 359px) {
+  .cameraBar {
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .cameraBar button {
+    padding-inline: var(--space-1);
   }
 }
 

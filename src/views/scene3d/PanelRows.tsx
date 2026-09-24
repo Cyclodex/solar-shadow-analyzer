@@ -10,6 +10,7 @@ import {
   type Mesh,
   type ShaderMaterial,
 } from 'three';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 import type { InstantState, ShadeRect } from '../../model/types';
 import { facadeLocal, panelLocal, panelRotationX } from './coords';
 import { Label } from './Label';
@@ -18,6 +19,7 @@ import {
   MAX_OVERLAY_RECTS,
   MODULE_THICKNESS,
   OVERLAY_VERTICES_PER_RECT,
+  TOUCH_LABEL_MIN_PX,
   modelShadeRects,
   writeOverlayRects,
   type SceneDims,
@@ -99,6 +101,7 @@ export interface PanelRowsProps {
 
 export function PanelRows({ palette, dims, floors, showModelShade, labels }: PanelRowsProps) {
   const anisotropy = useThree((s) => s.gl.capabilities.getMaxAnisotropy());
+  const coarse = useMediaQuery('(pointer: coarse)');
   const { layout, rows } = dims;
   const { moduleWidth: w, length: L, tiltFromVertical } = layout;
 
@@ -164,6 +167,7 @@ export function PanelRows({ palette, dims, floors, showModelShade, labels }: Pan
               z: row.railTopZ - layout.drop / 2,
             })}
             height={dims.labelHeight}
+            minPx={coarse ? TOUCH_LABEL_MIN_PX : 0}
             palette={palette}
             dot={floorSceneToken(row.floor)}
             anchor="right"
