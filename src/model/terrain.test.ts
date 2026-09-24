@@ -11,16 +11,20 @@ import {
   TILE_RETRIES,
   clearTerrainTileCache,
   computeHorizon,
+  computeHorizons,
+  computeTerrainHorizons,
   createTileSampler,
   decodeTerrarium,
   decodeTerrariumPng,
   fetchTerrainHorizon,
+  fetchTerrainHorizons,
   horizonSampleDistances,
   lonLatToTilePixel,
   planTerrainTiles,
   tilePixelToLonLat,
   tileUrl,
   type ElevationSampler,
+  type TerrainComputer,
   type TerrainTile,
 } from './terrain';
 
@@ -346,6 +350,32 @@ describe('computeHorizon', () => {
     const r = computeHorizon(onlySite, { ...SITE, observerHeight: 0 }, { minElevationDeg: -3 });
     expect(r.profile.elevations.every((e) => e === -3)).toBe(true);
     expect(() => computeHorizon(() => null, { ...SITE, observerHeight: 0 })).toThrow(/No elevation data/);
+  });
+});
+
+describe('computeHorizons', () => {
+  const D = horizonSampleDistances().find((d) => d >= 3000) as number;
+  const sampler = coneSampler(500, destination(SITE.latitude, SITE.longitude, 120, D), 1500, 1000);
+
+  it('equals computeHorizon at every observer height (one pass over the samples)', () => {
+    const heights = [4, 7, 12, 0.5];
+    const all = computeHorizons(sampler, SITE, heights);
+    expect(all).toHaveLength(heights.length);
+    heights.forEach((h, j) => {
+      expect(all[j]).toEqual(computeHorizon(sampler, { ...SITE, observerHeight: h }));
+    });
+    // The horizon drops with the height (the cone is the same, the eye rises).
+    expect(all[2].profile.elevations[120]).toBeLessThan(all[0].profile.elevations[120]);
+    const coarse = computeHorizons(sampler, { ...SITE, elevation: 450 }, [3, 9], { stepDeg: 5 });
+    expect(coarse[1]).toEqual(
+      computeHorizon(sampler, { ...SITE, elevation: 450, observerHeight: 9 }, { stepDeg: 5 }),
+    );
+  });
+
+  it('validates like computeHorizon', () => {
+    expect(computeHorizons(sampler, SITE, [])).toEqual([]);
+    expect(() => computeHorizons(sampler, SITE, [4, Number.NaN])).toThrow(/Invalid observer height: NaN/);
+    expect(() => computeHorizons(() => null, SITE, [4])).toThrow(/No elevation data/);
   });
 });
 
@@ -687,5 +717,81 @@ describe('fetchTerrainHorizon', () => {
   it('rejects invalid coordinates', async () => {
     await expect(fetchTerrainHorizon(Number.NaN, 7)).rejects.toThrow(RangeError);
     await expect(fetchTerrainHorizon(89, 7)).rejects.toThrow(RangeError);
+  });
+});
+
+describe('fetchTerrainHorizons', () => {
+  const png = flatPng();
+  const total = planTerrainTiles(SITE.latitude, SITE.longitude).length;
+
+  beforeEach(() => {
+    clearTerrainTileCache();
+    localStorage.clear();
+  });
+
+  it('computes every observer height from one download, equal to fetchTerrainHorizon', async () => {
+    const f = mockFetch(png);
+    const progress: number[] = [];
+    const r = await fetchTerrainHorizons(SITE.latitude, SITE.longitude, {
+      fetchImpl: f.impl,
+      observerHeights: [4, 7, 4],
+      onProgress: (done) => progress.push(done),
+    });
+    expect(Object.keys(r)).toEqual(['4', '7']);
+    expect(f.calls).toHaveLength(total);
+    expect(progress).toEqual([...Array(total + 1).keys()]);
+    clearTerrainTileCache();
+    localStorage.clear();
+    const single = await fetchTerrainHorizon(SITE.latitude, SITE.longitude, {
+      fetchImpl: mockFetch(png).impl,
+      observerHeight: 7,
+    });
+    expect(r[7]).toEqual(single);
+  });
+
+  it('computes only the heights missing in the result cache, and waits for beforeDownload only then', async () => {
+    const f = mockFetch(png);
+    await fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: f.impl, observerHeight: 4 });
+    const computed: number[][] = [];
+    const compute: TerrainComputer = (lat, lon, heights, opts) => {
+      computed.push([...heights]);
+      return computeTerrainHorizons(lat, lon, heights, opts);
+    };
+    const beforeDownload = vi.fn(async () => {});
+    const r = await fetchTerrainHorizons(SITE.latitude, SITE.longitude, {
+      fetchImpl: f.impl,
+      observerHeights: [4, 9],
+      compute,
+      beforeDownload,
+    });
+    expect(computed).toEqual([[9]]);
+    expect(beforeDownload).toHaveBeenCalledTimes(1);
+    expect(r[4].siteElevation).toBe(500);
+    expect(r[9].siteElevation).toBe(500);
+    // Both cached now: no computation, no waiting, the final progress once.
+    const progress: [number, number][] = [];
+    await fetchTerrainHorizons(SITE.latitude, SITE.longitude, {
+      observerHeights: [9, 4],
+      compute,
+      beforeDownload,
+      onProgress: (d, t) => progress.push([d, t]),
+    });
+    expect(computed).toHaveLength(1);
+    expect(beforeDownload).toHaveBeenCalledTimes(1);
+    expect(progress).toEqual([[total, total]]);
+  });
+
+  it('rejects when aborted while waiting before the download', async () => {
+    const f = mockFetch(png);
+    const ctrl = new AbortController();
+    const run = fetchTerrainHorizons(SITE.latitude, SITE.longitude, {
+      fetchImpl: f.impl,
+      observerHeights: [4],
+      signal: ctrl.signal,
+      beforeDownload: () => new Promise<void>(() => {}), // never settles
+    });
+    ctrl.abort();
+    await expect(run).rejects.toMatchObject({ name: 'AbortError' });
+    expect(f.calls).toHaveLength(0);
   });
 });

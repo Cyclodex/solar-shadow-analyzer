@@ -79,6 +79,34 @@ describe('useTerrainLoader', () => {
     expect(fetchMock.mock.calls.length).toBe(calls);
   });
 
+  it('downloads tiles only after the weather request has settled; cached horizons load at once', async () => {
+    const png = flatTile();
+    const fetchMock = vi.fn(
+      async () => ({ ok: true, status: 200, arrayBuffer: async () => png.slice().buffer }) as Response,
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    useDataStore.getState().setWeather({ status: 'loading' });
+    const { unmount } = renderHook(() => useTerrainLoader());
+    await new Promise((r) => setTimeout(r, 50));
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useDataStore.getState().terrain.status).toBe('loading');
+    act(() => useDataStore.getState().setWeather({ status: 'ready' }));
+    await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('ready'), { timeout: 5000 });
+    expect(fetchMock).toHaveBeenCalled();
+    unmount();
+
+    // Both floor heights are in the localStorage result cache now: no waiting, no download.
+    resetStores();
+    clearTerrainTileCache();
+    fetchMock.mockClear();
+    useDataStore.getState().setWeather({ status: 'loading' });
+    renderHook(() => useTerrainLoader());
+    await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('ready'));
+    expect(Object.keys(useDataStore.getState().terrain.profiles ?? {})).toEqual(['4', '7']);
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(useDataStore.getState().weather.status).toBe('loading');
+  });
+
   it('stays idle when the terrain horizon is disabled', () => {
     useConfigStore.getState().patch('horizon', { terrainEnabled: false });
     renderHook(() => useTerrainLoader());
