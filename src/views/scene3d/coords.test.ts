@@ -14,6 +14,7 @@ import {
   panelPointFacade,
   panelRotationX,
   threeToEnu,
+  threeToFacade,
   type Tuple3,
 } from './coords';
 
@@ -109,6 +110,19 @@ describe('facade frame → three.js', () => {
       { u: -2.5, n: 3.25, z: 7 },
     ] satisfies FacadeVector[]) {
       expectClose(world(group, facadeLocal(p)), facadeToThree(p, az));
+    }
+  });
+
+  it.each([0, 45, 180, 202, 311])('threeToFacade inverts facadeToThree (γ = %d°)', (az) => {
+    const out: FacadeVector = { u: 0, n: 0, z: 0 };
+    for (const p of [
+      { u: 1, n: 0, z: 0 },
+      { u: 0, n: 1, z: 0 },
+      { u: -2.5, n: 3.25, z: 7 },
+    ] satisfies FacadeVector[]) {
+      const [x, y, z] = facadeToThree(p, az);
+      expect(threeToFacade(new Vector3(x, y, z), az, out)).toBe(out);
+      expectClose([out.u, out.n, out.z], [p.u, p.n, p.z]);
     }
   });
 

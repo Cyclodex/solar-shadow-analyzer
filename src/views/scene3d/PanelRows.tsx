@@ -159,7 +159,8 @@ export function PanelRows({ palette, dims, floors, showModelShade, labels }: Pan
             text={labels[row.floor] ?? ''}
             position={facadeLocal({
               u: labelU,
-              n: row.railN + layout.reach / 2,
+              // Clear of the wall when the rows hang flat on it (balcony depth 0).
+              n: Math.max(row.railN + layout.reach / 2, dims.labelHeight / 2 + 0.05),
               z: row.railTopZ - layout.drop / 2,
             })}
             height={dims.labelHeight}

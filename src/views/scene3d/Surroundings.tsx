@@ -1,19 +1,50 @@
-import { memo, useEffect, useMemo } from 'react';
-import { BoxGeometry, BufferGeometry, DoubleSide, EdgesGeometry, Float32BufferAttribute } from 'three';
+import { memo, useEffect, useMemo, useRef } from 'react';
+import { useFrame } from '@react-three/fiber';
+import {
+  BoxGeometry,
+  BufferGeometry,
+  DoubleSide,
+  EdgesGeometry,
+  Float32BufferAttribute,
+  type LineBasicMaterial,
+  type MeshStandardMaterial,
+} from 'three';
 import { horizonAt } from '../../model/horizon';
-import type { HorizonProfile, Obstacle } from '../../model/types';
+import type { FacadeVector, HorizonProfile, Obstacle } from '../../model/types';
 import { toRad } from '../../model/units';
-import { enuToThree, facadeLocal } from './coords';
+import { enuToThree, facadeLocal, threeToFacade } from './coords';
 import { Label } from './Label';
 import type { ScenePalette } from './palette';
-import { HORIZON_RING_RADIUS, obstacleBox } from './sceneLayout';
+import { HORIZON_RING_RADIUS, obstacleBlocksView, obstacleBox } from './sceneLayout';
 
 // ─────────────────────────────────────────────
 // SURROUNDINGS: neighbour obstacles (facade frame) and the far horizon as a silhouette ring (world frame)
 // ─────────────────────────────────────────────
 
-function ObstacleBox({ obstacle, palette }: { obstacle: Obstacle; palette: ScenePalette }) {
-  const { min, max } = obstacleBox(obstacle);
+/** Opacity of an obstacle that hides part of the panel rows from the camera. */
+const FADED_OPACITY = 0.25;
+/** Camera position in the facade frame (scratch, written every frame). */
+const CAM: FacadeVector = { u: 0, n: 0, z: 0 };
+
+function setFaded(material: MeshStandardMaterial | LineBasicMaterial, faded: boolean): void {
+  material.transparent = faded;
+  material.opacity = faded ? FADED_OPACITY : 1;
+  material.depthWrite = !faded;
+  // `transparent` selects another shader program variant.
+  material.needsUpdate = true;
+}
+
+interface ObstacleBoxProps {
+  obstacle: Obstacle;
+  palette: ScenePalette;
+  facadeAzimuth: number;
+  targets: readonly FacadeVector[];
+  fade: boolean;
+}
+
+function ObstacleBox({ obstacle, palette, facadeAzimuth, targets, fade }: ObstacleBoxProps) {
+  const box = useMemo(() => obstacleBox(obstacle), [obstacle]);
+  const { min, max } = box;
   const sx = max.u - min.u;
   const sy = max.z - min.z;
   const sz = max.n - min.n;
@@ -26,14 +57,40 @@ function ObstacleBox({ obstacle, palette }: { obstacle: Obstacle; palette: Scene
     },
     [geometry, edges],
   );
+
+  // Fade the box while it hides part of the panel rows (not in the "from the sun" view, where what is
+  // visible is lit). Shadows are unaffected: the shadow map ignores opacity.
+  const bodyRef = useRef<MeshStandardMaterial>(null);
+  const edgeRef = useRef<LineBasicMaterial>(null);
+  const faded = useRef(false);
+  useFrame(({ camera }) => {
+    const blocked =
+      fade && obstacleBlocksView(threeToFacade(camera.position, facadeAzimuth, CAM), targets, box);
+    const body = bodyRef.current;
+    const edge = edgeRef.current;
+    if (blocked === faded.current || !body || !edge) return;
+    faded.current = blocked;
+    setFaded(body, blocked);
+    setFaded(edge, blocked);
+  });
+
   const centre = facadeLocal({ u: (min.u + max.u) / 2, n: (min.n + max.n) / 2, z: (min.z + max.z) / 2 });
   return (
     <group>
       <mesh geometry={geometry} position={centre} castShadow receiveShadow>
-        <meshStandardMaterial color={palette.obstacle} roughness={0.95} metalness={0} />
+        {/* Faces pushed back slightly: the coplanar outline wins the depth test (no dashed edges). */}
+        <meshStandardMaterial
+          ref={bodyRef}
+          color={palette.obstacle}
+          roughness={0.95}
+          metalness={0}
+          polygonOffset
+          polygonOffsetFactor={1}
+          polygonOffsetUnits={1}
+        />
       </mesh>
       <lineSegments geometry={edges} position={centre}>
-        <lineBasicMaterial color={palette.color('wall-edge')} />
+        <lineBasicMaterial ref={edgeRef} color={palette.color('wall-edge')} />
       </lineSegments>
       {obstacle.name && (
         <Label
@@ -47,18 +104,35 @@ function ObstacleBox({ obstacle, palette }: { obstacle: Obstacle; palette: Scene
   );
 }
 
+export interface ObstaclesProps {
+  obstacles: readonly Obstacle[];
+  palette: ScenePalette;
+  facadeAzimuth: number;
+  /** Points of the panel rows (facade frame) an obstacle must not hide; see viewTargets. */
+  targets: readonly FacadeVector[];
+  /** Fade obstacles that hide part of the panel rows from the camera. */
+  fade: boolean;
+}
+
 /** Neighbour buildings as boxes (children of the facade group). */
 export const Obstacles = memo(function Obstacles({
   obstacles,
   palette,
-}: {
-  obstacles: readonly Obstacle[];
-  palette: ScenePalette;
-}) {
+  facadeAzimuth,
+  targets,
+  fade,
+}: ObstaclesProps) {
   return (
     <group>
       {obstacles.map((o) => (
-        <ObstacleBox key={o.id} obstacle={o} palette={palette} />
+        <ObstacleBox
+          key={o.id}
+          obstacle={o}
+          palette={palette}
+          facadeAzimuth={facadeAzimuth}
+          targets={targets}
+          fade={fade}
+        />
       ))}
     </group>
   );

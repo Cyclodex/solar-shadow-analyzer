@@ -3,7 +3,14 @@ import { useThree } from '@react-three/fiber';
 import { BoxGeometry, EdgesGeometry, Matrix4, type BufferGeometry, type InstancedMesh } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { ScenePalette } from './palette';
-import { SLAB_THICKNESS, type SceneDims } from './sceneLayout';
+import {
+  MODULE_THICKNESS,
+  RAIL_CLEARANCE,
+  RAIL_THICKNESS as RAIL,
+  SLAB_THICKNESS,
+  hasRailing,
+  type SceneDims,
+} from './sceneLayout';
 
 // ─────────────────────────────────────────────
 // BUILDING AND BALCONIES (children of the facade group: x = u, y = z, z = n; facade wall at z = 0)
@@ -11,12 +18,15 @@ import { SLAB_THICKNESS, type SceneDims } from './sceneLayout';
 
 const WINDOW_WIDTH = 1.3;
 const WINDOW_PITCH = 2.6;
+/** Windows in front of the wall, m (less when the panels hang closer to the wall, so they stay in front). */
 const WINDOW_OFFSET = 0.012;
-const RAIL = 0.05;
+/**
+ * Distance from the panel plane to anything drawn behind vertical panels (windows, slab front): the
+ * modules' back face plus a gap, so that nothing is coplanar with them.
+ */
+const BEHIND_PANELS = MODULE_THICKNESS + 0.003;
 const POST = 0.04;
 const MAX_POST_SPACING = 1.3;
-/** Clearance between the railing front and the panel plane (no z-fighting with vertical panels), m. */
-const RAIL_CLEARANCE = 0.015;
 
 interface WindowRect {
   x: number;
@@ -42,11 +52,15 @@ function windowRects(dims: SceneDims): WindowRect[] {
   return out;
 }
 
-/** Railing of one balcony relative to its slab top (y = 0): posts, top and bottom rail, side rails. */
-function railingGeometry(dims: SceneDims): BufferGeometry {
+/**
+ * Railing of one balcony relative to its slab top (y = 0): posts, top and bottom rail, side rails. Null
+ * when it does not fit between the wall and the panel plane (panels mounted directly on the facade).
+ */
+function railingGeometry(dims: SceneDims): BufferGeometry | null {
   const { balconyWidth: w, railN, railHeight: h } = dims;
+  if (!hasRailing(railN)) return null;
   const parts: BufferGeometry[] = [];
-  const n = Math.max(RAIL / 2, railN - RAIL / 2 - RAIL_CLEARANCE);
+  const n = railN - RAIL / 2 - RAIL_CLEARANCE; // ≥ RAIL / 2: clear of the wall
   const add = (sx: number, sy: number, sz: number, x: number, y: number, z: number): void => {
     parts.push(new BoxGeometry(sx, sy, sz).translate(x, y, z));
   };
@@ -78,15 +92,17 @@ export interface BuildingProps {
 
 export const Building = memo(function Building({ palette, dims, day }: BuildingProps) {
   const invalidate = useThree((s) => s.invalidate);
-  const { buildingWidth: bw, buildingHeight: bh, buildingDepth: bd } = dims;
+  const { buildingWidth: bw, buildingHeight: bh, buildingDepth: bd, railN } = dims;
 
   const body = useMemo(() => new BoxGeometry(bw, bh, bd), [bw, bh, bd]);
   const edges = useMemo(() => new EdgesGeometry(body), [body]);
   const windows = useMemo(() => windowRects(dims), [dims]);
   const railing = useMemo(() => railingGeometry(dims), [dims]);
+  // The slab ends just behind vertical panels (its front would otherwise lie in their plane).
+  const slabDepth = railN >= 0.05 ? railN - BEHIND_PANELS : 0;
   const slab = useMemo(
-    () => (dims.railN >= 0.05 ? new BoxGeometry(dims.balconyWidth, SLAB_THICKNESS, dims.railN) : null),
-    [dims],
+    () => (slabDepth > 0 ? new BoxGeometry(dims.balconyWidth, SLAB_THICKNESS, slabDepth) : null),
+    [dims.balconyWidth, slabDepth],
   );
   useEffect(
     () => () => {
@@ -95,7 +111,7 @@ export const Building = memo(function Building({ palette, dims, day }: BuildingP
     },
     [body, edges],
   );
-  useEffect(() => () => railing.dispose(), [railing]);
+  useEffect(() => () => railing?.dispose(), [railing]);
   useEffect(() => () => slab?.dispose(), [slab]);
 
   const windowRef = useRef<InstancedMesh>(null);
@@ -103,21 +119,34 @@ export const Building = memo(function Building({ palette, dims, day }: BuildingP
     const mesh = windowRef.current;
     if (!mesh) return;
     const m = new Matrix4();
+    // Behind the panels' back face when they hang closer to the wall than the usual window offset.
+    const n = Math.min(WINDOW_OFFSET, Math.max(0, railN - BEHIND_PANELS));
     windows.forEach((w, i) => {
-      m.makeScale(WINDOW_WIDTH, w.y1 - w.y0, 1).setPosition(w.x, (w.y0 + w.y1) / 2, WINDOW_OFFSET);
+      m.makeScale(WINDOW_WIDTH, w.y1 - w.y0, 1).setPosition(w.x, (w.y0 + w.y1) / 2, n);
       mesh.setMatrixAt(i, m);
     });
     mesh.instanceMatrix.needsUpdate = true;
     mesh.computeBoundingSphere();
     invalidate();
-  }, [windows, invalidate]);
+  }, [windows, railN, invalidate]);
 
   const glow = Math.max(0, 1 - day) * 0.18;
 
   return (
     <group>
+      {/*
+        Wall faces pushed back: the coplanar outline wins the depth test (no dashed edges), and so do
+        windows and panel fronts in the wall plane (balcony depth 0).
+      */}
       <mesh geometry={body} position={[0, bh / 2, -bd / 2]} castShadow receiveShadow>
-        <meshStandardMaterial color={palette.color('wall')} roughness={0.92} metalness={0} />
+        <meshStandardMaterial
+          color={palette.color('wall')}
+          roughness={0.92}
+          metalness={0}
+          polygonOffset
+          polygonOffsetFactor={2}
+          polygonOffsetUnits={2}
+        />
       </mesh>
       <lineSegments geometry={edges} position={[0, bh / 2, -bd / 2]}>
         <lineBasicMaterial color={palette.color('wall-edge')} />
@@ -136,6 +165,9 @@ export const Building = memo(function Building({ palette, dims, day }: BuildingP
             metalness={0}
             emissive={palette.color('sun')}
             emissiveIntensity={glow}
+            polygonOffset
+            polygonOffsetFactor={1}
+            polygonOffsetUnits={1}
           />
         </instancedMesh>
       )}
@@ -143,18 +175,15 @@ export const Building = memo(function Building({ palette, dims, day }: BuildingP
         <group key={r.floor} position-y={r.slabZ}>
           {/* A ground-floor slab would be coplanar with the ground (z-fighting): the ground is the terrace. */}
           {slab && r.slabZ >= SLAB_THICKNESS && (
-            <mesh
-              geometry={slab}
-              position={[0, -SLAB_THICKNESS / 2, dims.railN / 2]}
-              castShadow
-              receiveShadow
-            >
+            <mesh geometry={slab} position={[0, -SLAB_THICKNESS / 2, slabDepth / 2]} castShadow receiveShadow>
               <meshStandardMaterial color={palette.color('wall-edge')} roughness={0.9} metalness={0} />
             </mesh>
           )}
-          <mesh geometry={railing} castShadow receiveShadow>
-            <meshStandardMaterial color={palette.color('railing')} roughness={0.5} metalness={0.2} />
-          </mesh>
+          {railing && (
+            <mesh geometry={railing} castShadow receiveShadow>
+              <meshStandardMaterial color={palette.color('railing')} roughness={0.5} metalness={0.2} />
+            </mesh>
+          )}
         </group>
       ))}
     </group>

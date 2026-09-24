@@ -200,7 +200,8 @@
 /*
  * Touch devices: vertical one-finger swipes scroll the page (the view is tall on phones), horizontal swipes
  * rotate, two fingers zoom. !important beats the inline touch-action: none set by OrbitControls.
- * Full touch targets in the floating camera bar.
+ * Full touch targets in the floating camera bar (incl. the icon-only reset button) and the legend's layer
+ * toggles (.legend .chip outranks the small Button size regardless of stylesheet order).
  */
 @media (pointer: coarse) {
   .canvas {
@@ -208,6 +209,11 @@
   }
 
   .cameraBar button {
+    min-height: var(--touch);
+    min-width: var(--touch);
+  }
+
+  .legend .chip {
     min-height: var(--touch);
   }
 }

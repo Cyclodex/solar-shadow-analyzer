@@ -8,8 +8,8 @@ import { Color, SRGBColorSpace } from 'three';
 // Derived colours (night sky, glass, grid lines) are mixes of tokens.
 // ─────────────────────────────────────────────
 
-/** sRGB colour, channels 0…1. */
-export interface Rgba {
+/** sRGB colour, channels 0…1 (the charts' canvas colours use 0…255 tuples instead). */
+export interface Rgba01 {
   r: number;
   g: number;
   b: number;
@@ -33,7 +33,7 @@ function channel(s: string, max: number): number | null {
  * Parses the colour syntaxes used by the design tokens: #rgb, #rgba, #rrggbb, #rrggbbaa,
  * rgb()/rgba() with commas or spaces and an optional "/ alpha" (number or %). Null for anything else.
  */
-export function parseCssColor(value: string): Rgba | null {
+export function parseCssColor(value: string): Rgba01 | null {
   const s = value.trim();
   const hex = HEX_RE.exec(s);
   if (hex) {
@@ -100,19 +100,20 @@ const FLOOR_TOKENS = [
   'floor-7',
 ] as const satisfies readonly SceneToken[];
 
-/** Colour token of floor index `k` (fixed order, as in the charts). */
+/** Colour token of floor index `k`: fixed order, wrapping after the last colour, as in the charts. */
 export function floorToken(k: number): SceneToken {
-  return FLOOR_TOKENS[Math.min(FLOOR_TOKENS.length - 1, Math.max(0, Math.round(k)))];
+  const n = FLOOR_TOKENS.length;
+  return FLOOR_TOKENS[((Math.round(k) % n) + n) % n];
 }
 
 /** Neutral stand-in for a token that is not defined (CSS not loaded, e.g. in unit tests). */
-const MISSING: Rgba = { r: 0.5, g: 0.5, b: 0.5, a: 1 };
+const MISSING: Rgba01 = { r: 0.5, g: 0.5, b: 0.5, a: 1 };
 
 export interface ScenePalette {
   /** Theme key the palette was read for. */
   theme: string;
   /** Token colours as sRGB (for canvas drawing via css()). */
-  rgba: Record<SceneToken, Rgba>;
+  rgba: Record<SceneToken, Rgba01>;
   /** Linear (working space) three.js colour of a token. */
   color: (token: SceneToken) => Color;
   /** CSS colour string of a token, alpha included (for 2D canvas textures). */
@@ -128,7 +129,7 @@ export interface ScenePalette {
   font: string;
 }
 
-function toCss({ r, g, b, a }: Rgba, alpha = a): string {
+function toCss({ r, g, b, a }: Rgba01, alpha = a): string {
   const c = (v: number): number => Math.round(v * 255);
   return `rgb(${c(r)} ${c(g)} ${c(b)} / ${Math.round(alpha * 1000) / 1000})`;
 }
@@ -136,7 +137,7 @@ function toCss({ r, g, b, a }: Rgba, alpha = a): string {
 /** Reads the scene tokens from the computed style of `root`. */
 export function readPalette(theme: string, root: Element = document.documentElement): ScenePalette {
   const style = getComputedStyle(root);
-  const rgba = {} as Record<SceneToken, Rgba>;
+  const rgba = {} as Record<SceneToken, Rgba01>;
   for (const t of TOKENS) rgba[t] = parseCssColor(style.getPropertyValue(`--${t}`)) ?? MISSING;
   const colors = new Map<SceneToken, Color>();
   const color = (t: SceneToken): Color => {

@@ -8,6 +8,8 @@ import type { CameraPreset } from './sceneLayout';
 const de = {
   title: '3D-Ansicht',
   subtitle: (when: string) => `${when} · ziehen zum Drehen`,
+  /** Base of the PNG file name. */
+  exportName: '3d-ansicht',
   camera: 'Kamera',
   presets: {
     default: 'Übersicht',
@@ -40,7 +42,8 @@ const de = {
   horizon: 'Horizont',
   legendModel:
     'Schraffiert: Flächen ohne direkte Sonne laut Modell – der Schatten des Stockwerks darüber; die ganze Reihe, wenn die Sonne hinter der Fassade oder unter dem Horizont des Stockwerks steht.',
-  legendCast: 'Von der 3D-Grafik gerendert (Shadow-Mapping), zum Vergleich mit dem Modell.',
+  legendCast:
+    'Von der 3D-Grafik gerendert (Shadow-Mapping), zum Vergleich mit dem Modell. Wie im Modell gilt die Fassade als unendlich breit und hoch: Steht die Sonne hinter der Fassade, liegt alles vor ihr im Schatten.',
   legendPath: (date: string) =>
     `${date}, mit Stundenmarken (Ortszeit); blass, wo die Sonne hinter der Fassade steht.`,
   legendHorizon: (distance: string) =>
@@ -66,6 +69,7 @@ export const sceneMessages: Messages<SceneMessages> = {
   en: {
     title: '3D view',
     subtitle: (when) => `${when} · drag to rotate`,
+    exportName: '3d-view',
     camera: 'Camera',
     presets: {
       default: 'Overview',
@@ -97,7 +101,8 @@ export const sceneMessages: Messages<SceneMessages> = {
     horizon: 'Horizon',
     legendModel:
       'Hatched: areas without direct sun according to the model – the shade of the floor above; the whole row when the sun is behind the facade or below that floor’s horizon.',
-    legendCast: 'Rendered by the 3D graphics (shadow mapping), for comparison with the model.',
+    legendCast:
+      'Rendered by the 3D graphics (shadow mapping), for comparison with the model. As in the model, the facade counts as infinitely wide and tall: with the sun behind the facade, everything in front of it is in shade.',
     legendPath: (date) => `${date}, with hour marks (local time); faded where the sun is behind the facade.`,
     legendHorizon: (distance) => `Terrain and manual points as a silhouette ${distance} away.`,
     shadeNow: 'Now, according to the model',

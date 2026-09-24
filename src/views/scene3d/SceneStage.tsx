@@ -1,4 +1,4 @@
-import { useCallback, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type RefObject } from 'react';
 import { Canvas, type RootState } from '@react-three/fiber';
 import { PCFShadowMap } from 'three';
 import { Button } from '../../components/Button';
@@ -9,7 +9,7 @@ import { useFormat, useLang, useMessages } from '../../i18n';
 import { useCommon } from '../../i18n/common';
 import type { ActivePreset, CameraApi } from './CameraRig';
 import { sceneMessages } from './messages';
-import { useScenePalette } from './palette';
+import { floorToken, useScenePalette } from './palette';
 import { SceneContent } from './SceneContent';
 import { SceneErrorBoundary } from './SceneErrorBoundary';
 import { DEFAULT_FOV, SUN_VIEW_MIN_ALTITUDE, type CameraPreset } from './sceneLayout';
@@ -17,8 +17,9 @@ import type { SceneData } from './useSceneData';
 import styles from './Scene3D.module.css';
 
 // ─────────────────────────────────────────────
-// 3D STAGE: <Canvas> (render on demand, preserved drawing buffer for the PNG export), camera preset bar,
-// per-floor model status and keyboard control (arrow keys orbit, +/− zoom, 0 = overview).
+// 3D STAGE: <Canvas> (render on demand while on screen, preserved drawing buffer for the PNG export),
+// camera preset bar, per-floor model status and keyboard control (arrow keys orbit, +/− zoom,
+// 0 = overview).
 // ─────────────────────────────────────────────
 
 const PRESET_BUTTONS: readonly CameraPreset[] = ['front', 'side', 'top', 'sun'];
@@ -40,6 +41,29 @@ const KEY_ACTIONS: Partial<Record<string, ((api: CameraApi) => void) | 'reset'>>
   Home: 'reset',
 };
 
+/**
+ * Whether the view card around `ref` is on screen (with a margin). Starts true, so the first paint is never
+ * blank (and stays true where IntersectionObserver reports nothing, e.g. jsdom). The whole card is
+ * observed, not the canvas: its header holds the PNG export, which reads the canvas.
+ */
+function useInView(ref: RefObject<HTMLElement | null>): boolean {
+  const [inView, setInView] = useState(true);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const last = entries[entries.length - 1];
+        if (last) setInView(last.isIntersecting);
+      },
+      { rootMargin: '200px 0px' },
+    );
+    observer.observe(el.closest('section') ?? el);
+    return () => observer.disconnect();
+  }, [ref]);
+  return inView;
+}
+
 export interface SceneStageProps {
   data: SceneData;
   showModelShade: boolean;
@@ -58,6 +82,15 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
   const [preset, setPreset] = useState<ActivePreset>('default');
   const [lost, setLost] = useState(false);
   const [canvasKey, setCanvasKey] = useState(0);
+  const stageRef = useRef<HTMLDivElement>(null);
+  const rootRef = useRef<RootState | null>(null);
+  // Off screen the canvas does not render at all (time animation would otherwise re-render the scene and
+  // its shadow map for nobody). Invalidations are dropped while frameloop is 'never', so the scene is
+  // rendered once explicitly when it comes back (the Canvas has switched to 'demand' by then).
+  const inView = useInView(stageRef);
+  useEffect(() => {
+    if (inView) rootRef.current?.invalidate();
+  }, [inView]);
 
   const { instant, dims, labels } = data;
   const { sun } = instant;
@@ -83,8 +116,9 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
     }
   };
 
-  const onCreated = useCallback(({ gl }: RootState) => {
-    gl.domElement.addEventListener('webglcontextlost', (event) => {
+  const onCreated = useCallback((state: RootState) => {
+    rootRef.current = state;
+    state.gl.domElement.addEventListener('webglcontextlost', (event) => {
       event.preventDefault();
       setLost(true);
     });
@@ -109,12 +143,12 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
     .join('; ');
 
   return (
-    <div className={styles.stage}>
+    <div ref={stageRef} className={styles.stage}>
       <SceneErrorBoundary fallback={<Placeholder>{t.failed}</Placeholder>}>
         <Canvas
           key={canvasKey}
           className={styles.canvas}
-          frameloop="demand"
+          frameloop={inView ? 'demand' : 'never'}
           flat
           dpr={[1, 2]}
           shadows={{ enabled: true, type: PCFShadowMap }}
@@ -158,7 +192,7 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
           {instant.floors
             .map((fl, k) => (
               <li key={fl.floor} className={styles.floorItem}>
-                <span className={styles.dot} style={cssVars({ '--dot': `var(--floor-${Math.min(7, k)})` })} />
+                <span className={styles.dot} style={cssVars({ '--dot': `var(--${floorToken(k)})` })} />
                 <span className={styles.floorName}>{labels[k]}</span>
                 <span className={styles.floorValue}>{floorStatus[k]}</span>
               </li>

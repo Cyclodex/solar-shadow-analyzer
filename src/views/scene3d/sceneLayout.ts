@@ -13,7 +13,7 @@ import { sunInFacade } from '../../model/geometry';
 import { sunVectorEnu } from '../../model/sun';
 import type { SolarPathPoint } from '../../model/sun';
 import { clamp, toDeg, toRad } from '../../model/units';
-import { enuToThree, facadeToThree, offsetAlong, type Tuple3 } from './coords';
+import { enuToThree, facadeToThree, offsetAlong, panelPointFacade, type Tuple3 } from './coords';
 
 // ─────────────────────────────────────────────
 // SCENE LAYOUT (pure, three.js math only — no rendering)
@@ -34,6 +34,10 @@ export const BUILDING_ABOVE_TOP_SLAB = 3;
 export const BALCONY_SIDE_MARGIN = 0.25;
 /** Balcony slab thickness, m. */
 export const SLAB_THICKNESS = 0.2;
+/** Railing bar thickness, m. */
+export const RAIL_THICKNESS = 0.05;
+/** Clearance between the railing front and the panel plane (no z-fighting with vertical panels), m. */
+export const RAIL_CLEARANCE = 0.015;
 /** Module thickness, m (drawn behind the panel plane; thin so the cast shadow matches the plane model). */
 export const MODULE_THICKNESS = 0.012;
 /** Model shade overlay: offset in front of the panel plane, m. */
@@ -51,6 +55,22 @@ export const SUN_VIEW_DISTANCE = 180;
 export const DEFAULT_FOV = 35;
 /** Obstacles closer than this (near face, m) are included in the shadow-map fit. */
 export const SHADOW_FIT_OBSTACLE_DISTANCE = 60;
+/** Closest and farthest orbit distance from the target, m. */
+export const MIN_CAMERA_DISTANCE = 1.5;
+export const MAX_CAMERA_DISTANCE = 230;
+/**
+ * Lowest camera elevation above the orbit target's horizontal plane, degrees: keeps the camera above the
+ * ground (the target never lies below it). Shared by the orbit limit and the "from the sun" preset, so
+ * the preset is never clamped off the sun rays.
+ */
+export const MIN_CAMERA_ELEVATION = 1;
+/** Largest polar angle of the orbit camera (from straight above), radians. */
+export const MAX_POLAR = Math.PI / 2 - toRad(MIN_CAMERA_ELEVATION);
+/**
+ * Half-extent of the shadow-only stand-in for the model's infinite facade (along the facade and above the
+ * roof), m. Large enough that rays from the rows towards a grazing sun still cross it.
+ */
+export const FACADE_OCCLUDER_EXTENT = 500;
 
 export interface Box3Facade {
   min: FacadeVector;
@@ -150,6 +170,14 @@ export function sceneDims(
   };
 }
 
+/**
+ * Whether a railing fits between the wall and the panel plane at railing distance `railN` (m). Without
+ * it the panels are drawn as mounted directly on the facade (e.g. balcony depth 0).
+ */
+export function hasRailing(railN: number): boolean {
+  return railN >= RAIL_THICKNESS + RAIL_CLEARANCE;
+}
+
 /** The 8 corners of a facade-frame box in three.js world coordinates. */
 export function boxCorners(box: Box3Facade, facadeAzimuth: number): Tuple3[] {
   const out: Tuple3[] = [];
@@ -161,12 +189,86 @@ export function boxCorners(box: Box3Facade, facadeAzimuth: number): Tuple3[] {
   return out;
 }
 
+/**
+ * Shadow-only stand-in for the model's facade, which is infinitely wide and high: a thin slab just behind
+ * the wall (n < 0), cast into the shadow map while the sun is behind the facade so that, as in the model,
+ * no direct sun reaches anything in front of it.
+ */
+export function facadeOccluderBox(dims: SceneDims): Box3Facade {
+  const e = FACADE_OCCLUDER_EXTENT;
+  return {
+    min: { u: -e, n: -0.002, z: 0 },
+    max: { u: e, n: -0.001, z: dims.buildingHeight + e },
+  };
+}
+
 /** Facade-frame box of an obstacle (u = offsetAlong ± width/2, n = distance … distance + depth, z = 0 … height). */
 export function obstacleBox(o: Obstacle): Box3Facade {
   return {
     min: { u: o.offsetAlong - o.width / 2, n: o.distance, z: 0 },
     max: { u: o.offsetAlong + o.width / 2, n: o.distance + o.depth, z: o.height },
   };
+}
+
+/**
+ * Points of the panel rows that obstacles should not hide from the camera: centre and corners of every
+ * module (facade frame).
+ */
+export function viewTargets(dims: SceneDims): FacadeVector[] {
+  const { layout } = dims;
+  const out: FacadeVector[] = [];
+  for (const row of dims.rows) {
+    for (const m of layout.modules) {
+      out.push(panelPointFacade(row, layout, (m.u0 + m.u1) / 2, layout.length / 2));
+      for (const u of [m.u0, m.u1]) {
+        for (const v of [0, layout.length]) out.push(panelPointFacade(row, layout, u, v));
+      }
+    }
+  }
+  return out;
+}
+
+const AXES = ['u', 'n', 'z'] as const;
+
+/** Whether the segment a→b meets the box (slab test; allocation-free). */
+export function segmentHitsBox(a: FacadeVector, b: FacadeVector, box: Box3Facade): boolean {
+  let t0 = 0;
+  let t1 = 1;
+  for (let i = 0; i < AXES.length; i++) {
+    const k = AXES[i];
+    const d = b[k] - a[k];
+    if (Math.abs(d) < 1e-12) {
+      if (a[k] < box.min[k] || a[k] > box.max[k]) return false;
+      continue;
+    }
+    const ta = (box.min[k] - a[k]) / d;
+    const tb = (box.max[k] - a[k]) / d;
+    t0 = Math.max(t0, Math.min(ta, tb));
+    t1 = Math.min(t1, Math.max(ta, tb));
+    if (t0 > t1) return false;
+  }
+  return true;
+}
+
+/**
+ * Whether an obstacle box hides any of `targets` from the camera at `cam` (facade frame). False while the
+ * camera is inside the box: its faces are culled from inside, so it does not hide anything then.
+ */
+export function obstacleBlocksView(
+  cam: FacadeVector,
+  targets: readonly FacadeVector[],
+  box: Box3Facade,
+): boolean {
+  const inside =
+    cam.u > box.min.u &&
+    cam.u < box.max.u &&
+    cam.n > box.min.n &&
+    cam.n < box.max.n &&
+    cam.z > box.min.z &&
+    cam.z < box.max.z;
+  if (inside) return false;
+  for (let i = 0; i < targets.length; i++) if (segmentHitsBox(cam, targets[i], box)) return true;
+  return false;
 }
 
 // ── Sun ──────────────────────────────────────
@@ -359,8 +461,11 @@ export interface CameraPose {
 
 /** Share of the view left free around the fitted box (overlays, breathing room). */
 const VIEW_MARGIN = 0.8;
-/** Lowest sun altitude (degrees) for the "from the sun" preset (camera stays above the ground). */
-export const SUN_VIEW_MIN_ALTITUDE = 1;
+/**
+ * Lowest sun altitude (degrees) for the "from the sun" preset: the lowest camera elevation the orbit allows
+ * (so the camera stays above the ground and exactly on the sun ray).
+ */
+export const SUN_VIEW_MIN_ALTITUDE = MIN_CAMERA_ELEVATION;
 
 /** Viewing directions (facade frame, towards the camera) of the fixed presets. */
 const PRESET_DIRS: Record<Exclude<CameraPreset, 'top' | 'sun'>, FacadeVector> = {
@@ -437,6 +542,14 @@ export function fitBoxFov(
     tv = Math.max(tv, Math.abs(c.y) / d, Math.abs(c.x) / d / Math.max(0.2, aspect));
   }
   return { centre, fov: clamp(toDeg(2 * Math.atan(tv / VIEW_MARGIN)), 3, 60) };
+}
+
+/**
+ * Distance at which a camera with vertical field of view `toFov` frames the plane through the target
+ * exactly as a camera at `distance` with `fromFov` does (same view height at the target).
+ */
+export function equivalentDistance(distance: number, fromFov: number, toFov: number): number {
+  return (distance * Math.tan(toRad(fromFov) / 2)) / Math.tan(toRad(toFov) / 2);
 }
 
 function normalize(v: Tuple3): Tuple3 {

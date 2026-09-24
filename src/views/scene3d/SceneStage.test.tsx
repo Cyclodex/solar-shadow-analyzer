@@ -22,6 +22,7 @@ describe('Scene3D stage (DOM parts)', () => {
 
   it('offers PNG export, camera presets and layer toggles', async () => {
     const camera = await renderLoaded();
+    expect(screen.getByText(/ziehen zum Drehen/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '3D-Ansicht als PNG exportieren' })).toBeInTheDocument();
     for (const name of ['Ansicht zurücksetzen', 'Front', 'Seite', 'Oben', 'Aus Sonnenrichtung']) {
       expect(within(camera).getByRole('button', { name })).toBeInTheDocument();

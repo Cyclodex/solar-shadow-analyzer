@@ -17,9 +17,11 @@ describe('Scene3D without WebGL (jsdom)', () => {
     expect(screen.getByText('3D-Ansicht nicht verfügbar')).toBeInTheDocument();
     expect(screen.getByText(/kein WebGL 2/)).toBeInTheDocument();
     expect(document.querySelector('canvas')).toBeNull();
-    // Nothing to export or toggle.
+    // Nothing to export, toggle or drag.
     expect(screen.queryByRole('button', { name: /PNG/ })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Modell-Schatten' })).toBeNull();
+    expect(screen.getByText(/21\. Juni 2025, 12:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/ziehen zum Drehen/)).toBeNull();
   });
 
   it('shows date and time of the selected instant in the subtitle, in English too', () => {
@@ -27,6 +29,7 @@ describe('Scene3D without WebGL (jsdom)', () => {
     render(<Scene3D />);
     expect(screen.getByRole('heading', { name: '3D view' })).toBeInTheDocument();
     expect(screen.getByText(/21 June 2025, 12:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/drag to rotate/)).toBeNull();
     expect(screen.getByText('3D view not available')).toBeInTheDocument();
   });
 });

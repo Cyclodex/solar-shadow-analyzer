@@ -3,22 +3,34 @@ import { PerspectiveCamera, Vector3 } from 'three';
 import { DEFAULT_CONFIG } from '../../model/defaults';
 import { floorPlacements, panelLayout, shadeFromAbove, sunInFacade } from '../../model/geometry';
 import { solarPath } from '../../model/sun';
-import type { Config, InstantState, ShadeRect, SunPosition } from '../../model/types';
-import { panelPointFacade, type Tuple3 } from './coords';
+import type { Config, FacadeVector, InstantState, Obstacle, ShadeRect, SunPosition } from '../../model/types';
+import { toDeg } from '../../model/units';
+import { panelPointFacade, threeToFacade, type Tuple3 } from './coords';
 import {
   BUILDING_SIDE_MARGIN,
+  DEFAULT_FOV,
+  FACADE_OCCLUDER_EXTENT,
   MAX_OVERLAY_RECTS,
+  MAX_POLAR,
   OVERLAY_VERTICES_PER_RECT,
   SUN_VIEW_DISTANCE,
+  SUN_VIEW_MIN_ALTITUDE,
   boxCorners,
   cameraPose,
+  equivalentDistance,
+  facadeOccluderBox,
   fitShadowCamera,
+  hasRailing,
   hourMarks,
   modelShadeRects,
+  obstacleBlocksView,
+  obstacleBox,
   sceneDims,
+  segmentHitsBox,
   skyState,
   sunDirection,
   sunPathSegments,
+  viewTargets,
   writeOverlayRects,
   type CameraPreset,
   type SceneDims,
@@ -83,6 +95,47 @@ describe('sceneDims', () => {
     }
     expect(d.sunDistance).toBeGreaterThanOrEqual(30);
     expect(d.sunDistance).toBeLessThanOrEqual(60);
+  });
+
+  it('draws a railing only where it fits between the wall and the panels', () => {
+    expect(hasRailing(dimsOf({ building: { balconyDepth: 0 } }).railN)).toBe(false);
+    expect(hasRailing(dimsOf({ building: { balconyDepth: 5 } }).railN)).toBe(false);
+    expect(hasRailing(dimsOf({ building: { balconyDepth: 10 } }).railN)).toBe(true);
+    expect(hasRailing(dimsOf().railN)).toBe(true);
+  });
+});
+
+describe('facadeOccluderBox', () => {
+  it('lies just behind the wall and stands for the infinite facade of the model', () => {
+    const d = dimsOf();
+    const box = facadeOccluderBox(d);
+    expect(box.max.n).toBeLessThan(0);
+    expect(box.max.n - box.min.n).toBeLessThanOrEqual(0.001 + 1e-12);
+    expect(box.min.z).toBe(0);
+    // Every ray from a panel corner towards a sun behind the facade crosses the stand-in, down to grazing
+    // sun (s_n = −0.01): the rendered rows get no direct sun then, as in the model.
+    const plane = (box.min.n + box.max.n) / 2;
+    let checked = 0;
+    for (const alt of [2, 30, 60]) {
+      for (const offset of [90.7, 100, 135, 180]) {
+        for (const side of [-1, 1]) {
+          const s = sunInFacade(sun(alt, d.facadeAzimuth + side * offset), d.facadeAzimuth);
+          if (!(s.n < -0.005)) continue;
+          for (const row of d.rows) {
+            for (const u of [-d.layout.rowWidth / 2, d.layout.rowWidth / 2]) {
+              for (const v of [0, d.layout.length]) {
+                const p = panelPointFacade(row, d.layout, u, v);
+                const t = (plane - p.n) / s.n;
+                expect(Math.abs(p.u + t * s.u)).toBeLessThanOrEqual(FACADE_OCCLUDER_EXTENT);
+                expect(p.z + t * s.z).toBeLessThanOrEqual(box.max.z);
+                checked++;
+              }
+            }
+          }
+        }
+      }
+    }
+    expect(checked).toBe(3 * 4 * 2 * d.rows.length * 4);
   });
 });
 
@@ -230,6 +283,27 @@ describe('cameraPose', () => {
     expect(cameraPose('sun', d, sun(0.5, 200), 1.6)).toBeNull();
   });
 
+  it('keeps the sun view on the sun ray down to its lowest altitude (orbit limit agrees)', () => {
+    const d = dimsOf();
+    const pose = cameraPose('sun', d, sun(SUN_VIEW_MIN_ALTITUDE, 200), 1.6);
+    expect(pose).not.toBeNull();
+    if (!pose) return;
+    const dir = new Vector3(...pose.position).sub(new Vector3(...pose.target)).normalize();
+    const elevation = toDeg(Math.asin(dir.y));
+    expect(elevation).toBeCloseTo(SUN_VIEW_MIN_ALTITUDE, 9);
+    // OrbitControls clamps the camera to polar angles ≤ MAX_POLAR: the pose must not be clamped.
+    expect(elevation).toBeGreaterThanOrEqual(90 - toDeg(MAX_POLAR) - 1e-9);
+  });
+
+  it('keeps the framing at the target when switching to the default field of view', () => {
+    // 180 m at 3° frames the target plane like ≈ 14.95 m at 35°.
+    expect(equivalentDistance(SUN_VIEW_DISTANCE, 3, DEFAULT_FOV)).toBeCloseTo(14.949, 3);
+    expect(equivalentDistance(20, DEFAULT_FOV, DEFAULT_FOV)).toBeCloseTo(20, 12);
+    const d = equivalentDistance(100, 8, DEFAULT_FOV);
+    const viewHeight = (dist: number, fov: number): number => 2 * dist * Math.tan((fov * Math.PI) / 360);
+    expect(viewHeight(d, DEFAULT_FOV)).toBeCloseTo(viewHeight(100, 8), 9);
+  });
+
   it('puts north up in the top view', () => {
     const d = dimsOf();
     const pose = cameraPose('top', d, sun(40, 180), 1);
@@ -238,6 +312,55 @@ describe('cameraPose', () => {
     // Camera offset slightly to the south (+Z): the screen's up direction is north (−Z).
     expect(pose.position[2]).toBeGreaterThan(pose.target[2]);
     expect(pose.position[1] - pose.target[1]).toBeGreaterThan(100 * (pose.position[2] - pose.target[2]));
+  });
+});
+
+describe('obstacles in front of the panel rows', () => {
+  const d = dimsOf();
+  const targets = viewTargets(d);
+  const obstacle = (distance: number, depth = 10): Obstacle => ({
+    id: 'o',
+    name: '',
+    offsetAlong: 0,
+    distance,
+    width: 15,
+    depth,
+    height: 12,
+  });
+  const camera = (preset: CameraPreset): FacadeVector => {
+    const pose = cameraPose(preset, d, sun(40, 180), 1.4);
+    if (!pose) throw new Error('no pose');
+    const [x, y, z] = pose.position;
+    return threeToFacade({ x, y, z }, d.facadeAzimuth, { u: 0, n: 0, z: 0 });
+  };
+
+  it('samples every module of every row', () => {
+    expect(targets).toHaveLength(d.rows.length * d.layout.modules.length * 5);
+  });
+
+  it('detects a neighbour building hiding the rows from the overview', () => {
+    const cam = camera('default');
+    expect(obstacleBlocksView(cam, targets, obstacleBox(obstacle(10)))).toBe(true);
+    expect(obstacleBlocksView(cam, targets, obstacleBox(obstacle(12)))).toBe(true);
+    expect(obstacleBlocksView(cam, targets, obstacleBox(obstacle(20)))).toBe(false);
+    // A thin building close to the facade hides the rows from the front view.
+    expect(obstacleBlocksView(camera('front'), targets, obstacleBox(obstacle(8, 2)))).toBe(true);
+  });
+
+  it('does not block the side view, nor from inside the box (its faces are culled from there)', () => {
+    for (const distance of [5, 8, 10, 12, 20]) {
+      expect(obstacleBlocksView(camera('side'), targets, obstacleBox(obstacle(distance)))).toBe(false);
+    }
+    const box = obstacleBox(obstacle(10));
+    expect(obstacleBlocksView({ u: 0, n: 15, z: 5 }, targets, box)).toBe(false);
+  });
+
+  it('tests segments, not rays', () => {
+    const box = { min: { u: -1, n: 4, z: 0 }, max: { u: 1, n: 6, z: 3 } };
+    expect(segmentHitsBox({ u: 0, n: 10, z: 1 }, { u: 0, n: 0, z: 1 }, box)).toBe(true);
+    expect(segmentHitsBox({ u: 0, n: 10, z: 1 }, { u: 0, n: 7, z: 1 }, box)).toBe(false); // ends before
+    expect(segmentHitsBox({ u: 0, n: 10, z: 4 }, { u: 0, n: 0, z: 4 }, box)).toBe(false); // passes above
+    expect(segmentHitsBox({ u: 3, n: 10, z: 1 }, { u: 3, n: 0, z: 1 }, box)).toBe(false); // parallel, beside
   });
 });
 

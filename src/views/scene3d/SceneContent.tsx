@@ -10,8 +10,10 @@ import { PanelRows } from './PanelRows';
 import {
   SHADOW_FIT_OBSTACLE_DISTANCE,
   boxCorners,
+  facadeOccluderBox,
   obstacleBox,
   skyState,
+  viewTargets,
   type HourMark,
   type SceneDims,
   type SunPathSegment,
@@ -72,8 +74,13 @@ export function SceneContent({
   const { facadeAzimuth } = dims;
   const altitude = instant.sun.altitude;
   const sky = skyState(altitude);
+  // The model's facade is infinitely wide and high: with the sun behind it, no direct sun reaches anything
+  // in front of it. The finite building box would let light past its sides and over its roof, so a
+  // shadow-only stand-in for the infinite facade is added while the sun is behind the facade.
+  const facadeShadow = castShadows && altitude > 0 && instant.sunFacade.n <= 0;
 
-  // Shadow camera: fitted to the building (+ panels) and nearby obstacles; all obstacles set the light distance.
+  // Shadow camera: fitted to the building (+ panels) and nearby obstacles; all obstacles (and the facade
+  // stand-in) set the light distance.
   const { fitPoints, depthPoints } = useMemo(() => {
     const highTop = dims.buildingHeight - dims.focus.max.z < 12;
     const building = {
@@ -91,8 +98,11 @@ export function SceneContent({
       depth.push(...corners);
       if (o.distance <= SHADOW_FIT_OBSTACLE_DISTANCE) fit.push(...corners);
     }
+    if (facadeShadow) depth.push(...boxCorners(facadeOccluderBox(dims), facadeAzimuth));
     return { fitPoints: fit, depthPoints: depth };
-  }, [dims, obstacles, facadeAzimuth]);
+  }, [dims, obstacles, facadeAzimuth, facadeShadow]);
+  const occluder = facadeOccluderBox(dims);
+  const targets = useMemo(() => viewTargets(dims), [dims]);
 
   const glow = useMemo(() => createGlowTexture(palette), [palette]);
   useEffect(() => () => glow.dispose(), [glow]);
@@ -123,7 +133,30 @@ export function SceneContent({
           showModelShade={showModelShade}
           labels={labels}
         />
-        <Obstacles obstacles={obstacles} palette={palette} />
+        <Obstacles
+          obstacles={obstacles}
+          palette={palette}
+          facadeAzimuth={facadeAzimuth}
+          targets={targets}
+          fade={preset !== 'sun'}
+        />
+        {facadeShadow && (
+          // Invisible: writes neither colour nor depth, only into the shadow map (a visible=false object
+          // would be skipped there too).
+          <mesh
+            position={[0, (occluder.min.z + occluder.max.z) / 2, (occluder.min.n + occluder.max.n) / 2]}
+            castShadow
+          >
+            <boxGeometry
+              args={[
+                occluder.max.u - occluder.min.u,
+                occluder.max.z - occluder.min.z,
+                occluder.max.n - occluder.min.n,
+              ]}
+            />
+            <meshBasicMaterial colorWrite={false} depthWrite={false} />
+          </mesh>
+        )}
       </group>
       <SunMarker
         palette={palette}

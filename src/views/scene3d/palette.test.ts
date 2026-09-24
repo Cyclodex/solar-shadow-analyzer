@@ -50,10 +50,11 @@ describe('readPalette', () => {
 });
 
 describe('floorToken', () => {
-  it('maps floor indices to the fixed floor colour order and clamps', () => {
+  it('maps floor indices to the fixed floor colour order and wraps like the charts', () => {
     expect(floorToken(0)).toBe('floor-0');
     expect(floorToken(7)).toBe('floor-7');
-    expect(floorToken(12)).toBe('floor-7');
-    expect(floorToken(-1)).toBe('floor-0');
+    expect(floorToken(8)).toBe('floor-0');
+    expect(floorToken(12)).toBe('floor-4');
+    expect(floorToken(-1)).toBe('floor-7');
   });
 });

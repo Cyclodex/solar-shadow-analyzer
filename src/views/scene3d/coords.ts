@@ -84,3 +84,21 @@ export function panelPointFacade(
 export function offsetAlong(origin: readonly number[], dir: readonly number[], scale: number): Tuple3 {
   return [origin[0] + dir[0] * scale, origin[1] + dir[1] * scale, origin[2] + dir[2] * scale];
 }
+
+/**
+ * three.js world point → facade frame (inverse of facadeToThree), written into `out` (allocation-free, for
+ * per-frame use): u = −X·cos γ − Z·sin γ, n = X·sin γ − Z·cos γ, z = Y.
+ */
+export function threeToFacade(
+  p: { readonly x: number; readonly y: number; readonly z: number },
+  facadeAzimuth: number,
+  out: FacadeVector,
+): FacadeVector {
+  const g = toRad(facadeAzimuth);
+  const s = Math.sin(g);
+  const c = Math.cos(g);
+  out.u = -p.x * c - p.z * s;
+  out.n = p.x * s - p.z * c;
+  out.z = p.y;
+  return out;
+}

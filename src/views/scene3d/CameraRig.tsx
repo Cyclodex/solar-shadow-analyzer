@@ -1,16 +1,28 @@
 import { useCallback, useEffect, useEffectEvent, useLayoutEffect, useRef, type RefObject } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
-import { PerspectiveCamera, Spherical, Vector3 } from 'three';
+import { PerspectiveCamera, Spherical, Vector3, type Camera } from 'three';
 import type { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import type { SunPosition } from '../../model/types';
 import { clamp, toRad } from '../../model/units';
-import { DEFAULT_FOV, cameraPose, type CameraPose, type CameraPreset, type SceneDims } from './sceneLayout';
+import {
+  DEFAULT_FOV,
+  MAX_CAMERA_DISTANCE,
+  MAX_POLAR,
+  MIN_CAMERA_DISTANCE,
+  cameraPose,
+  equivalentDistance,
+  type CameraPose,
+  type CameraPreset,
+  type SceneDims,
+} from './sceneLayout';
 
 // ─────────────────────────────────────────────
 // CAMERA: OrbitControls (damped, above the ground) + presets with a short spherical transition.
 // Presets follow scene changes; 'sun' also follows the sun (time slider / animation) until the user
-// orbits. Nothing is allocated per frame.
+// orbits: only a camera change made by the controls during a pointer interaction counts as a user move,
+// so a click or tap that focuses the scene keeps the preset. Leaving the narrow "from the sun" view
+// restores the default field of view. Nothing is allocated per frame.
 // ─────────────────────────────────────────────
 
 /** 'custom' = the user moved the camera. */
@@ -25,16 +37,14 @@ export interface CameraApi {
   zoom(factor: number): void;
 }
 
-const MIN_DISTANCE = 1.5;
-const MAX_DISTANCE = 230;
-/** Keeps the camera above the ground plane. */
-const MAX_POLAR = Math.PI / 2 - 0.04;
 const TRANSITION_MS = 700;
 
 /** Scratch objects (module level: no allocation per call or frame; the rig never re-enters itself). */
 const OFFSET = new Vector3();
 const SPH = new Spherical();
 const TARGET = new Vector3();
+const SAVED_POS = new Vector3();
+const SAVED_TARGET = new Vector3();
 
 function prefersReducedMotion(): boolean {
   return globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
@@ -91,11 +101,65 @@ export function CameraRig({ dims, sun, preset, onUserMove, apiRef }: CameraRigPr
     [get],
   );
 
+  /** Pointer interaction with the controls in progress (between their 'start' and 'end' events). */
+  const interacting = useRef(false);
+  /** A programmatic controls.update() is running: its 'change' event is not a user move. */
+  const programmatic = useRef(false);
+  const updateControls = useCallback((controls: OrbitControlsImpl) => {
+    programmatic.current = true;
+    try {
+      controls.update();
+    } finally {
+      programmatic.current = false;
+    }
+  }, []);
+
+  /**
+   * Drops the damping momentum left over from a drag without moving the camera (an undamped update zeroes
+   * three-stdlib's sphericalDelta/panOffset). Otherwise it would play out after a preset or key step.
+   */
+  const stopMomentum = useCallback(
+    (controls: OrbitControlsImpl, camera: Camera) => {
+      SAVED_POS.copy(camera.position);
+      SAVED_TARGET.copy(controls.target);
+      controls.enableDamping = false;
+      updateControls(controls);
+      controls.enableDamping = true;
+      camera.position.copy(SAVED_POS);
+      controls.target.copy(SAVED_TARGET);
+      camera.lookAt(controls.target);
+    },
+    [updateControls],
+  );
+
+  /**
+   * Leaves a narrow field of view (the "from the sun" telephoto) for the default one, moving the camera
+   * along its view ray so that the view at the target keeps its size. Free orbiting and zooming then work
+   * with normal perspective and overlay sizes.
+   */
+  const leaveTelephoto = useCallback(() => {
+    const controls = controlsRef.current;
+    const camera = get().camera;
+    if (!controls || !(camera instanceof PerspectiveCamera) || tween.current.active) return;
+    if (Math.abs(camera.fov - DEFAULT_FOV) < 0.01) return;
+    OFFSET.copy(camera.position).sub(controls.target);
+    const distance = clamp(
+      equivalentDistance(OFFSET.length(), camera.fov, DEFAULT_FOV),
+      MIN_CAMERA_DISTANCE,
+      MAX_CAMERA_DISTANCE,
+    );
+    camera.position.copy(controls.target).addScaledVector(OFFSET.normalize(), distance);
+    camera.fov = DEFAULT_FOV;
+    camera.lookAt(controls.target);
+    updateNear(distance);
+  }, [get, updateNear]);
+
   const setPose = useCallback(
     (pose: CameraPose, animate: boolean) => {
       const controls = controlsRef.current;
       const camera = get().camera;
       if (!controls || !(camera instanceof PerspectiveCamera)) return;
+      stopMomentum(controls, camera);
       const tw = tween.current;
       const target = TARGET.set(pose.target[0], pose.target[1], pose.target[2]);
       if (animate && !prefersReducedMotion()) {
@@ -120,11 +184,11 @@ export function CameraRig({ dims, sun, preset, onUserMove, apiRef }: CameraRigPr
         camera.fov = pose.fov;
         camera.lookAt(target);
         updateNear(camera.position.distanceTo(target));
-        controls.update();
+        updateControls(controls);
       }
       invalidate();
     },
-    [get, invalidate, updateNear],
+    [get, invalidate, updateNear, stopMomentum, updateControls],
   );
 
   const apply = useCallback(
@@ -144,15 +208,17 @@ export function CameraRig({ dims, sun, preset, onUserMove, apiRef }: CameraRigPr
       if (!controls) return;
       tween.current.active = false;
       controls.enabled = true;
+      stopMomentum(controls, camera);
+      leaveTelephoto();
       SPH.setFromVector3(OFFSET.copy(camera.position).sub(controls.target));
       SPH.theta += toRad(dAz);
       SPH.phi = clamp(SPH.phi - toRad(dPolar), 0.02, MAX_POLAR);
       camera.position.setFromSpherical(SPH).add(controls.target);
       camera.lookAt(controls.target);
-      controls.update();
+      updateControls(controls);
       invalidate();
     },
-    [get, invalidate],
+    [get, invalidate, stopMomentum, leaveTelephoto, updateControls],
   );
 
   const zoom = useCallback(
@@ -162,14 +228,16 @@ export function CameraRig({ dims, sun, preset, onUserMove, apiRef }: CameraRigPr
       if (!controls) return;
       tween.current.active = false;
       controls.enabled = true;
+      stopMomentum(controls, camera);
+      leaveTelephoto();
       SPH.setFromVector3(OFFSET.copy(camera.position).sub(controls.target));
-      SPH.radius = clamp(SPH.radius * factor, MIN_DISTANCE, MAX_DISTANCE);
+      SPH.radius = clamp(SPH.radius * factor, MIN_CAMERA_DISTANCE, MAX_CAMERA_DISTANCE);
       camera.position.setFromSpherical(SPH).add(controls.target);
       updateNear(SPH.radius);
-      controls.update();
+      updateControls(controls);
       invalidate();
     },
-    [get, invalidate, updateNear],
+    [get, invalidate, updateNear, stopMomentum, leaveTelephoto, updateControls],
   );
 
   useEffect(() => {
@@ -209,17 +277,29 @@ export function CameraRig({ dims, sun, preset, onUserMove, apiRef }: CameraRigPr
     if (t >= 1) {
       tw.active = false;
       controls.enabled = true;
-      controls.update();
+      updateControls(controls);
     }
     invalidate();
   });
 
+  const onStart = useCallback(() => {
+    interacting.current = true;
+  }, []);
+  const onEnd = useCallback(() => {
+    interacting.current = false;
+  }, []);
+  // A pointer press alone ('start') is no move: only an actual camera change while the pointer is down
+  // (drag, wheel, pinch) leaves the preset.
   const onChange = useCallback(() => {
     const controls = controlsRef.current;
     if (!controls) return;
     if (controls.target.y < 0) controls.target.y = 0;
+    if (interacting.current && !programmatic.current) {
+      leaveTelephoto();
+      onUserMove();
+    }
     updateNear(get().camera.position.distanceTo(controls.target));
-  }, [get, updateNear]);
+  }, [get, updateNear, leaveTelephoto, onUserMove]);
 
   return (
     <OrbitControls
@@ -227,10 +307,11 @@ export function CameraRig({ dims, sun, preset, onUserMove, apiRef }: CameraRigPr
       makeDefault
       enableDamping
       dampingFactor={0.12}
-      minDistance={MIN_DISTANCE}
-      maxDistance={MAX_DISTANCE}
+      minDistance={MIN_CAMERA_DISTANCE}
+      maxDistance={MAX_CAMERA_DISTANCE}
       maxPolarAngle={MAX_POLAR}
-      onStart={onUserMove}
+      onStart={onStart}
+      onEnd={onEnd}
       onChange={onChange}
     />
   );
