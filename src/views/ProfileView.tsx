@@ -2,6 +2,8 @@ import { memo, useMemo } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { cssVars } from '../components/cssVars';
 import { HatchPattern } from '../components/svg/HatchPattern';
+import { useElementWidth } from '../components/svg/useElementWidth';
+import { useSvgId } from '../components/svg/useSvgId';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Lang, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
 import { useFloorPlacements, useFocusFloor, useInstant, useLayout, useSelectedUtc } from '../hooks/useModel';
@@ -12,7 +14,6 @@ import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { floorColor } from '../styles/tokens';
 import { pathD, px, stripD, textWidth, wrapText } from './svg/geometry2d';
-import { useSvgId } from '../components/svg/useSvgId';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { useViewText } from './svg/messages';
@@ -34,7 +35,6 @@ import {
   type Scene,
 } from './svg/profileLayout';
 import { SvgFigure } from './svg/SvgFigure';
-import { useElementWidth } from '../components/svg/useElementWidth';
 import { GeometryNotices } from './svg/ViewNotice';
 import s from './svg/svg.module.css';
 import styles from './ProfileView.module.css';

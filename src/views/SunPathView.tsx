@@ -1,6 +1,8 @@
 import { memo, useMemo } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { HatchPattern } from '../components/svg/HatchPattern';
+import { useElementWidth } from '../components/svg/useElementWidth';
+import { useSvgId } from '../components/svg/useSvgId';
 import {
   compassPoint,
   floorLabel,
@@ -24,7 +26,6 @@ import {
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { pathD, px, wrapText } from './svg/geometry2d';
-import { useSvgId } from '../components/svg/useSvgId';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { useViewText } from './svg/messages';
@@ -32,7 +33,6 @@ import { SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
 import { FONT, HATCH, LINE, PAD, VIEW_WIDTH } from './svg/constants';
 import { RIM, RING_ALTITUDES, buildDiagram, hourLabels, type Diagram } from './svg/sunPathLayout';
 import { SvgFigure } from './svg/SvgFigure';
-import { useElementWidth } from '../components/svg/useElementWidth';
 import s from './svg/svg.module.css';
 import styles from './SunPathView.module.css';
 

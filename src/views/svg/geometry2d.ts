@@ -25,6 +25,8 @@ export type Segment = readonly [Pt, Pt];
 /** Rounds a screen coordinate to 0.01 px (short, stable SVG attributes). */
 export const px = (v: number): number => Math.round(v * 100) / 100 + 0;
 
+export const pt = (x: number, y: number): Pt => ({ x, y });
+
 export function boxWidth(b: Box): number {
   return b.x1 - b.x0;
 }
