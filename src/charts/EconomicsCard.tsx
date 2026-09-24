@@ -12,10 +12,10 @@ import { useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { floorColor } from '../styles/tokens';
 import { isFocusVisible } from './lib/focus';
-import { linePath } from './lib/paths';
+import { linePath } from '../components/svg/paths';
 import { stepValue } from './lib/sliderKeys';
-import { useElementWidth } from './lib/useElementWidth';
-import { useSvgId } from './lib/useSvgId';
+import { useElementWidth } from '../components/svg/useElementWidth';
+import { useSvgId } from '../components/svg/useSvgId';
 import styles from './EconomicsCard.module.css';
 
 const de = {

@@ -1,6 +1,7 @@
 import { memo, useId, useMemo } from 'react';
 import { Segmented } from '../components/Segmented';
 import { ViewCard } from '../components/ViewCard';
+import { HatchPattern } from '../components/svg/HatchPattern';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
 import { useFloorPlacements, useFocusFloor, useInstant, useLayout, useSelectedUtc } from '../hooks/useModel';
@@ -11,11 +12,11 @@ import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { pathD, px, rectD, textWidth, wrapText } from './svg/geometry2d';
-import { useSvgId } from './svg/ids';
+import { useSvgId } from '../components/svg/useSvgId';
 import { layoutLegend, type LegendItem } from './svg/legend';
 import { SvgLegend } from './svg/Legend';
 import { relativeDirection, useViewText, type ViewText } from './svg/messages';
-import { FONT, LINE, PAD } from './svg/constants';
+import { FONT, HATCH_LIGHT, LINE, PAD, VIEW_WIDTH } from './svg/constants';
 import {
   INSET,
   boxesD,
@@ -25,9 +26,9 @@ import {
   railLabel,
   type RowGeometry,
 } from './svg/panelShadowLayout';
-import { Arrow, HatchPattern, SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
+import { Arrow, SUN_GLYPH_EXTENT, SunGlyph, TextLines } from './svg/primitives';
 import { SvgFigure } from './svg/SvgFigure';
-import { useElementWidth } from './svg/useElementWidth';
+import { useElementWidth } from '../components/svg/useElementWidth';
 import { GeometryNotices } from './svg/ViewNotice';
 import s from './svg/svg.module.css';
 import styles from './PanelShadowView.module.css';
@@ -259,8 +260,8 @@ export function PanelShadowView() {
   const instant = useInstant();
   const utcMs = useSelectedUtc();
   const minutes = useTimeStore((st) => st.minutes);
-  const [frameRef, width] = useElementWidth<HTMLDivElement>();
-  const hatchId = `${useSvgId()}-hatch`;
+  const [frameRef, width] = useElementWidth<HTMLDivElement>(VIEW_WIDTH);
+  const hatchId = `${useSvgId('v')}-hatch`;
   const n = placements.length;
   const placement = placements[focus] ?? placements[0];
   const floorName = floorLabel(placement.storey, lang);
@@ -371,7 +372,7 @@ export function PanelShadowView() {
       <div ref={frameRef} className={s.frame}>
         <SvgFigure width={width} height={height} title={t.figTitle(floorName, time)} desc={desc}>
           <defs>
-            <HatchPattern id={hatchId} tone="light" />
+            <HatchPattern id={hatchId} {...HATCH_LIGHT} />
           </defs>
           {cast && <path d={cast} className={styles.cast} />}
           <RowDrawing row={row} rowWidth={layout.rowWidth} />

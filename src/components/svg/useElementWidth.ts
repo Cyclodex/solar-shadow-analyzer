@@ -10,8 +10,9 @@ export interface ElementWidthOptions {
 /**
  * Content width (px, floored so a layout never overflows its container) of the element behind the returned
  * callback ref, updated with a ResizeObserver. The first measurement happens in the ref callback, before
- * paint, so there is no frame at the fallback width. Charts render in real pixels at this width so text
- * keeps its size on narrow screens.
+ * paint, so there is no frame at the fallback width. Charts and views lay their SVG out in real pixels at
+ * this width (viewBox = width): text keeps its size on narrow screens and drawings re-layout instead of
+ * shrinking.
  */
 export function useElementWidth<T extends HTMLElement>({
   fallback = 600,

@@ -46,11 +46,11 @@ import {
   type HeatmapPalette,
   type SlotRange,
 } from './lib/heatmap';
-import { measureTextWidth } from './lib/text';
-import { useElementWidth } from './lib/useElementWidth';
+import { measureTextWidth } from '../components/svg/text';
+import { useElementWidth } from '../components/svg/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { usePlotPointer } from './lib/usePlotPointer';
-import { useSvgId } from './lib/useSvgId';
+import { useSvgId } from '../components/svg/useSvgId';
 import chart from './lib/chart.module.css';
 import styles from './ShadeHeatmap.module.css';
 

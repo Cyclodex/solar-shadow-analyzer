@@ -65,10 +65,6 @@
 }
 
 /* ── Text ─────────────────────────────────── */
-.text {
-  fill: var(--text);
-  font-size: 12px;
-}
 
 .label {
   fill: var(--text-muted);
@@ -98,10 +94,6 @@
 
 .badText {
   fill: var(--bad);
-}
-
-.sunText {
-  fill: var(--sun-ink);
 }
 
 /* ── Chart chrome ─────────────────────────── */
@@ -200,12 +192,6 @@
   stroke-width: 1;
 }
 
-.panelStroke {
-  fill: none;
-  stroke: var(--panel);
-  stroke-linecap: round;
-}
-
 .panelCell {
   fill: none;
   stroke: var(--panel-cell);
@@ -220,25 +206,6 @@
 
 .shade {
   fill: var(--shade);
-}
-
-.hatchLine {
-  stroke: var(--text);
-  stroke-opacity: 0.4;
-  stroke-width: 1.2;
-}
-
-.hatchLineLight {
-  stroke: var(--on-accent);
-  stroke-opacity: 0.55;
-  stroke-width: 1.2;
-}
-
-.outline {
-  fill: none;
-  stroke: var(--text-muted);
-  stroke-width: 1;
-  stroke-dasharray: 4 3;
 }
 
 .bad {
@@ -368,9 +335,4 @@
 
 .swatchFloor {
   fill: var(--c);
-}
-
-.swatchLine {
-  fill: none;
-  stroke-width: 2;
 }

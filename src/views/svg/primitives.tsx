@@ -4,8 +4,8 @@ import { arcD, pathD, px, type Anchor, type Pt } from './geometry2d';
 import s from './svg.module.css';
 
 // ─────────────────────────────────────────────
-// SVG PRIMITIVES shared by the 2D views: sun glyph, dimension line, angle arc, arrow, hatch pattern,
-// multi-line text. All sizes in px (user units); colours come from svg.module.css (theme tokens).
+// SVG PRIMITIVES shared by the 2D views: sun glyph, dimension line, angle arc, arrow, multi-line text
+// (hatch fills: components/svg/HatchPattern). All sizes in px (user units); colours come from svg.module.css (theme tokens).
 // ─────────────────────────────────────────────
 
 /** Outer radius of a SunGlyph (rays / glow) relative to its core radius. */
@@ -176,26 +176,6 @@ export function Arrow({ from, to, head = 7, lineClassName, headClassName }: Arro
       <path d={pathD([from, base])} className={lineClassName ?? s.arrowLine} />
       <path d={pathD(headPts, true)} className={headClassName ?? s.arrow} />
     </g>
-  );
-}
-
-/**
- * Diagonal hatch pattern (non-colour cue for shade and blocked zones); reference it as url(#id).
- * tone 'light' draws light lines for use on dark fills (shade on the dark-blue panels).
- */
-export function HatchPattern({
-  id,
-  size = 6,
-  tone = 'dark',
-}: {
-  id: string;
-  size?: number;
-  tone?: 'dark' | 'light';
-}) {
-  return (
-    <pattern id={id} patternUnits="userSpaceOnUse" width={size} height={size} patternTransform="rotate(45)">
-      <line x1="0" y1="0" x2="0" y2={size} className={tone === 'light' ? s.hatchLineLight : s.hatchLine} />
-    </pattern>
   );
 }
 

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { px } from './geometry2d';
-import { useSvgId } from './ids';
+import { useSvgId } from '../../components/svg/useSvgId';
 import s from './svg.module.css';
 
 export interface SvgFigureProps {
@@ -21,7 +21,7 @@ export interface SvgFigureProps {
  * The viewBox equals the layout size in px, so 1 user unit = 1 CSS px at the measured width.
  */
 export function SvgFigure({ width, height, title, desc, className, children }: SvgFigureProps) {
-  const id = useSvgId();
+  const id = useSvgId('v');
   const w = px(width);
   const h = px(height);
   return (

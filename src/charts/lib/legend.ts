@@ -1,8 +1,16 @@
-import { estimateTextWidth, flowLayout, type FlowLayout } from './text';
+import {
+  LEGEND_FONT_SIZE,
+  LEGEND_ITEM_GAP,
+  LEGEND_ROW_HEIGHT,
+  LEGEND_SWATCH_GAP,
+  LEGEND_SWATCH_W,
+} from '../../components/svg/legend';
+import { estimateTextWidth, flowLayout, type FlowLayout } from '../../components/svg/text';
 
 // ─────────────────────────────────────────────
 // LEGEND LAYOUT (SVG legends of the charts, see ChartLegend.tsx)
-// Named Chart… so they are not mixed up with the legend of the 2D views (views/svg), which has another API.
+// Named Chart… so they are not mixed up with the legend of the 2D views (views/svg), which has another API
+// but the same style (components/svg/legend.ts).
 // ─────────────────────────────────────────────
 
 export type ChartLegendSwatch = 'line' | 'rect' | 'band';
@@ -19,11 +27,6 @@ export interface ChartLegendItem {
   opacity?: number;
 }
 
-export const LEGEND_FONT_SIZE = 12;
-export const LEGEND_SWATCH_W = 16;
-export const LEGEND_SWATCH_GAP = 6;
-export const LEGEND_ITEM_GAP = 16;
-export const LEGEND_ROW_HEIGHT = 18;
 /** Space above an SVG legend (keeps exported PNGs from starting flush with the text). */
 export const LEGEND_TOP = 4;
 

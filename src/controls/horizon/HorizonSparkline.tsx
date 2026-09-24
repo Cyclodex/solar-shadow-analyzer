@@ -1,4 +1,5 @@
 import { useId, useMemo, useState, type KeyboardEvent, type PointerEvent } from 'react';
+import { linePath } from '../../components/svg/paths';
 import { useFloorPlacements, useFocusFloor, useTerrainProfile } from '../../hooks/useModel';
 import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../../i18n';
 import { horizonAt, horizonFromPoints, obstacleHorizon } from '../../model/horizon';
@@ -67,8 +68,9 @@ function sample(profile: HorizonProfile, facade: number): number[] {
   return RELS.map((r) => Math.max(0, horizonAt(profile, facade + r)));
 }
 
-function path(values: readonly number[], y: (el: number) => number): string {
-  return values.map((v, i) => `${i === 0 ? 'M' : 'L'}${x(RELS[i]).toFixed(1)} ${y(v).toFixed(1)}`).join(' ');
+/** Plot points of per-azimuth values (index i ↔ RELS[i]). */
+function points(values: readonly number[], y: (el: number) => number): [number, number][] {
+  return values.map((v, i) => [x(RELS[i]), y(v)]);
 }
 
 /**
@@ -227,12 +229,16 @@ export function HorizonSparkline() {
             </g>
           ))}
           <path
-            d={`${path(effective, y)} L${x(HALF_RANGE)} ${y(0)} L${x(-HALF_RANGE)} ${y(0)} Z`}
+            d={linePath([...points(effective, y), [x(HALF_RANGE), y(0)], [x(-HALF_RANGE), y(0)]], true)}
             className={styles.effective}
           />
           <line x1={x(0)} x2={x(0)} y1={PAD_T} y2={y(0)} className={styles.facade} />
           {series.map((s) => (
-            <path key={s.key} d={path(s.values, y)} className={`${styles.line} ${styles[s.key]}`} />
+            <path
+              key={s.key}
+              d={linePath(points(s.values, y))}
+              className={`${styles.line} ${styles[s.key]}`}
+            />
           ))}
           <line x1={PAD_L} x2={W - PAD_R} y1={y(0)} y2={y(0)} className={styles.axis} />
           <text x={PAD_L - 4} y={y(0)} className={styles.yLabel} textAnchor="end" dominantBaseline="central">

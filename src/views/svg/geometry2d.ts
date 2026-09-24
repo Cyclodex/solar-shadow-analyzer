@@ -1,3 +1,5 @@
+import { clamp } from '../../model/units';
+
 // ─────────────────────────────────────────────
 // 2D DRAWING HELPERS (screen space, pixels, y down)
 // Pure drawing math for the SVG views: rounding, path strings, clipping, uniform world→screen fits,
@@ -23,21 +25,12 @@ export type Segment = readonly [Pt, Pt];
 /** Rounds a screen coordinate to 0.01 px (short, stable SVG attributes). */
 export const px = (v: number): number => Math.round(v * 100) / 100 + 0;
 
-export const pt = (x: number, y: number): Pt => ({ x, y });
-
 export function boxWidth(b: Box): number {
   return b.x1 - b.x0;
 }
 
 export function boxHeight(b: Box): number {
   return b.y1 - b.y0;
-}
-
-/** Shrinks a box by `d` px on every side (never below zero size). */
-export function insetBox(b: Box, d: number): Box {
-  const dx = Math.min(d, boxWidth(b) / 2);
-  const dy = Math.min(d, boxHeight(b) / 2);
-  return { x0: b.x0 + dx, y0: b.y0 + dy, x1: b.x1 - dx, y1: b.y1 - dy };
 }
 
 /** "M x y L x y …" through the points (optionally closed). Empty string for no points. */
@@ -124,8 +117,8 @@ export function segmentHitsBox([a, b]: Segment, box: Box): boolean {
 
 /** True if `box` and the circle around `c` with radius `r` overlap. */
 export function boxHitsCircle(box: Box, c: Pt, r: number): boolean {
-  const dx = c.x - within(c.x, box.x0, box.x1);
-  const dy = c.y - within(c.y, box.y0, box.y1);
+  const dx = c.x - clamp(c.x, box.x0, box.x1);
+  const dy = c.y - clamp(c.y, box.y0, box.y1);
   return dx * dx + dy * dy < r * r;
 }
 
@@ -260,11 +253,6 @@ export function clampLabelX(x: number, width: number, anchor: Anchor, x0: number
   const left = anchor === 'start' ? x : anchor === 'middle' ? x - width / 2 : x - width;
   const shift = left < x0 ? x0 - left : left + width > x1 ? x1 - (left + width) : 0;
   return x + shift;
-}
-
-/** Keeps a value inside [min, max] (min wins if the range is empty). */
-export function within(v: number, min: number, max: number): number {
-  return Math.max(min, Math.min(max, v));
 }
 
 /** Uniform world→screen transform: world x → right, world y → up (screen y is flipped). */

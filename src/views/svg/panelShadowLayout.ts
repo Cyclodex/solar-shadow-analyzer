@@ -1,6 +1,6 @@
 import { CELLS_ACROSS_SHORT_SIDE, SUBSTRINGS_PER_MODULE } from '../../model/geometry';
 import type { PanelLayout, ShadeRect } from '../../model/types';
-import { boxDistance, labelBox, pathD, pt, rectD, textWidth, type Box, type Pt } from './geometry2d';
+import { boxDistance, labelBox, pathD, rectD, textWidth, type Box, type Pt } from './geometry2d';
 import { PAD } from './constants';
 
 // ─────────────────────────────────────────────
@@ -143,7 +143,14 @@ export function railLabel(
   });
   if (free) return { ...free, y, leader: null };
   const top = row.box.y0 - 4;
-  return { ...sides[0], y: top, leader: [pt(sides[0].x, top + 3), pt(sides[0].x, row.railY - 2)] };
+  return {
+    ...sides[0],
+    y: top,
+    leader: [
+      { x: sides[0].x, y: top + 3 },
+      { x: sides[0].x, y: row.railY - 2 },
+    ],
+  };
 }
 
 /** Substring bands of each module touched by a shade rectangle. */

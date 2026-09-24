@@ -10,19 +10,19 @@ import { floorColor } from '../styles/tokens';
 import { AxisX, AxisY, type AxisTick } from './lib/Axes';
 import { ChartStats } from './lib/ChartStats';
 import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
-import { HatchPattern } from './lib/HatchPattern';
+import { HatchPattern } from '../components/svg/HatchPattern';
 import { ChartLegend } from './lib/ChartLegend';
 import { topDown, useFloorLabels } from './lib/floors';
 import { LEGEND_TOP, layoutChartLegend, type ChartLegendItem, type ChartLegendLayout } from './lib/legend';
-import { roundedTopBar } from './lib/paths';
+import { roundedTopBar } from '../components/svg/paths';
 import { niceTicks, scaleBand, scaleLinear, stepDigits, type BandScale, type LinearScale } from './lib/scale';
 import { useSourceLabel } from './lib/sourceLabel';
-import { useElementWidth } from './lib/useElementWidth';
+import { useElementWidth } from '../components/svg/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { PlotSlider } from './lib/PlotSlider';
 import { stepValue } from './lib/sliderKeys';
 import { usePlotPointer } from './lib/usePlotPointer';
-import { useSvgId } from './lib/useSvgId';
+import { useSvgId } from '../components/svg/useSvgId';
 import chart from './lib/chart.module.css';
 import styles from './MonthlyYieldChart.module.css';
 
@@ -95,6 +95,8 @@ interface Geometry {
 
 /** Id of the hatch pattern of floor k (or the neutral one for all floors) inside one chart instance. */
 const hatchId = (uid: string, k: number | 'loss'): string => `${uid}-hatch-${k}`;
+/** Loss texture: lines falling to the right over a light wash of the same colour. */
+const LOSS_HATCH = { wash: 0.22, angle: 135 } as const;
 
 const monthlyLoss = (sim: SimulationResult, k: number, m: number): number =>
   Math.max(0, sim.floors[k].monthlyUnshadedKwh[m] - sim.floors[k].monthlyKwh[m]);
@@ -480,9 +482,9 @@ export function MonthlyYieldChart() {
               <desc id={descId}>{summary}</desc>
               <defs>
                 {Array.from({ length: numFloors }, (_, k) => (
-                  <HatchPattern key={k} id={patternId(k)} color={floorColor(k)} />
+                  <HatchPattern key={k} id={patternId(k)} color={floorColor(k)} {...LOSS_HATCH} />
                 ))}
-                <HatchPattern id={patternId('loss')} color="var(--text-faint)" />
+                <HatchPattern id={patternId('loss')} color="var(--text-faint)" {...LOSS_HATCH} />
               </defs>
               <ChartLegend layout={geom.legend} x={geom.plot.left} y={LEGEND_TOP} />
               <AxisY

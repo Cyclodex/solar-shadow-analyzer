@@ -41,12 +41,6 @@
   font-size: 11px;
 }
 
-/* ── Legend (inside the SVG so PNG exports are complete) ── */
-.legendText {
-  fill: var(--text-muted);
-  font-size: 12px;
-}
-
 /* ── Markers ────────────────────────────── */
 .series {
   fill: none;
