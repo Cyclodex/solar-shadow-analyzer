@@ -1,38 +1,69 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '../components/Button';
-import { ShareIcon, CheckIcon } from '../components/icons';
+import { CheckIcon, ShareIcon } from '../components/icons';
 import { useMessages, type Messages } from '../i18n';
+import { useCommon } from '../i18n/common';
+import { copyText } from '../export/clipboard';
+import { useConfigStore } from '../state/configStore';
 import { shareUrl } from '../state/urlSync';
 import styles from './ShareButton.module.css';
 
 const de = {
   share: 'Teilen',
-  shareLabel: 'Link zu dieser Konfiguration kopieren',
+  copyLabel: 'Link zu dieser Konfiguration kopieren',
+  shareLabel: 'Link zu dieser Konfiguration teilen',
   copied: 'Link kopiert',
-  manual: 'Kopieren nicht möglich – Link bitte manuell kopieren:',
+  manual: 'Kopieren nicht möglich – bitte den Link manuell kopieren:',
   linkLabel: 'Link zu dieser Konfiguration',
-  close: 'Schliessen',
+  shareText: (name: string) => `Verschattungsanalyse für Balkon-Solarpanels – ${name}`,
 };
 const messages: Messages<typeof de> = {
   de,
   en: {
     share: 'Share',
-    shareLabel: 'Copy link to this configuration',
+    copyLabel: 'Copy link to this configuration',
+    shareLabel: 'Share link to this configuration',
     copied: 'Link copied',
     manual: 'Copying failed – please copy the link manually:',
     linkLabel: 'Link to this configuration',
-    close: 'Close',
+    shareText: (name) => `Shading analysis for balcony solar panels – ${name}`,
   },
 };
 
 /** How long the "copied" confirmation stays visible. */
 const COPIED_MS = 2500;
+/** Viewport margin kept free by the popover, px. */
+const EDGE = 8;
 
-/** Copies the share link (#c=…) of the current config; shows the link for manual copying if the clipboard fails. */
+/**
+ * Native share sheet on touch devices (phones, tablets); desktop browsers copy the link instead,
+ * which is what a "share" button is expected to do there.
+ */
+function nativeShareAvailable(data: ShareData): boolean {
+  if (typeof navigator.share !== 'function') return false;
+  if (!globalThis.matchMedia?.('(pointer: coarse)').matches) return false;
+  try {
+    return navigator.canShare ? navigator.canShare(data) : true;
+  } catch {
+    return false;
+  }
+}
+
+const isAbort = (e: unknown): boolean => e instanceof DOMException && e.name === 'AbortError';
+
+/**
+ * Share link (#c=… of the current config, model/share buildShareUrl via state/urlSync). Touch devices
+ * open the native share sheet; otherwise the link is copied (Clipboard API, legacy fallback) with a
+ * "Link kopiert" confirmation. If copying is impossible, the link is shown in a field to copy by hand.
+ */
 export function ShareButton() {
   const t = useMessages(messages);
+  const c = useCommon();
   const [copied, setCopied] = useState(false);
   const [manualUrl, setManualUrl] = useState<string | null>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const inputId = useId();
 
@@ -42,32 +73,88 @@ export function ShareButton() {
     return () => clearTimeout(timer);
   }, [copied]);
 
-  useEffect(() => {
-    if (manualUrl) inputRef.current?.select();
+  const closeManual = useCallback((focusButton: boolean): void => {
+    setManualUrl(null);
+    if (focusButton) buttonRef.current?.focus();
+  }, []);
+
+  // Manual-copy popover: select the link, keep the popover inside the viewport, close on outside clicks.
+  useLayoutEffect(() => {
+    const el = popoverRef.current;
+    if (!manualUrl || !el) return;
+    inputRef.current?.select();
+    el.style.setProperty('--shift', '0px');
+    const r = el.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    const shift = r.left < EDGE ? EDGE - r.left : r.right > vw - EDGE ? vw - EDGE - r.right : 0;
+    el.style.setProperty('--shift', `${Math.round(shift)}px`);
   }, [manualUrl]);
+
+  useEffect(() => {
+    if (!manualUrl) return;
+    const onPointerDown = (e: PointerEvent): void => {
+      if (!rootRef.current?.contains(e.target as Node)) closeManual(false);
+    };
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [manualUrl, closeManual]);
 
   const onClick = async (): Promise<void> => {
     const url = shareUrl();
-    try {
-      if (!navigator.clipboard) throw new Error('Clipboard API unavailable');
-      await navigator.clipboard.writeText(url);
+    const data: ShareData = {
+      title: document.title,
+      text: t.shareText(useConfigStore.getState().config.location.name),
+      url,
+    };
+    if (nativeShareAvailable(data)) {
+      try {
+        await navigator.share(data);
+        return;
+      } catch (e) {
+        if (isAbort(e)) return; // the user closed the share sheet
+        // other failures: fall back to copying
+      }
+    }
+    if (await copyText(url)) {
       setManualUrl(null);
       setCopied(true);
-    } catch {
+    } else {
+      setCopied(false);
       setManualUrl(url);
     }
   };
 
+  const touchShare =
+    typeof navigator.share === 'function' && globalThis.matchMedia?.('(pointer: coarse)').matches;
+
   return (
-    <div className={styles.root}>
-      <Button icon={copied ? <CheckIcon /> : <ShareIcon />} onClick={onClick} title={t.shareLabel}>
+    <div ref={rootRef} className={styles.root}>
+      <Button
+        ref={buttonRef}
+        icon={copied ? <CheckIcon /> : <ShareIcon />}
+        onClick={onClick}
+        title={touchShare ? t.shareLabel : t.copyLabel}
+        data-state={copied ? 'copied' : undefined}
+        className={styles.button}
+      >
         <span className={styles.text}>{copied ? t.copied : t.share}</span>
       </Button>
       <span className="sr-only" role="status">
         {copied ? t.copied : ''}
       </span>
       {manualUrl && (
-        <div className={styles.popover} role="dialog" aria-labelledby={`${inputId}-label`}>
+        <div
+          ref={popoverRef}
+          className={styles.popover}
+          role="dialog"
+          aria-labelledby={`${inputId}-label`}
+          onKeyDown={(e) => {
+            if (e.key === 'Escape') {
+              e.stopPropagation();
+              closeManual(true);
+            }
+          }}
+        >
           <label id={`${inputId}-label`} htmlFor={inputId} className={styles.label}>
             {t.manual}
           </label>
@@ -77,13 +164,11 @@ export function ShareButton() {
             className={styles.input}
             readOnly
             value={manualUrl}
+            aria-describedby={`${inputId}-label`}
             onFocus={(e) => e.target.select()}
-            onKeyDown={(e) => {
-              if (e.key === 'Escape') setManualUrl(null);
-            }}
           />
-          <Button size="sm" onClick={() => setManualUrl(null)}>
-            {t.close}
+          <Button size="sm" onClick={() => closeManual(true)}>
+            {c.close}
           </Button>
         </div>
       )}

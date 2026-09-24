@@ -26,7 +26,7 @@ export function downloadText(
   mime = 'text/plain;charset=utf-8',
   opts: { bom?: boolean } = {},
 ): void {
-  const parts: BlobPart[] = opts.bom ? ['﻿', text] : [text];
+  const parts: BlobPart[] = opts.bom ? ['\uFEFF', text] : [text];
   downloadBlob(new Blob(parts, { type: mime }), filename);
 }
 

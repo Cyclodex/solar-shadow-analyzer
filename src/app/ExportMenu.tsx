@@ -1,87 +1,446 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
+import {
+  Fragment,
+  useCallback,
+  useDeferredValue,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ChangeEvent,
+  type KeyboardEvent,
+  type RefObject,
+} from 'react';
+import { createPortal } from 'react-dom';
 import { Button } from '../components/Button';
 import { DownloadIcon } from '../components/icons';
-import { useMessages, type Messages } from '../i18n';
-import { configToJson } from '../model/share';
-import { downloadText, safeFilename } from '../export/download';
-import { useConfigStore } from '../state/configStore';
+import { floorLabel, useLang, useMessages, type Messages } from '../i18n';
+import { useCommon } from '../i18n/common';
+import { useFloorPlacements, useHeatmap, useSimulation, useTiltSweep } from '../hooks/useModel';
+import type { Config } from '../model/types';
+import {
+  CONFIG_FILE_ACCEPT,
+  downloadConfigJson,
+  readConfigFile,
+  type ConfigImportError,
+} from '../export/configFile';
+import { exportFilename } from '../export/filenames';
+import { downloadCsv, heatmapCsv, monthlyResultsCsv, tiltSweepCsv } from '../export/resultsCsv';
+import { PrintReport } from '../export/PrintReport';
+import { printReport, usePrintMode } from '../export/print';
+import { useConfig, useConfigStore } from '../state/configStore';
+import { useDataStore } from '../state/dataStore';
 import styles from './ExportMenu.module.css';
 
 const de = {
   export: 'Export',
-  configJson: 'Konfiguration (JSON)',
+  menuLabel: 'Export und Import',
+  configGroup: 'Konfiguration',
+  saveConfig: 'Konfiguration speichern',
+  loadConfig: 'Konfiguration laden …',
+  resultsGroup: 'Ergebnisse',
+  monthly: 'Monatsertrag je Stockwerk',
+  tiltSweep: 'Neigungsvergleich',
+  heatmap: (floor: string) => `Schatten-Heatmap ${floor}`,
+  computing: 'wird berechnet …',
+  print: 'Bericht drucken …',
+  printHint: 'auch als PDF',
+  clearSkyTag: 'klarer-himmel',
+  imported: (name: string) => `Konfiguration «${name}» geladen.`,
+  undo: 'Rückgängig',
+  undone: 'Vorherige Konfiguration wiederhergestellt.',
+  errors: {
+    empty: 'Die Datei ist leer.',
+    'too-large': 'Die Datei ist zu gross für eine Konfiguration.',
+    unreadable: 'Die Datei konnte nicht gelesen werden.',
+    invalid: 'Die Datei enthält keine gültige Konfiguration dieser App (JSON).',
+  } satisfies Record<ConfigImportError, string>,
 };
 const messages: Messages<typeof de> = {
   de,
   en: {
     export: 'Export',
-    configJson: 'Configuration (JSON)',
+    menuLabel: 'Export and import',
+    configGroup: 'Configuration',
+    saveConfig: 'Save configuration',
+    loadConfig: 'Load configuration …',
+    resultsGroup: 'Results',
+    monthly: 'Monthly yield per floor',
+    tiltSweep: 'Tilt comparison',
+    heatmap: (floor) => `Shade heatmap ${floor}`,
+    computing: 'computing …',
+    print: 'Print report …',
+    printHint: 'or save as PDF',
+    clearSkyTag: 'clear-sky',
+    imported: (name) => `Configuration “${name}” loaded.`,
+    undo: 'Undo',
+    undone: 'Previous configuration restored.',
+    errors: {
+      empty: 'The file is empty.',
+      'too-large': 'The file is too large for a configuration.',
+      unreadable: 'The file could not be read.',
+      invalid: 'The file does not contain a valid configuration of this app (JSON).',
+    },
   },
 };
+
+type MessageSet = typeof de;
 
 interface MenuItem {
   id: string;
   label: string;
+  /** Format tag shown on the right (part of the accessible name). */
+  format?: string;
+  /** Secondary text (e.g. why the item is unavailable). */
+  detail?: string;
+  disabled?: boolean;
   onSelect: () => void;
 }
 
-/** Downloads the current config as JSON (model/share configToJson). */
-function downloadConfigJson(): void {
-  const config = useConfigStore.getState().config;
-  const name = safeFilename(`verschattung-${config.location.name}`, 'verschattung-config');
-  downloadText(configToJson(config), `${name}.json`, 'application/json;charset=utf-8');
+interface MenuGroup {
+  id: string;
+  label?: string;
+  items: MenuItem[];
+}
+
+type Notice =
+  | { kind: 'imported'; text: string; previous: Config }
+  | { kind: 'info'; text: string }
+  | { kind: 'error'; text: string };
+
+/** Viewport margin kept free by popovers, px. */
+const EDGE = 8;
+/** Success notices disappear after this time (unless focus is inside). */
+const NOTICE_MS = 8000;
+
+/** Shifts an absolutely positioned popover horizontally so it stays inside the viewport. */
+function useKeepInViewport(ref: RefObject<HTMLElement | null>, active: boolean): void {
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!active || !el) return;
+    el.style.setProperty('--shift', '0px');
+    const r = el.getBoundingClientRect();
+    const vw = document.documentElement.clientWidth || window.innerWidth;
+    let shift = 0;
+    if (r.left < EDGE) shift = EDGE - r.left;
+    else if (r.right > vw - EDGE) shift = vw - EDGE - r.right;
+    el.style.setProperty('--shift', `${Math.round(shift)}px`);
+  }, [ref, active]);
+}
+
+/** Menu entries; data-dependent entries are disabled until their results exist. */
+function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
+  const c = useCommon();
+  const lang = useLang();
+  const config = useConfig();
+  const simulation = useSimulation();
+  const clearSky = useDataStore((s) => s.weather.series?.source === 'clear-sky');
+  // The tilt sweep may not be cached yet: compute it after the menu has painted.
+  const ready = useDeferredValue(true, false);
+  const sweep = useTiltSweep(ready);
+  const heatmap = useHeatmap();
+  const placements = useFloorPlacements();
+  const name = config.location.name;
+  const heatmapFloor = floorLabel(placements[heatmap.floor]?.storey ?? heatmap.floor, lang);
+
+  return [
+    {
+      id: 'config',
+      label: t.configGroup,
+      items: [
+        {
+          id: 'config-save',
+          label: t.saveConfig,
+          format: 'JSON',
+          onSelect: () => downloadConfigJson(useConfigStore.getState().config, lang),
+        },
+        { id: 'config-load', label: t.loadConfig, format: 'JSON', onSelect: onLoadConfig },
+      ],
+    },
+    {
+      id: 'results',
+      label: t.resultsGroup,
+      items: [
+        {
+          id: 'csv-monthly',
+          label: t.monthly,
+          format: c.exportCsv,
+          disabled: !simulation,
+          detail: simulation ? undefined : t.computing,
+          onSelect: () => {
+            if (!simulation) return;
+            const parts = [
+              name,
+              simulation.year,
+              ...(simulation.source === 'clear-sky' ? [t.clearSkyTag] : []),
+            ];
+            downloadCsv(monthlyResultsCsv(simulation, lang), exportFilename('monthly', lang, parts, 'csv'));
+          },
+        },
+        {
+          id: 'csv-tilt',
+          label: t.tiltSweep,
+          format: c.exportCsv,
+          disabled: !sweep,
+          detail: sweep ? undefined : t.computing,
+          onSelect: () => {
+            if (!sweep) return;
+            const storeys = placements.map((p) => p.storey);
+            downloadCsv(
+              tiltSweepCsv(sweep.points, storeys, lang),
+              exportFilename(
+                'tiltSweep',
+                lang,
+                [name, config.weather.year, ...(clearSky ? [t.clearSkyTag] : [])],
+                'csv',
+              ),
+            );
+          },
+        },
+        {
+          id: 'csv-heatmap',
+          label: t.heatmap(heatmapFloor),
+          format: c.exportCsv,
+          onSelect: () =>
+            downloadCsv(
+              heatmapCsv(heatmap, lang),
+              exportFilename('heatmap', lang, [name, heatmapFloor, heatmap.year], 'csv'),
+            ),
+        },
+      ],
+    },
+    {
+      id: 'report',
+      items: [
+        { id: 'print', label: t.print, detail: t.printHint, onSelect: () => setTimeout(printReport, 0) },
+      ],
+    },
+  ];
+}
+
+interface MenuProps {
+  id: string;
+  label: string;
+  t: MessageSet;
+  onClose: (focusButton: boolean) => void;
+  onLoadConfig: () => void;
+}
+
+/** The open menu (role="menu"); mounted only while open, so its data hooks cost nothing when closed. */
+function Menu({ id, label, t, onClose, onLoadConfig }: MenuProps) {
+  const groups = useMenuGroups(t, onLoadConfig);
+  const menuRef = useRef<HTMLDivElement>(null);
+  useKeepInViewport(menuRef, true);
+
+  const itemEls = (): HTMLButtonElement[] =>
+    Array.from(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []);
+
+  useEffect(() => {
+    menuRef.current?.querySelector<HTMLButtonElement>('[role="menuitem"]')?.focus();
+  }, []);
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
+    const els = itemEls();
+    const i = els.indexOf(document.activeElement as HTMLButtonElement);
+    const focusAt = (k: number): void => els[(k + els.length) % els.length]?.focus();
+    switch (e.key) {
+      case 'Escape':
+        e.preventDefault();
+        e.stopPropagation();
+        onClose(true);
+        return;
+      case 'ArrowDown':
+        e.preventDefault();
+        focusAt(i + 1);
+        return;
+      case 'ArrowUp':
+        e.preventDefault();
+        focusAt(i - 1);
+        return;
+      case 'Home':
+        e.preventDefault();
+        focusAt(0);
+        return;
+      case 'End':
+        e.preventDefault();
+        focusAt(els.length - 1);
+        return;
+      case 'Tab':
+        onClose(false);
+        return;
+    }
+    // Type-ahead: first item (after the current one) starting with the typed character.
+    if (e.key.length === 1 && /\S/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const key = e.key.toLocaleLowerCase();
+      for (let k = 1; k <= els.length; k++) {
+        const el = els[(i + k) % els.length];
+        if (el.textContent?.trim().toLocaleLowerCase().startsWith(key)) {
+          el.focus();
+          break;
+        }
+      }
+    }
+  };
+
+  return (
+    <div ref={menuRef} id={id} role="menu" aria-label={label} className={styles.menu} onKeyDown={onKeyDown}>
+      {groups.map((g, gi) => (
+        <Fragment key={g.id}>
+          {gi > 0 && <div role="separator" className={styles.separator} />}
+          <div role="group" aria-label={g.label} className={styles.group}>
+            {g.label && (
+              <div className={styles.groupLabel} aria-hidden="true">
+                {g.label}
+              </div>
+            )}
+            {g.items.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                role="menuitem"
+                tabIndex={-1}
+                aria-disabled={item.disabled || undefined}
+                className={styles.item}
+                onClick={() => {
+                  if (item.disabled) return;
+                  onClose(true);
+                  item.onSelect();
+                }}
+              >
+                <span className={styles.itemText}>
+                  {/* The spaces separate the parts in the accessible name (ignored by the flex layout). */}
+                  <span className={styles.itemLabel}>{item.label}</span>
+                  {item.detail && (
+                    <>
+                      {' '}
+                      <span className={styles.itemDetail}>{item.detail}</span>
+                    </>
+                  )}
+                </span>
+                {item.format && (
+                  <>
+                    {' '}
+                    <span className={styles.format}>{item.format}</span>
+                  </>
+                )}
+              </button>
+            ))}
+          </div>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+/** Result of a config import (success with undo, or an error), anchored below the menu button. */
+function ImportNotice({
+  notice,
+  t,
+  onClose,
+  onUndo,
+}: {
+  notice: Notice;
+  t: MessageSet;
+  /** focusButton: return focus to the menu button (the notice had focus). */
+  onClose: (focusButton: boolean) => void;
+  onUndo: () => void;
+}) {
+  const c = useCommon();
+  const ref = useRef<HTMLDivElement>(null);
+  useKeepInViewport(ref, true);
+
+  useEffect(() => {
+    if (notice.kind === 'error') return;
+    const hide = (): void => {
+      if (ref.current?.contains(document.activeElement)) timer = setTimeout(hide, NOTICE_MS);
+      else onClose(false);
+    };
+    let timer = setTimeout(hide, NOTICE_MS);
+    return () => clearTimeout(timer);
+  }, [notice, onClose]);
+
+  return (
+    <div
+      ref={ref}
+      className={styles.notice}
+      data-kind={notice.kind}
+      data-print="hide"
+      role={notice.kind === 'error' ? 'alert' : 'status'}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onClose(true);
+      }}
+    >
+      <p className={styles.noticeText}>{notice.text}</p>
+      <div className={styles.noticeActions}>
+        {notice.kind === 'imported' && (
+          <Button size="sm" onClick={onUndo}>
+            {t.undo}
+          </Button>
+        )}
+        <Button size="sm" variant="ghost" onClick={() => onClose(true)}>
+          {c.close}
+        </Button>
+      </div>
+    </div>
+  );
 }
 
 /**
- * Export menu (menu button pattern): button with aria-haspopup/aria-expanded, role="menu" with
- * role="menuitem" entries; Arrow keys move, Escape closes and returns focus, outside click closes.
+ * Export menu (menu button pattern): config JSON export/import, result tables as CSV, print report.
+ * The button has aria-haspopup/aria-expanded; the menu takes focus, Arrow keys/Home/End/type-ahead
+ * move, Escape closes and returns focus, Tab and outside clicks close. Unavailable entries stay
+ * focusable with aria-disabled. Also mounts the print mode (light theme + inputs appendix).
  */
 export function ExportMenu() {
   const t = useMessages(messages);
   const [open, setOpen] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
   const menuId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
-
-  const items: MenuItem[] = [{ id: 'config-json', label: t.configJson, onSelect: downloadConfigJson }];
+  const fileRef = useRef<HTMLInputElement>(null);
+  const printedAt = usePrintMode();
 
   useEffect(() => {
-    if (!open) return;
-    itemRefs.current[0]?.focus();
+    if (!open && !notice) return;
     const onPointerDown = (e: PointerEvent): void => {
-      if (!rootRef.current?.contains(e.target as Node)) setOpen(false);
+      if (rootRef.current?.contains(e.target as Node)) return;
+      setOpen(false);
+      if (notice?.kind !== 'imported') setNotice(null);
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
+  }, [open, notice]);
 
   const close = (focusButton: boolean): void => {
     setOpen(false);
     if (focusButton) buttonRef.current?.focus();
   };
 
-  const onMenuKeyDown = (e: KeyboardEvent<HTMLDivElement>): void => {
-    const els = itemRefs.current.filter((x): x is HTMLButtonElement => x !== null);
-    const i = els.indexOf(document.activeElement as HTMLButtonElement);
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      close(true);
-    } else if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      els[(i + 1) % els.length]?.focus();
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      els[(i - 1 + els.length) % els.length]?.focus();
-    } else if (e.key === 'Home') {
-      e.preventDefault();
-      els[0]?.focus();
-    } else if (e.key === 'End') {
-      e.preventDefault();
-      els[els.length - 1]?.focus();
-    } else if (e.key === 'Tab') {
-      setOpen(false);
+  const closeNotice = useCallback((focusButton: boolean): void => {
+    setNotice(null);
+    if (focusButton) buttonRef.current?.focus();
+  }, []);
+
+  const onFile = async (e: ChangeEvent<HTMLInputElement>): Promise<void> => {
+    const input = e.currentTarget;
+    const file = input.files?.[0];
+    input.value = ''; // the same file can be chosen again
+    if (!file) return;
+    const result = await readConfigFile(file);
+    if (!result.ok) {
+      setNotice({ kind: 'error', text: t.errors[result.error] });
+      return;
     }
+    const previous = useConfigStore.getState().config;
+    useConfigStore.getState().replace(result.config);
+    setNotice({ kind: 'imported', text: t.imported(result.config.location.name), previous });
+  };
+
+  const undo = (): void => {
+    if (notice?.kind !== 'imported') return;
+    useConfigStore.getState().replace(notice.previous);
+    setNotice({ kind: 'info', text: t.undone });
   };
 
   return (
@@ -92,10 +451,15 @@ export function ExportMenu() {
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        onClick={() => setOpen((o) => !o)}
+        title={t.menuLabel}
+        onClick={() => {
+          setNotice(null);
+          setOpen((o) => !o);
+        }}
         onKeyDown={(e) => {
-          if (e.key === 'ArrowDown' && !open) {
+          if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && !open) {
             e.preventDefault();
+            setNotice(null);
             setOpen(true);
           }
         }}
@@ -103,27 +467,17 @@ export function ExportMenu() {
         <span className={styles.text}>{t.export}</span>
       </Button>
       {open && (
-        <div id={menuId} role="menu" aria-label={t.export} className={styles.menu} onKeyDown={onMenuKeyDown}>
-          {items.map((item, i) => (
-            <button
-              key={item.id}
-              ref={(el) => {
-                itemRefs.current[i] = el;
-              }}
-              type="button"
-              role="menuitem"
-              tabIndex={-1}
-              className={styles.item}
-              onClick={() => {
-                item.onSelect();
-                close(true);
-              }}
-            >
-              {item.label}
-            </button>
-          ))}
-        </div>
+        <Menu
+          id={menuId}
+          label={t.menuLabel}
+          t={t}
+          onClose={close}
+          onLoadConfig={() => fileRef.current?.click()}
+        />
       )}
+      {notice && <ImportNotice notice={notice} t={t} onClose={closeNotice} onUndo={undo} />}
+      <input ref={fileRef} type="file" accept={CONFIG_FILE_ACCEPT} hidden onChange={onFile} />
+      {printedAt !== null && createPortal(<PrintReport printedAt={printedAt} />, document.body)}
     </div>
   );
 }
