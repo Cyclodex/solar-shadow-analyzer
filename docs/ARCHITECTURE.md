@@ -11,6 +11,8 @@ Es ist die verbindliche Referenz für alle Beiträge.
 - Zustand für den App-State (mit `persist` für localStorage)
 - Three.js über `@react-three/fiber` 9 + `@react-three/drei` 10 (nur in der lazy geladenen 3D-Ansicht)
 - fast-png: Dekodierung der DEM-Kacheln (Terrarium-PNG) in `model/terrain.ts`
+- Web Worker (Modul-Worker) für Download, Dekodierung und Berechnung des Geländehorizonts (`src/workers`), mit
+  Rückfall in den Hauptthread, siehe [Gelände-Horizont](#gelände-horizont)
 - vite-plugin-pwa (Workbox): Web-App-Manifest und Service Worker, siehe [PWA und Deployment](#pwa-und-deployment)
 - Styling: CSS-Variablen (`src/styles/global.css`) + CSS Modules pro Komponente (`*.module.css`), keine Inline-Style-Monolithen
 - Alle 2D-Visualisierungen als SVG (Heatmap als `<canvas>`), keine Chart-Library
@@ -19,8 +21,10 @@ Es ist die verbindliche Referenz für alle Beiträge.
 
 ```
 src/
-  main.tsx                 Einstieg: initUrlSync() und initInstallPrompt() vor dem ersten Render, dann <App/>
-  App.tsx                  Layout: Header, Sidebar, KPI-Leiste, Ansichten, Analyse, Footer, PwaToast
+  main.tsx                 Einstieg: initUrlSync(), initInstallPrompt() und initStaleChunkReload() vor dem ersten
+                           Render, dann <App/>
+  App.tsx                  Layout je Breite (siehe Layout und Bedienung): Header, Sidebar bzw. Zeitpunkt/Neigung,
+                           KPI-Leiste, Ansichten, Analyse, Einstellungen, Footer, BottomBar (Handys), PwaToast
   setupTests.ts            jsdom-Setup der UI-Tests (fetch gesperrt; Stubs für matchMedia, ResizeObserver,
                            IntersectionObserver, Canvas-Kontext = null, URL.createObjectURL)
   model/                   Reine, UI-freie Berechnungen (keine React-/State-/UI-Imports, per ESLint erzwungen)
@@ -31,14 +35,18 @@ src/
     sun.ts                 Sonnenstand (NOAA), Sonnenauf-/untergang, Sonnenvektor
     geometry.ts            Fassaden-Koordinaten, Panel-Layout, Schattenwurf zwischen Stockwerken, Teilstrang-Verlust
     horizon.ts             Horizontprofile, Hindernisse (Nachbargebäude) → Horizont, CSV-Import
-    terrain.ts             Gelände-Horizont aus DEM-Kacheln (AWS Terrarium) im Browser; Kachel-Retries (2×, n·400 ms,
-                           nur Netzwerkfehler/429/5xx), Ergebnis-Cache ssa.terrain.v1:* (max. 40: 8 Höhen × 5 Standorte)
+    terrain.ts             Gelände-Horizont aus DEM-Kacheln (AWS Terrarium) im Browser; mehrere Beobachterhöhen aus einem
+                           Download in einem Durchgang (fetchTerrainHorizons, computeHorizons); Kachel-Retries (2×,
+                           n·400 ms, nur Netzwerkfehler/429/5xx), Kachelpläne der letzten 5 Standorte im Speicher,
+                           Ergebnis-Cache ssa.terrain.v1:* (max. 40: 8 Höhen × 5 Standorte)
     pvgis.ts               PVGIS-printhorizon-Import (JSON/CSV/basic; Azimut S-basiert → N-basiert: A + 180)
-    irradiance.ts          Clear-Sky-Modell, Einfallswinkel, IAM, POA-Einstrahlung, Himmelssichtfaktor
+    irradiance.ts          Clear-Sky-Modell, Einfallswinkel, IAM, POA-Einstrahlung, Himmelssichtfaktor (Winkeltabellen
+                           des Himmelsrasters je Rasterform wiederverwendet)
     weather.ts             Stündliche Wetterdaten (Open-Meteo-Archiv, Modell best_match) + Clear-Sky-Jahr,
                            localStorage-Cache ssa.weather.v1:* (max. 3 Jahre)
     simulation.ts          Jahressimulation (kWh je Stockwerk/Monat, Verschattungsverlust)
-    analysis.ts            Heatmap-Daten, Neigungs-Sweep (0–90° in 5°-Schritten), Tagesprofil
+    analysis.ts            Heatmap-Daten (Sonne im Fassadenrahmen je Fassade und Horizont: heatmapSunCells, dann nur die
+                           Verschattung: heatmapFromSunCells), Neigungs-Sweep (0–90° in 5°-Schritten), Tagesprofil
     economics.ts           Wirtschaftlichkeit
     storageCache.ts        localStorage-LRU-Cache der Wetter- und Geländeergebnisse (fängt fehlendes, gesperrtes oder
                            volles localStorage ab)
@@ -46,18 +54,21 @@ src/
     share.ts               Config ⇄ URL-Hash (Base64url) und JSON, Validierung (sanitizeConfig), Migration v1 → v2
   app/                     App-Shell: Header, WarningsBar, KpiBar, ViewToggles, ShareButton, ExportMenu, Footer,
                            DataLoader (startet die Loader), useDocumentSettings (<html> data-theme/lang, Titel,
-                           theme-color)
+                           theme-color), BottomBar (Steuerleiste der Handys: Uhrzeit, Neigung, «Springe zu»),
+                           jumpTo (Sprung zu einer Seitenregion ohne Änderung des URL-Hashs), layout.ts (Media
+                           Queries der Layouts: WIDE_LAYOUT, BOTTOM_BAR_LAYOUT)
   components/              Generische UI-Bausteine: Button, InfoTip, NumberField (+ numberInput.ts),
                            Placeholder, Section, Segmented, SelectField, Skeleton, Slider, Spinner, TextField,
                            Toggle, ViewCard, icons, cssVars, usePopover (Popover im Viewport halten, Schliessen bei
-                           Klick ausserhalb)
+                           Klick ausserhalb; auch für das Menü «Springe zu»)
     svg/                   SVG-Helfer für Diagramme und 2D-Ansichten: useElementWidth, useSvgId, paths, text
                            (Textbreiten, Fliesslayout), legend (gemeinsamer Legendenstil), HatchPattern
   controls/                Eingaben (Sidebar): Sidebar, TimeControls, TiltControl und je Einstellungsgruppe eine
                            *Section.tsx (Location, Building, Panel, System, Horizon, Weather, Economics);
                            sections.module.css (gemeinsames Layout der Abschnitte), icons (gemeinsame Icons der
                            Eingaben), loadError.ts + LoadErrorDetails (übersetzte Ursache eines Ladefehlers,
-                           technische Meldung aufklappbar)
+                           technische Meldung aufklappbar), useTimeSlider (Uhrzeitregler für TimeControls und
+                           BottomBar)
     location/              PlaceSearch, PresetSelect, MyLocationButton, CompassDial, TimeZoneField, timeZones
     horizon/               TerrainStatus, ObstacleList/ObstacleItem, ManualHorizon (inkl. PVGIS-Dateiimport),
                            HorizonSparkline, horizonData
@@ -67,28 +78,34 @@ src/
                            primitives, messages, svg.module.css
     scene3d/               3D-Ansicht (three.js/R3F), lazy: index.ts → Scene3D → SceneView; SceneStage, SceneContent,
                            Building, PanelRows, Ground, Surroundings, SkyAndLights, SunMarker, CameraRig, Label,
-                           SceneErrorBoundary, useSceneData; coords.ts, sceneLayout, palette, shadeMaterial
-                           (Modellschatten-Overlay), textures, webgl, messages, captureRender (Bild für PNG-Export
-                           und Druck sofort und in höherer Auflösung rendern)
+                           SceneErrorBoundary, useSceneData, useKeptWhileHidden (Szene ausserhalb des Bildschirms
+                           eingefroren); coords.ts, sceneLayout, palette, shadeMaterial (Modellschatten-Overlay),
+                           textures, webgl, messages, captureRender (Bild für PNG-Export und Druck sofort und in
+                           höherer Auflösung rendern)
   charts/                  Analyse: DailyProfileChart, ShadeHeatmap (Canvas), MonthlyYieldChart, TiltSweepChart,
                            EconomicsCard, MonthlyTable
     lib/                   Chart-Bausteine ohne Library: scale, Axes, timeAxis, legend/ChartLegend, ChartTooltip,
                            ChartStats, DataTable (+ ColumnHeader), heatmap, monthlyTable, colors, canvasTheme,
-                           floors, focus, sourceLabel, usePlotPointer, PlotSlider (Tastatur-/Zeiger-Ebene mit
-                           Fadenkreuz), sliderKeys, shadingTotals (Verschattungsverlust für KPI, Monatsertrag und
-                           Monatstabelle)
+                           floors, focus, sourceLabel, usePlotPointer (Maus und Touch-Gesten, siehe Layout und
+                           Bedienung), PlotSlider (Tastatur-/Zeiger-Ebene mit Fadenkreuz), sliderKeys, shadingTotals
+                           (Verschattungsverlust für KPI, Monatsertrag und Monatstabelle)
   export/                  png, csv (RFC 4180), resultsCsv (Monatsertrag, Neigungsvergleich, Heatmap), configFile
                            (JSON speichern/laden), clipboard, download, filenames, Druckbericht (print.ts, print.css,
                            PrintReport.tsx, PrintRoot.tsx), canvasRender (Canvas vor PNG-Export/Druck synchron neu
                            zeichnen)
   hooks/                   useModel (memoisierte Modell-Hooks) + cache.ts, useTerrain/useWeather (je Loader + Leser),
-                           useAnimation, useMediaQuery (Layout-Umbruch bei 1100 px)
+                           useAnimation, useMediaQuery (Layouts aus app/layout.ts, pointer: coarse),
+                           useNearViewport (Karten weit unter dem Bildschirm rechnen nicht, ausser im Druck)
   state/                   configStore, timeStore, uiStore, dataStore, shareLinkStore (Hinweise zum Teilen-Link),
-                           urlSync (#c=-Hash), storage (Persistenz der Stores, fängt localStorage-Fehler ab)
+                           urlSync (#c=-Hash), storage (Persistenz der Stores, fängt localStorage-Fehler ab),
+                           loadGate (Gelände-Download erst nach der Wetteranfrage)
+  workers/                 Gelände-Worker: terrain.worker.ts (Modul-Worker), terrainWorkerHandler.ts (sein
+                           Nachrichten-Handler, ohne Worker testbar), terrainProtocol.ts (Nachrichten),
+                           terrainClient.ts (computeTerrainInWorker, Rückfall in den Hauptthread)
   pwa/                     install.ts (beforeinstallprompt/appinstalled → useInstallStore, promptInstall, isIos,
                            Standalone-Erkennung), InstallButton (Header), PwaToast (Service-Worker-Registrierung,
                            Hinweise «Neue Version verfügbar» / «Offline verfügbar»), updates.ts (stündliche
-                           Update-Prüfung, reloadPage)
+                           Update-Prüfung, reloadPage), staleChunks.ts (einmal neu laden bei fehlenden Chunks)
   i18n/                    index.ts (useLang, useMessages, useFormat, floorLabel, compassPoint …), common.ts
   styles/                  global.css: Design-Tokens (CSS-Variablen) für Dark/Light, globale Styles; tokens.ts:
                            Token-Zugriff aus TypeScript (Stockwerksfarben, useThemeKey, cssVar, parseCssColor)
@@ -97,7 +114,7 @@ src/
 
 public/                    favicon.svg und die daraus erzeugten App-Icons (pwa-192x192, pwa-512x512,
                            pwa-maskable-512x512, apple-touch-icon)
-e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts, pwa.spec.ts)
+e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts, mobile.spec.ts, pwa.spec.ts)
 scripts/validate-terrain.ts  Gelände-Horizont gegen PVGIS printhorizon prüfen (braucht Netzwerk)
 scripts/validate-yield.ts    Jahresertrag gegen PVGIS seriescalc/PVcalc prüfen (braucht Netzwerk)
 scripts/generate-icons.ts    App-Icons aus public/favicon.svg rendern (Playwright-Chromium, `npm run icons`)
@@ -190,6 +207,32 @@ RMS 0.34° / 1.19° / 1.22° und Korrelation r = 0.986 / 0.993 / 0.984 für Mitt
 (46.62/8.04) und Zermatt (46.02/7.75), Lauf vom 24.09.2026. Eine heruntergeladene printhorizon-Datei kann im
 Abschnitt „Horizont & Umgebung“ als eigener Horizont importiert werden (`model/pvgis.ts`).
 
+Beobachterhöhe ist je Panel-Stockwerk die Oberkante seiner Panelreihe (Platte + Geländer, unabhängig von der
+Neigung, auf 1 m gerundet: `floorTerrainHeight` in `hooks/useTerrain.ts`). Alle Höhen eines Standorts kommen aus
+einem Kachel-Download und einem Durchgang über die Strahlen (`fetchTerrainHorizons`, `computeHorizons`; je Höhe
+dasselbe Ergebnis wie `computeHorizon`); Höhen im Ergebnis-Cache werden nicht neu gerechnet.
+
+Laden (`useTerrainLoader`, einmal in `<DataLoader/>` gemountet):
+
+- Nach einer Änderung von Standort oder Stockwerkhöhen wartet der Loader `TERRAIN_DEBOUNCE_MS` = 800 ms; der
+  erste Aufruf, ein neuer Versuch und das Wiedereinschalten starten sofort. Ändern sich nur die Stockwerkhöhen,
+  bleiben die bisherigen Profile (nächstgelegene Höhe, `terrainProfileAt`) stehen, bis die neuen aus den Kacheln im
+  Speicher gerechnet sind.
+- Ein Download wartet auf `terrainDownloadGate()` (`state/loadGate.ts`): bis keine Wetteranfrage mehr läuft und
+  jede mit `holdTerrainDownload()` angemeldete Anfrage fertig ist, höchstens `TERRAIN_GATE_MAX_MS` = 5 s. Die rund
+  2 MB Kacheln (`TILE_CONCURRENCY` = 6 Anfragen gleichzeitig) würden auf einer langsamen Mobilverbindung sonst das
+  Wetter verzögern, das die Jahresergebnisse brauchen. Solange nur das Gelände fehlt, erscheinen die Jahreswerte als
+  vorläufig (siehe [Laden und Rechenlast](#laden-und-rechenlast)); die WarningsBar zeigt den Fortschritt des
+  Downloads in Prozent (nur sichtbar: die Live-Region meldet den Hinweis einmal, nicht jede Kachel).
+- Download, PNG-Dekodierung und Berechnung laufen in einem Modul-Worker. `computeTerrainInWorker`
+  (`workers/terrainClient.ts`, Typ `TerrainComputer` wie `computeTerrainHorizons`) schickt je Auftrag `compute`
+  mit einer `id` an `terrain.worker.ts` und erhält `progress`, `result` oder `error`; ein Abbruch schickt `abort`,
+  der Worker verwirft den Auftrag. Der Worker bleibt bestehen, sein Kachel-Cache im Speicher (bis 96 Kacheln) dient
+  späteren Aufträgen, etwa neuen Stockwerkhöhen am selben Standort. Der localStorage-Ergebnis-Cache bleibt auf der
+  Seite (Worker haben kein localStorage). Ohne `Worker` (jsdom, alte Browser), mit eingespieltem `fetchImpl`
+  (Tests) oder wenn das Worker-Skript nicht startet oder abstürzt, rechnet dieselbe Funktion im Hauptthread, offene
+  Aufträge eingeschlossen.
+
 ## State
 
 - `useConfigStore` (Zustand, persistiert unter `ssa.config`, Version 2): `config: Config` + `patch(section, partial)`,
@@ -212,6 +255,7 @@ Abschnitt „Horizont & Umgebung“ als eigener Horizont importiert werden (`mod
 - Abgeleitete Daten über Hooks in `hooks/useModel.ts`: ein komponentenübergreifender Cache (`hooks/cache.ts`), dessen
   Schlüssel die Config-_Abschnitte_ sind. Neigungsänderungen berechnen daher z. B. den Neigungs-Sweep nicht neu,
   Zeitänderungen nur den Momentanzustand. Jahresrechnungen lesen ihre Eingaben über `useDeferredValue`.
+  Neigungs-Sweep im Hintergrund und vorläufige Jahreswerte: siehe [Laden und Rechenlast](#laden-und-rechenlast).
 
 ## i18n
 
@@ -224,13 +268,148 @@ const t = useMessages(messages);
 
 Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useFormat()` (Intl, Locale `de-CH`/`en-GB`) formatiert.
 
+## Layout und Bedienung
+
+### Layouts
+
+`App.tsx` rendert die Container je Layout (Media Queries in `app/layout.ts`, CSS-Umbrüche in `App.module.css`);
+die DOM-Reihenfolge ist die Lesereihenfolge, Tastaturfokus und Screenreader folgen also dem Bild:
+
+- **ab 1100 px** (`WIDE_LAYOUT`): Sticky-Sidebar (Zeitpunkt, Neigung, Einstellungen) | Hauptspalte (Hinweise und
+  Kennzahlen, Ansichten, Analyse);
+- **900–1099 px ohne groben Zeiger:** eine Spalte Kennzahlen → Zeitpunkt/Neigung → Ansichten → Analyse →
+  Einstellungen;
+- **Handys, Tablets mit Touchscreen und schmale Fenster** (`BOTTOM_BAR_LAYOUT`: unter 900 px, mit
+  `pointer: coarse` unter 1100 px): Kennzahlen → Ansichten → Zeitpunkt/Neigung → Analyse → Einstellungen, dazu die
+  Steuerleiste am unteren Rand. Die 3D-Ansicht folgt so direkt auf die Kennzahlen.
+
+Zeitpunkt/Neigung und Einstellungen wechseln an den Umbrüchen den Container; `<main>` und die Ergebnisse bleiben an
+ihrem Platz im Baum (kein Neuaufbau des WebGL-Kontexts der 3D-Ansicht). Zwischen 700 und 1099 px stehen die Karten
+Zeitpunkt und Neigung nebeneinander (`controls/Sidebar.module.css`).
+
+### Steuerleiste (Handys und Touch-Tablets)
+
+`app/BottomBar.tsx` (Region «Schnellsteuerung», `position: fixed`, `data-print="hide"`) hält die Uhrzeit in
+Reichweite, während 3D-Ansicht oder Ergebnisse im Bild sind:
+
+- **−/+** verschieben die Uhrzeit um `TIME_STEP` = 15 min auf das 15-Minuten-Raster (12:05 → 12:15 bzw. 12:00) und
+  halten die Animation an. Die **Uhrzeit** (mit Datum, unter 360 px ohne) öffnet den Zeitregler (`useTimeSlider`,
+  derselbe wie in `TimeControls`), daneben **Abspielen/Anhalten**. **θ** öffnet den Neigungsregler mit dem
+  Optimum als Marke («Opt. 40°»); den Sweep dafür rechnet das Panel erst nach seinem ersten Paint und nur mit
+  endgültigen Eingaben (`useResultsReady`). Es ist immer höchstens ein Regler offen; die Animation selbst läuft in
+  `TimeControls` (`useAnimation` ist dort einmal gemountet).
+- **«Springe zu»** öffnet ein Menü (Knopf mit `aria-expanded` und `<nav>`) zu den Regionen `results`, `views`,
+  `quick`, `analysis` und `settings` (in diesem Layout mit `tabIndex={-1}`). `jumpTo()` (`app/jumpTo.ts`, auch
+  vom Skip-Link benutzt) scrollt ohne Navigation zu `#id`, die den `#c=`-Teilen-Hash ersetzen und einen
+  Verlaufseintrag anlegen würde, sanft ausser bei `prefers-reduced-motion`, und setzt den Fokus auf die Region.
+  Escape schliesst das Menü und gibt den Fokus an den Knopf zurück; ein Druck ausserhalb und Tab aus dem Menü
+  hinaus schliessen es ebenfalls.
+- Unter 600 px liegt die Leiste über die ganze Breite, der offene Regler über den Knöpfen; breiter schwebt sie als
+  Dock (höchstens 48rem) mit dem Regler zwischen den Knöpfen. Sie hält die Safe Areas ein und veröffentlicht die
+  Höhe, die sie verdeckt, als `--bottom-bar-h` auf `<html>`: `global.css` gibt dem Seitenende diesen Abstand (im
+  Druck 0) und hält fokussierte Elemente darüber (`scroll-padding-bottom`); `PwaToast` steht über der Leiste.
+
+### Touch
+
+Auf dem Handy beginnt ein Bildlauf oft auf einem Regler oder Diagramm. Eine Berührung ändert deshalb erst etwas,
+wenn sie kein Bildlauf ist: bei einem Tipp oder sobald sie seitwärts zieht. Übernimmt der Browser die Geste zum
+Scrollen, sendet er `pointercancel`; dann bleibt nichts verstellt und kein Tooltip offen. Maus, Stift, Tastatur
+und Hilfstechnologien wirken sofort.
+
+- **Regler** (`components/Slider.tsx`, alle Schieberegler inkl. `NumberField`): Blink setzt den Wert schon beim
+  Aufsetzen des Fingers. Eine Berührung hält ihn zurück, bis sie mindestens `TOUCH_DRAG_SLOP` = 6 px und mehr
+  waagrecht als senkrecht zieht (dann live) oder als Tipp auf die Spur endet (`pointerup`); ein Bildlauf verwirft
+  ihn. Daumen 24 px auf Touchscreens.
+- **Fassadenkompass** (`CompassDial`, `touch-action: pan-y pinch-zoom`): Ein Tipp setzt die Richtung, und zwar erst
+  mit dem `click`, den der Browser nur für einen echten Tipp sendet (nicht für langes Drücken oder einen Tipp, der
+  einen Bildlauf stoppt); Ziehen dreht erst nach mehr als 8 px seitwärts. Bricht der Browser die Geste ab, gilt
+  wieder der Wert von vor der Berührung.
+- **Diagramme** (`charts/lib/usePlotPointer.ts`, Overlays mit `touch-action: pan-y`): Ein Tipp wählt mit dem
+  folgenden `click`. Im Tagesverlauf (`drag`) beginnt das Ziehen erst nach mehr als 8 px seitwärts (`CLICK_SLOP`);
+  wird es doch zum Bildlauf, stellt `onDragCancel` Uhrzeit und Animation von vor der Berührung wieder her. In der
+  Heatmap wählt auch das Loslassen nach seitlichem Wischen (`touchScrubSelects`), weil eine Fingerkuppe etwa eine
+  Woche Tage bedeckt. Der Tooltip einer Berührung bleibt nach dem Loslassen stehen und schliesst beim nächsten Tipp
+  ausserhalb; in Tagesverlauf und Heatmap lautet sein Hinweis dann «Tippen oder seitwärts ziehen …» statt
+  «Klicken …».
+- **Neigungsvergleich** (`touchPreview`): Ein Tipp zeigt nur die Werte eines Punkts, denn die Neigung ist
+  gespeichert und rechnet alle Ergebnisse neu. Übernommen wird sie mit dem Knopf «Neigung … übernehmen» im Tooltip
+  (`ChartTooltip` mit `action`; der Knopf trägt `data-chart-action`, sein Tipp schliesst den Tooltip nicht, danach
+  geht der Fokus an den Regler des Diagramms).
+- `HorizonSparkline` entfernt bei `pointercancel` das Fadenkreuz. In der 3D-Ansicht scrollt senkrechtes Wischen
+  mit einem Finger die Seite, waagrechtes dreht, zwei Finger zoomen.
+
+Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
+
+- `--touch` ist 36 px, dort 44 px (Apple HIG 44 pt, nahe an Materials 48 dp): Knöpfe (dort auch mindestens so
+  breit wie hoch), Segmente, Schalter, InfoTips, Aufklapper von Tabellen und Ladefehlern, Kamera- und
+  Legendenknöpfe der 3D-Ansicht und die Einträge von «Springe zu».
+- Eingabefelder (ausser Regler, Kontroll- und Optionsfelder), Auswahllisten und Textbereiche haben mindestens
+  16 px Schrift, sonst zoomt iOS Safari beim Fokussieren die Seite (und bleibt gezoomt).
+- `NumberField`: Die Dezimaltastatur von iOS hat kein Minus. Felder mit beiden Vorzeichen bekommen deshalb die
+  Texttastatur (`inputMode="text"`, deren Zahlenebene «-» hat); in Feldern nur für negative Werte (z. B. der
+  Temperaturkoeffizient, im Datenblatt «−0.35 %/K») zählt eine Zahl ohne Vorzeichen als negativ.
+
+### Schmale Bildschirme
+
+- **Kennzahlen** kompakt, wenn die KPI-Leiste schmaler als 560 px ist, und auf Handys quer (bis 1099 px breit und
+  500 px hoch): ohne die Aufteilung je Stockwerk und ohne «Sonnenhöhe» und «Profilwinkel» (beides zeigen Ansichten
+  und Diagramme); alle Unterzeilen bleiben.
+- **3D-Ansicht:** Bis 520 px Breite zeigt die Legende nur die Ebenen-Schalter, die Erklärungen öffnet «Legende
+  erklären» (gedruckt immer mit Erklärungen). Stockwerks- und Stundenbeschriftungen sind auf Touchscreens
+  mindestens `TOUCH_LABEL_MIN_PX` = 22 px hoch (etwa 11 px Text; `Label` mit `minPx`, vor jedem gerenderten Frame
+  skaliert), die Kamera rahmt weiter mit der Weltgrösse. Unter 360 px bleibt die Kameraleiste einzeilig.
+- **Diagramme und 2D-Ansichten:** Der Tagesverlauf zeigt bei Sonnenauf- und -untergang nur die Zeiten, wenn
+  «Aufgang …» und «Untergang …» nicht zwischen die beiden Linien passen, und rückt die Legende nach links, damit
+  lange Einträge im Bild bleiben (`chartLegendX`). Frontalansicht und Sonnenbahn lassen Beschriftungen weg oder
+  weichen aus, die sich überdecken würden; in der Seitenansicht liegt die Beschriftung des kritischen Winkels über
+  dem Sonnenstrahl. Die Monatstabelle zeichnet ihre Zeilenlinien auch unter der fixierten Monatsspalte.
+- **Einstellungen:** Das Horizont-Diagramm ist unter 1100 px höchstens 360 px breit, unter 600 px mit 12 px
+  Beschriftung. Unter 480 px entfällt die Beschriftung «Sichtbare Ansichten» vor den Ansichtsschaltern (die Gruppe
+  behält ihren Namen für Screenreader).
+
+## Laden und Rechenlast
+
+- **Vorläufige Jahreswerte:** `useAnnualResultsState()` (`hooks/useModel.ts`) liefert `'loading'` (das Wetter des
+  eingestellten Standorts und Jahres ist noch nicht in den Ergebnissen, oder das Gelände steht seit weniger als
+  `PROVISIONAL_DELAY_MS` = 1.5 s aus), `'provisional'` (nur der Geländehorizont fehlt noch) oder `'final'`.
+  Vorläufig zeigen die Jahreskennzahlen ihre ohne Gelände gerechneten Werte gedämpft mit «vorläufig –
+  Geländehorizont wird geladen», die Neigungskarte das Optimum gedämpft und ohne «Optimum … übernehmen». Diagramme,
+  Wirtschaftlichkeit, Monatstabelle, Export und die Optimum-Marke der Steuerleiste warten auf endgültige Eingaben
+  (`useAnnualInputsPending`, `useResultsReady`). Ein schneller oder gecachter Geländehorizont geht so ohne
+  vorläufigen Zwischenstand vom Platzhalter zum Ergebnis.
+- **Neigungs-Sweep im Hintergrund:** 19 Jahressimulationen, immer in Scheiben von etwa 8 ms (`SWEEP_SLICE_MS`)
+  zwischen den Frames, auch das erste Ergebnis eines Standorts (bis dahin `null`). Andere Änderungen an Gebäude,
+  Panels, System und Horizont übernimmt er nach `SWEEP_SETTLE_MS` = 250 ms Ruhe, bis dahin gilt das vorige
+  Ergebnis mit `updating: true`; die Neigung selbst rechnet ihn nie neu. `flushSweeps()` rechnet einen laufenden
+  Sweep sofort fertig (vor dem Druck, in Tests).
+- **Neigungsschritte:** Die Heatmap cacht die Sonnenstände je Standort und Jahr (`sunGrid`) und die Sonne im
+  Fassadenrahmen je Fassade und Horizont (`heatmapSunCells`); ein Schritt rechnet nur die Verschattung
+  (`shadeFractionFromAbove`, ohne Rechtecke je Modul). Der Himmelssichtfaktor nutzt Winkeltabellen je Rasterform,
+  die Jahressimulation die gecachten Monate der Wetterschritte (je Reihe und Zeitzone), das Tagesprofil die
+  Sonnenstände des Tages.
+- **Ausserhalb des Bildschirms:** `useNearViewport()` (`hooks/`) meldet, ob die Karte höchstens eine
+  Bildschirmhöhe vom sichtbaren Bereich entfernt ist (anfangs sofort gemessen, dann per `IntersectionObserver`).
+  Heatmap und die Spalte der verschatteten Stunden in der Monatstabelle rechnen und zeichnen nur dann; sonst
+  bleibt ihr letztes Ergebnis stehen (die Heatmap-Karte ist memoisiert und zeichnet nicht neu), etwa während oben
+  auf dem Handy die Neigung gezogen wird. Die 3D-Ansicht rendert ausserhalb des Bildschirms (Karte plus 200 px)
+  gar nicht (`frameloop` `'never'`); solange kein Pixel der Bühne sichtbar ist, behält die Szene zudem die zuletzt
+  gezeigten Daten (`useKeptWhileHidden`, `SceneContent` memoisiert), Statusanzeige und Beschreibung bleiben
+  aktuell. Der Schimmer der Platzhalter läuft über `transform` (ohne Neuzeichnen im Hauptthread).
+- **Drucken und PNG-Export:** Der Druck zeigt die ganze Seite, also gilt `useNearViewport` währenddessen als nah.
+  Sein `beforeprint`-Listener und der von `flushSweeps` werden beim Laden der Module registriert, also vor dem des
+  Druckmodus (`export/print.ts`), der die Canvases erfasst, und rendern synchron (`flushSync`), weil der Browser
+  den Druck gleich nach den `beforeprint`-Handlern aufnimmt. Die 3D-Szene übernimmt beim `CANVAS_RENDER_EVENT`
+  (PNG-Export und Druck) synchron die aktuellen Daten und friert danach wieder ein (`detail.restore`). Steuerleiste
+  und Zeitpunkt/Neigung fehlen im Druck.
+
 ## PWA und Deployment
 
 - **Basis-Pfad:** `vite.config.ts` setzt `base` aus der Umgebungsvariable `BASE_PATH` (Standard `/`, normalisiert in
   `scripts/basePath.ts`). GitHub Pages dient die App als Projektseite unter `/solar-shadow-analyzer/` aus;
   `.github/workflows/pages.yml` übernimmt den Pfad aus `actions/configure-pages` (`base_path`:
   `/solar-shadow-analyzer`, mit eigener Domain leer, also `/`). Laufzeit-URLs hängen nicht vom Pfad ab: `index.html`
-  verweist auf `/favicon.svg` usw., Vite setzt beim Build den Basis-Pfad davor; das Manifest nutzt
+  verweist auf `/favicon.svg` usw., Vite setzt beim Build den Basis-Pfad davor (ebenso vor die URL des
+  Gelände-Workers aus `new URL('./terrain.worker.ts', import.meta.url)`); das Manifest nutzt
   relative URLs (`start_url`, `scope`, Icons ohne Pfad), nur `id` ist der Basis-Pfad selbst (eine relative `id`
   löst der Browser gegen den Origin auf, nicht gegen `start_url`; `./` wäre `https://cyclodex.github.io/`). Die
   `id` ist die Identität der installierten App und darf sich nach der Veröffentlichung nicht mehr ändern. Der
@@ -243,11 +422,12 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   über `<link>`, alle erzeugt von `scripts/generate-icons.ts`.
 - **iOS:** `apple-mobile-web-app-capable`, `-title`, `-status-bar-style: black-translucent`; mit `viewport-fit=cover`
   läuft die Seite bis an den Bildschirmrand. `global.css` definiert `--safe-top/-right/-bottom/-left` aus
-  `env(safe-area-inset-*)`; Header, Seitenraster, Sticky-Sidebar, Skip-Link und die Hinweise halten diese Abstände
-  ein. Unter der transparenten Statusleiste (immer weisse Symbole) liegt ein fixer Streifen in `--statusbar`, auch im
-  hellen Theme.
+  `env(safe-area-inset-*)`; Header, Seitenraster, Sticky-Sidebar, Skip-Link, Steuerleiste und die Hinweise halten
+  diese Abstände ein. Unter der transparenten Statusleiste (immer weisse Symbole) liegt ein fixer Streifen in
+  `--statusbar`, auch im hellen Theme.
 - **Service Worker** (Workbox `generateSW`, nur im Produktions-Build; in Entwicklung und Tests aus):
-  - Precache des ganzen Builds (`js, css, html, svg, png` + Manifest), auch des lazy geladenen 3D-Chunks (~960 kB).
+  - Precache des ganzen Builds (`js, css, html, svg, png` + Manifest), auch des lazy geladenen 3D-Chunks (~960 kB)
+    und des Gelände-Workers (~31 kB).
     Ein Asset über `maximumFileSizeToCacheInBytes` (Standard 2 MiB) bricht den Build ab, statt offline zu fehlen.
   - Navigationen fallen auf `index.html` zurück (`navigateFallback`), alte Precaches werden aufgeräumt
     (`cleanupOutdatedCaches`). Kein Runtime-Caching: Wetter- und Geländedaten cacht die App selbst im `localStorage`.
@@ -302,12 +482,23 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   - `resetStores()` aus `src/test/utils.ts` setzt den App-State zurück.
   - `getContext` liefert `null`, deshalb zeigt die 3D-Ansicht ihren Hinweis ohne WebGL und die Heatmap zeichnet nicht.
     `SceneStage.test.tsx` mockt `./webgl`, um die DOM-Teile der 3D-Ansicht zu testen.
+  - `matchMedia` trifft nie zu (einspaltiges Layout ohne Steuerleiste, kein grober Zeiger); `App.test.tsx` stubbt
+    es für das Handy-Layout (`BOTTOM_BAR_LAYOUT`). `IntersectionObserver` meldet nichts, `useNearViewport` und die
+    3D-Bühne gelten also als sichtbar.
+  - jsdom kennt keinen `Worker`: Der Geländehorizont rechnet dort im Hauptthread. `terrainClient.test.ts` ersetzt
+    `Worker` durch einen Stellvertreter im selben Prozess mit dem echten Nachrichten-Handler.
+  - Touch-Gesten mit `pointerType: 'touch'` (Slider, CompassDial, HorizonSparkline, Tagesverlauf, Heatmap,
+    Neigungsvergleich): Bildlauf (`pointercancel`), Tipp, seitliches Ziehen und der Knopf im Tooltip des
+    Neigungsvergleichs.
 - **E2E** (`npm run e2e`, Playwright gegen den `vite preview`-Build, Chromium + SwiftShader, Open-Meteo und Kacheln
   blockiert, Port über `E2E_PORT`): App lädt mit Jahresertrag; kein horizontales Scrollen bei 360 px, auch mit
   iPhone-User-Agent und geöffneter Anleitung des Knopfs «Installieren» (bleibt im Bild); 3D-Canvas zeichnet Inhalt
   (mehr als 20 Farben, kein Screenshot-Vergleich); Kamera-Preset «Aus Sonnenrichtung» bleibt nach einem Klick
   erhalten, folgt der Uhrzeit und weicht nachts der Übersicht; Teilen-Link stellt die Konfiguration wieder her;
-  Sprachumschaltung DE → EN. `pwa.spec.ts`: Manifest gültig und unter dem Basis-Pfad, `id` wie Chromiums
+  Sprachumschaltung DE → EN. `mobile.spec.ts`: Auf einem iPhone 14 (Touch, in Chromium) schliesst die
+  Steuerleiste am unteren Bildschirmrand ab, −/+ ändern die Uhrzeit um 15 min (auch im Zeitregler der Seite),
+  «Springe zu» → «Einstellungen» scrollt dorthin und setzt den Fokus, ohne Hash in der URL, kein horizontales
+  Scrollen; bei 1440 px keine Steuerleiste. `pwa.spec.ts`: Manifest gültig und unter dem Basis-Pfad, `id` wie Chromiums
   `Page.getAppId`, Icons ladbar (Grösse, `maskable`/`apple-touch-icon` deckend); Service Worker registriert sich,
   kontrolliert die Seite nach einem Reload und hat den 3D-Chunk im Precache; offline (`context.setOffline`) lädt die
   App mit Clear-Sky-Ergebnissen und 3D-Ansicht, ohne Konsolenfehler; eine neue Version (derselbe Worker als
