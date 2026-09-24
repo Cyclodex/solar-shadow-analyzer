@@ -193,8 +193,10 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
     .reverse()
     .join('; ');
 
+  // data-jump-reveal: "Springe zu › Ansichten (3D)" of phones scrolls on until the whole stage with its camera
+  // buttons is above the control bar (app/jumpTo.ts, JUMP_REVEAL_ATTR).
   return (
-    <div ref={stageRef} className={styles.stage}>
+    <div ref={stageRef} className={styles.stage} data-jump-reveal="">
       <SceneErrorBoundary fallback={<Placeholder>{t.failed}</Placeholder>}>
         <Canvas
           key={canvasKey}

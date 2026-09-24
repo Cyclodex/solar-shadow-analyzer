@@ -270,11 +270,12 @@
 }
 
 /*
- * Smallest phones (320 px, e.g. iPhone Display Zoom): the reset button and the four short presets need about
- * 282 px with the default spacing and would wrap onto a second row over the model. Tighter spacing keeps one
- * row; the touch targets stay ≥ var(--touch) (.cameraBar button outranks the Button size's padding).
+ * Narrow phones (below 420 px with touch, and any screen below 360 px): the reset button and the four short
+ * presets need about 290 px with the default spacing and 44 px touch targets, and would wrap onto a second
+ * row over the model at 360 px and less. Tighter spacing keeps one row (about 246 px); the touch targets stay
+ * ≥ var(--touch) (.cameraBar button outranks the Button size's padding).
  */
-@media (max-width: 359px) {
+@media (max-width: 359px), (pointer: coarse) and (max-width: 419.98px) {
   .cameraBar {
     gap: 2px;
     padding: 2px;
@@ -282,6 +283,15 @@
 
   .cameraBar button {
     padding-inline: var(--space-1);
+  }
+}
+
+/* 320 px: the tight row needs the full width of the 262 px stage; a smaller inset leaves it some slack. */
+@media (max-width: 359px) {
+  .cameraBar {
+    left: var(--space-1);
+    bottom: var(--space-1);
+    max-width: calc(100% - 2 * var(--space-1));
   }
 }
 
