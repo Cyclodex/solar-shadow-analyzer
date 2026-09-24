@@ -1,5 +1,5 @@
 import { act, render, renderHook, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { substringBeamLoss } from '../model/geometry';
 import { clearSkyYear } from '../model/weather';
@@ -9,7 +9,7 @@ import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { useInstant, useLayout } from '../hooks/useModel';
-import { KpiBar } from './KpiBar';
+import { ANNOUNCE_MS, KpiBar } from './KpiBar';
 
 const series = clearSkyYear(DEFAULT_CONFIG.location.latitude, DEFAULT_CONFIG.location.longitude, 2025);
 const patch = useConfigStore.getState().patch;
@@ -170,6 +170,57 @@ describe('KpiBar', () => {
       useUiStore.getState().setLang('en');
       render(<KpiBar />);
       expect(dds(kpi('Shade on Floor 1'))[1]).toBe('of panel area, exact from the 3D model');
+    });
+  });
+
+  describe('announcement of changed instant results', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    const status = (): HTMLElement =>
+      within(screen.getByRole('region', { name: 'Ergebnisse' })).getByRole('status');
+
+    it('announces the results once a change has settled, not during the time animation', () => {
+      vi.useFakeTimers();
+      render(<KpiBar />);
+      const initial = status().textContent ?? '';
+      expect(initial).toMatch(
+        /^Schatten auf 1\. OG: \d+\s%, Profilwinkel [\d.]+°, Leistung jetzt: [\d’']+ W$/,
+      );
+
+      // Tilt changed: announced after the quiet time only.
+      act(() => patch('panels', { tiltFromVertical: 20 }));
+      act(() => {
+        vi.advanceTimersByTime(ANNOUNCE_MS - 1);
+      });
+      expect(status().textContent).toBe(initial);
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      const tilted = status().textContent ?? '';
+      expect(tilted).not.toBe(initial);
+      expect(tilted).toContain(`Leistung jetzt: ${dds(kpi('Leistung jetzt'))[0]}`);
+
+      // Time animation: frozen until it stops.
+      act(() => useTimeStore.getState().setPlaying(true));
+      act(() => useTimeStore.getState().setMinutes(15 * 60));
+      act(() => {
+        vi.advanceTimersByTime(5 * ANNOUNCE_MS);
+      });
+      expect(status().textContent).toBe(tilted);
+      act(() => useTimeStore.getState().setPlaying(false));
+      act(() => {
+        vi.advanceTimersByTime(ANNOUNCE_MS);
+      });
+      expect(status().textContent).not.toBe(tilted);
+    });
+
+    it('names the sun state instead of a value at night', () => {
+      vi.useFakeTimers();
+      useTimeStore.setState({ minutes: 60 });
+      render(<KpiBar />);
+      expect(status()).toHaveTextContent('Schatten auf 1. OG: Sonne unter dem Horizont, Leistung jetzt: 0 W');
     });
   });
 });

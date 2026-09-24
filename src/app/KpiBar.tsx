@@ -1,4 +1,4 @@
-import { useId, type ReactNode } from 'react';
+import { useEffect, useId, useState, type ReactNode } from 'react';
 import { Skeleton } from '../components/Skeleton';
 import { cssVars } from '../components/cssVars';
 import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../i18n';
@@ -81,6 +81,24 @@ const messages: Messages<typeof de> = {
   },
 };
 
+/** Quiet time before changed instant results are announced (after a slider drag or key repeat). */
+export const ANNOUNCE_MS = 1000;
+
+/**
+ * `text` once it has stayed unchanged for ANNOUNCE_MS, for a polite live region. Frozen while `paused`
+ * (time animation: its steps are not announced, as the clock in TimeControls). Starts with the current
+ * text, so nothing is announced on load.
+ */
+function useSettledText(text: string, paused: boolean): string {
+  const [settled, setSettled] = useState(text);
+  useEffect(() => {
+    if (paused) return;
+    const timer = setTimeout(() => setSettled(text), ANNOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [text, paused]);
+  return settled;
+}
+
 /** Number with a smaller unit, e.g. <Num value="2’855" unit="kWh" />. */
 function Num({ value, unit }: { value: string; unit?: string }) {
   return (
@@ -160,6 +178,7 @@ export function KpiBar() {
   const shadedFloor = useShadedFloor();
   const date = useTimeStore((s) => s.date);
   const minutes = useTimeStore((s) => s.minutes);
+  const playing = useTimeStore((s) => s.playing);
 
   const { numFloors } = config.building;
   const loading = pending || simulation === null;
@@ -205,6 +224,21 @@ export function KpiBar() {
     angle: t.profileSub(f.deg(layout.criticalProfileAngle, 1)),
   };
   const profileSub = profileSubs[criticalAngleKind(layout, numFloors > 1)];
+  const profileValue = profile === null || sun.altitude <= 0 ? '–' : f.deg(profile, 1);
+  const shadedName = floorLabel(placements[shadedFloor]?.storey ?? shadedFloor, lang);
+  const totalPower = f.num(power.reduce((a, b) => a + b, 0));
+
+  // Changed instant results (tilt, time, …) for screen readers: settled, not during the time animation.
+  const announcement = useSettledText(
+    [
+      `${t.shadeOn(shadedName)}: ${shadeValue === '–' ? shadeSub[0] : shadeValue}`,
+      profileValue === '–' ? null : `${t.profile} ${profileValue}`,
+      `${t.power}: ${totalPower} W`,
+    ]
+      .filter(Boolean)
+      .join(', '),
+    playing,
+  );
 
   const headingId = useId();
   const skeleton = <Skeleton width="7ch" height="1.1em" />;
@@ -301,21 +335,9 @@ export function KpiBar() {
               .filter(Boolean)
               .join(' · ')}
           />
-          <Kpi
-            label={t.profile}
-            value={profile === null || sun.altitude <= 0 ? '–' : f.deg(profile, 1)}
-            sub={profileSub}
-          />
-          <Kpi
-            label={t.shadeOn(floorLabel(placements[shadedFloor]?.storey ?? shadedFloor, lang))}
-            value={shadeValue}
-            sub={shadeSub}
-          />
-          <Kpi
-            label={t.power}
-            value={<Num value={f.num(power.reduce((a, b) => a + b, 0))} unit="W" />}
-            sub={t.powerSub}
-          >
+          <Kpi label={t.profile} value={profileValue} sub={profileSub} />
+          <Kpi label={t.shadeOn(shadedName)} value={shadeValue} sub={shadeSub} />
+          <Kpi label={t.power} value={<Num value={totalPower} unit="W" />} sub={t.powerSub}>
             {numFloors > 1 && (
               <FloorList
                 items={topDown.map((p) => ({
@@ -327,6 +349,9 @@ export function KpiBar() {
             )}
           </Kpi>
         </dl>
+        <p className="sr-only" role="status">
+          {announcement}
+        </p>
       </div>
     </section>
   );
