@@ -69,6 +69,8 @@ async function settled(canvas: Locator): Promise<number[]> {
 }
 
 test('"Aus Sonnenrichtung" survives a click, follows the time, gives way at night', async ({ page }) => {
+  // Several waits for the software-rendered (SwiftShader) canvas to settle: ~25 s locally, more on slow runners.
+  test.setTimeout(90_000);
   await page.goto('./');
   await page.getByTitle('Juni-Sonnenwende').click();
   const time = page.getByRole('slider', { name: 'Uhrzeit (Ortszeit)' });
