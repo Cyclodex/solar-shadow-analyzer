@@ -1,5 +1,6 @@
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { clearModelCaches } from '../hooks/useModel';
+import { INITIAL_INSTALL, useInstallStore } from '../pwa/install';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { INITIAL_SHARE_LINK, useShareLinkStore } from '../state/shareLinkStore';
@@ -10,8 +11,8 @@ import { DEFAULT_VIEWS, useUiStore } from '../state/uiStore';
 export const TEST_DATE = '2025-06-21';
 
 /**
- * Resets all stores (config = DEFAULT_CONFIG, lang 'de', dark theme, fixed test date/time, no link notices)
- * and model caches.
+ * Resets all stores (config = DEFAULT_CONFIG, lang 'de', dark theme, fixed test date/time, no link notices,
+ * no install prompt) and model caches.
  */
 export function resetStores(): void {
   useConfigStore.setState({ config: DEFAULT_CONFIG });
@@ -19,5 +20,6 @@ export function resetStores(): void {
   useUiStore.setState({ lang: 'de', theme: 'dark', views: DEFAULT_VIEWS, openSections: {}, focusFloor: 0 });
   useDataStore.getState().resetData();
   useShareLinkStore.setState(INITIAL_SHARE_LINK);
+  useInstallStore.setState(INITIAL_INSTALL);
   clearModelCaches();
 }

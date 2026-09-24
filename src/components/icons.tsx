@@ -60,6 +60,26 @@ export function DownloadIcon(props: IconProps) {
   );
 }
 
+/** Install as an app: a device with a downward arrow. */
+export function InstallIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="6" y="2" width="12" height="20" rx="2.5" />
+      <path d="M12 7v7M9 11l3 3 3-3" />
+    </Icon>
+  );
+}
+
+/** The iOS share symbol (box with an upward arrow), as in Safari. */
+export function ShareIosIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3v12M8 7l4-4 4 4" />
+      <path d="M8 10H6.5A1.5 1.5 0 0 0 5 11.5v8A1.5 1.5 0 0 0 6.5 21h11a1.5 1.5 0 0 0 1.5-1.5v-8a1.5 1.5 0 0 0-1.5-1.5H16" />
+    </Icon>
+  );
+}
+
 export function PlayIcon(props: IconProps) {
   return (
     <Icon {...props}>

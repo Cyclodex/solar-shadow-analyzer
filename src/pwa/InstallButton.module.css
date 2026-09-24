@@ -1,0 +1,49 @@
+.root {
+  position: relative;
+}
+
+/* Below the button, right-aligned; --shift keeps it inside the viewport (set from JS). */
+.popover {
+  position: absolute;
+  z-index: 40;
+  top: calc(100% + 6px);
+  right: 0;
+  transform: translateX(var(--shift, 0px));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  width: min(22rem, calc(100vw - 16px));
+  padding: var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  box-shadow: var(--shadow);
+  font-size: var(--fs-sm);
+}
+
+.title {
+  font-weight: 650;
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding-left: 1.5em;
+}
+
+.shareIcon {
+  display: inline-block;
+  margin-right: 0.35em;
+  vertical-align: -0.15em;
+  color: var(--accent);
+}
+
+.note {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.close {
+  align-self: flex-end;
+}

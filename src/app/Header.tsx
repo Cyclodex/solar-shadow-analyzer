@@ -3,6 +3,7 @@ import { LogoIcon, MoonIcon, SunIcon } from '../components/icons';
 import { Segmented } from '../components/Segmented';
 import { compassPoint, displayLocationName, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
+import { InstallButton } from '../pwa/InstallButton';
 import { useConfig } from '../state/configStore';
 import { useUiStore } from '../state/uiStore';
 import { ExportMenu } from './ExportMenu';
@@ -25,7 +26,7 @@ const messages: Messages<typeof de> = {
   },
 };
 
-/** Title, configuration summary and global actions (language, theme, share, export). */
+/** Title, configuration summary and global actions (language, theme, share, export, install). */
 export function Header() {
   const c = useCommon();
   const t = useMessages(messages);
@@ -80,6 +81,7 @@ export function Header() {
         </Button>
         <ShareButton />
         <ExportMenu />
+        <InstallButton />
       </div>
     </header>
   );
