@@ -101,12 +101,21 @@ function useSettledText(text: string, paused: boolean): string {
   return settled;
 }
 
-/** Number with a smaller unit, e.g. <Num value="2’855" unit="kWh" />. */
+/**
+ * Number with a smaller unit, e.g. <Num value="2’855" unit="kWh" />. A normal space (in the unit's size):
+ * where the value and a long unit do not fit (1’070 kWh/kWp on a 320 px phone), the unit goes onto the next
+ * line, in one piece.
+ */
 function Num({ value, unit }: { value: string; unit?: string }) {
   return (
     <>
       {value}
-      {unit && <span className={styles.unit}>{`\u00a0${unit}`}</span>}
+      {unit && (
+        <span className={styles.unit}>
+          {' '}
+          <span className={styles.unitText}>{unit}</span>
+        </span>
+      )}
     </>
   );
 }

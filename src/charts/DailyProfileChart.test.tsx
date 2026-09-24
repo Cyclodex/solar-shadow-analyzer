@@ -52,6 +52,28 @@ describe('DailyProfileChart', () => {
     expect(x).toBeLessThanOrEqual(262 - 258);
   });
 
+  it('keeps the words of the sunrise/sunset labels while a small gap stays between them', () => {
+    // Chart widths where the estimated labels (81 and 93 px, 4 px from their lines) leave a gap of about
+    // 5.6 px (290 px) and 3.6 px (288 px) between them.
+    const labels = (width: number): string[] => {
+      const rect = vi
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockReturnValue(DOMRect.fromRect({ width }));
+      const { container, unmount } = render(<DailyProfileChart />);
+      const texts = [...container.querySelectorAll('text[text-anchor="start"], text[text-anchor="end"]')]
+        .map((t) => t.textContent ?? '')
+        .filter((t) => /\d\d:\d\d$/.test(t));
+      unmount();
+      rect.mockRestore();
+      return texts;
+    };
+    expect(labels(290)).toEqual([
+      expect.stringMatching(/^Aufgang 05:\d\d$/),
+      expect.stringMatching(/^Untergang 21:\d\d$/),
+    ]);
+    expect(labels(288)).toEqual([expect.stringMatching(/^05:\d\d$/), expect.stringMatching(/^21:\d\d$/)]);
+  });
+
   it('keeps the legend at the plot edge where it fits', () => {
     const { container } = render(<DailyProfileChart />);
     const legend = screen.getByText('Verschattung durch oberes Stockwerk').closest('g[aria-hidden]');

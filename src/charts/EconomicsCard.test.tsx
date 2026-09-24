@@ -24,6 +24,9 @@ function simulatedKwh(): { total: number; floors: number[] } {
   return { total: sim.totalAnnualKwh, floors: sim.floors.map((fl) => fl.annualKwh) };
 }
 
+/** The payback figure's label, with a soft hyphen for the narrow figure column of a 320 px phone. */
+const PAYBACK = 'Amortisations\u00addauer';
+
 function figure(label: string): HTMLElement {
   return screen.getByText(label, { selector: 'dt' }).parentElement as HTMLElement;
 }
@@ -62,8 +65,8 @@ describe('EconomicsCard', () => {
     render(<EconomicsCard />);
 
     expect(figure('Ersparnis pro Jahr')).toHaveTextContent(n(f.currency(total.annualSavings, 'CHF', 0)));
-    expect(figure('Amortisationsdauer')).toHaveTextContent(`${f.num(total.paybackYears, 1)} Jahre`);
-    expect(figure('Amortisationsdauer')).toHaveTextContent(n(`Investition ${f.currency(1800, 'CHF', 0)}`));
+    expect(figure(PAYBACK)).toHaveTextContent(`${f.num(total.paybackYears, 1)} Jahre`);
+    expect(figure(PAYBACK)).toHaveTextContent(n(`Investition ${f.currency(1800, 'CHF', 0)}`));
     expect(figure('Bilanz nach 25 Jahren')).toHaveTextContent(n(f.currency(total.lifetimeNet, 'CHF', 0)));
 
     const table = screen.getByRole('table', { name: 'Wirtschaftlichkeit je Stockwerk' });
@@ -141,14 +144,14 @@ describe('EconomicsCard', () => {
     act(() => useDataStore.getState().setWeather({ status: 'ready', series }));
     useConfigStore.getState().patch('economics', { investmentPerFloor: 20000, lifetimeYears: 10 });
     const { unmount } = render(<EconomicsCard />);
-    expect(figure('Amortisationsdauer')).toHaveTextContent('länger als die Betrachtungsdauer (10 Jahre)');
+    expect(figure(PAYBACK)).toHaveTextContent('länger als die Betrachtungsdauer (10 Jahre)');
     expect(screen.queryByText(/^Amortisation nach/)).toBeNull();
     expect(figure('Bilanz nach 10 Jahren').textContent).toMatch(/−/);
     unmount();
 
     act(() => useConfigStore.getState().patch('economics', { electricityPrice: 0, feedInTariff: 0 }));
     render(<EconomicsCard />);
-    expect(figure('Amortisationsdauer')).toHaveTextContent('nie');
+    expect(figure(PAYBACK)).toHaveTextContent('nie');
   });
 
   it('renders in English with the configured currency', () => {

@@ -56,6 +56,10 @@
   font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text-muted);
+}
+
+/* The space before it may wrap (narrowest phones), the unit itself not. */
+.unitText {
   white-space: nowrap;
 }
 

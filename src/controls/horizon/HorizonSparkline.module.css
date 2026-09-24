@@ -196,6 +196,15 @@
   }
 }
 
+/* Narrowest phones (320–374 px: scale 0.76–0.94): ≥ 10.6 px on screen. */
+@media (max-width: 374.98px) {
+  .yLabel,
+  .xLabel,
+  .xFacade {
+    font-size: 14px;
+  }
+}
+
 @media (forced-colors: active) {
   .line {
     stroke: CanvasText;

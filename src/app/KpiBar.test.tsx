@@ -46,6 +46,8 @@ describe('KpiBar', () => {
       const [specific, installed] = dds(kpi('Spezifischer Ertrag'));
       expect(installed).toMatch(/^bei 1\.72\skWp installiert$/); // 2 floors × 2 × 430 Wp
       expect(num(specific)).toBeCloseTo(total / 1.72, -1);
+      // A normal space before the unit: on a 320 px phone "kWh/kWp" moves onto the next line.
+      expect(kpi('Spezifischer Ertrag').querySelector('dd')?.textContent).toMatch(/^[\d’']+ kWh\/kWp$/);
     });
 
     it('stays busy while the terrain horizon loads (values would be without terrain)', () => {

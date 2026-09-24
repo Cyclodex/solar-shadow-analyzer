@@ -108,9 +108,12 @@ const M = { left: 48, right: Math.ceil(estimateTextWidth('24:00', 11) / 2) + 2, 
 /** Minutes of the time grid the pointer and keyboard snap to. */
 const SNAP = 5;
 const TOP_GAP = 6;
-/** Sunrise/sunset labels: offset from their line and the least gap between the two labels, px (11 px font). */
+/**
+ * Sunrise/sunset labels: offset from their line and the least gap between the two labels, px (11 px font).
+ * The gap is small: the widths are measured (rounded up), and the labels have a halo.
+ */
 const EVENT_PAD = 4;
-const EVENT_GAP = 8;
+const EVENT_GAP = 4;
 /**
  * Shaded periods (any floor above SHADED_THRESHOLD) as one class, drawn exactly like the legend swatch; the
  * shaded share itself is in the tooltip, the summary and the table.
