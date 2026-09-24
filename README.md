@@ -165,8 +165,9 @@ Der Gerätestandort wird nur auf Klick über die Geolocation-API des Browsers ab
 Koordinaten), UI-Einstellungen und zwischengespeicherte Wetter- und Geländedaten liegen im `localStorage`, die
 App-Dateien für den Offline-Start im Cache des Service Workers (nur Dateien der App selbst). Wird die Seite verlassen,
 bevor der URL-Hash nachgeführt ist, übergibt der `sessionStorage` (`ssa.pendingHash`) ihn dem nächsten Aufruf im
-selben Tab. Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet, wer den Link
-erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
+selben Tab; dort merkt sich die App auch, wann sie sich wegen einer neuen Version selbst neu geladen hat
+(`ssa.chunkReload`). Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet, wer
+den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
 
 ## Einschränkungen
 

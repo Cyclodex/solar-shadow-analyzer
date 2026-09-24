@@ -257,6 +257,12 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
     kontrollierte) und «Später» (das Update übernimmt, wenn alle Fenster der App geschlossen sind). Nach dem ersten
     Besuch kurz «Offline verfügbar». Update-Prüfung stündlich und beim Zurückkehren in den Vordergrund nach
     mindestens einer Stunde (`scheduleUpdateChecks`).
+- **Veraltete Chunks:** Ohne kontrollierenden Service Worker (gesperrt, privates Fenster, Daten vom Browser
+  gelöscht) fordert eine vor einem Deployment geladene Seite beim Einblenden der 3D-Ansicht Chunks an, die es nicht
+  mehr gibt. Vite meldet das als `vite:preloadError`; `initStaleChunkReload()` (`pwa/staleChunks.ts`, vor dem
+  ersten Render) lädt die Seite dann einmal neu: nicht offline und nicht erneut innerhalb von 60 s (Zeitpunkt im
+  sessionStorage unter `ssa.chunkReload`). Bis dahin, oder wenn das Neuladen nicht hilft, ersetzt eine
+  Fehlergrenze (`SceneErrorBoundary` in `App.tsx`) nur die 3D-Ansicht durch einen Hinweis mit «Neu laden».
 - **Installieren:** `initInstallPrompt()` (vor dem ersten Render) hält `beforeinstallprompt` fest (ohne Chromes
   Mini-Infoleiste) und merkt sich `appinstalled`. `InstallButton` im Header: mit Event öffnet es den Installdialog
   (`prompt()`, das Event ist danach verbraucht), auf iOS/iPadOS (User-Agent, iPadOS über Touchpunkte) ein Popover

@@ -12,18 +12,22 @@ import { MonthlyTable } from './charts/MonthlyTable';
 import { MonthlyYieldChart } from './charts/MonthlyYieldChart';
 import { ShadeHeatmap } from './charts/ShadeHeatmap';
 import { TiltSweepChart } from './charts/TiltSweepChart';
+import { Button } from './components/Button';
+import { Placeholder } from './components/Placeholder';
 import { Spinner } from './components/Spinner';
 import { QuickControls, SettingsSections } from './controls/Sidebar';
 import { PrintRoot } from './export/PrintRoot';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useMessages, type Messages } from './i18n';
 import { PwaToast } from './pwa/PwaToast';
+import { reloadPage } from './pwa/updates';
 import { useUiStore } from './state/uiStore';
 import { FrontalView } from './views/FrontalView';
 import { PanelShadowView } from './views/PanelShadowView';
 import { ProfileView } from './views/ProfileView';
 import { SunPathView } from './views/SunPathView';
 import { Scene3DLazy } from './views/scene3d';
+import { SceneErrorBoundary } from './views/scene3d/SceneErrorBoundary';
 import styles from './App.module.css';
 
 const de = {
@@ -32,6 +36,10 @@ const de = {
   views: 'Ansichten',
   analysis: 'Analyse',
   loading3d: '3D-Ansicht wird geladen …',
+  failed3d: 'Die 3D-Ansicht konnte nicht geladen werden.',
+  failed3dDetail:
+    'Wahrscheinlich ist inzwischen eine neue Version erschienen, oder die Internetverbindung fehlt. Neu laden holt die aktuelle Version.',
+  reload: 'Neu laden',
   noViews: 'Alle Ansichten sind ausgeblendet.',
 };
 const messages: Messages<typeof de> = {
@@ -42,6 +50,10 @@ const messages: Messages<typeof de> = {
     views: 'Views',
     analysis: 'Analysis',
     loading3d: 'Loading 3D view …',
+    failed3d: 'The 3D view could not be loaded.',
+    failed3dDetail:
+      'Most likely a new version has been released in the meantime, or there is no internet connection. Reloading fetches the current version.',
+    reload: 'Reload',
     noViews: 'All views are hidden.',
   },
 };
@@ -123,15 +135,36 @@ export default function App() {
                 <ViewToggles />
               </div>
               {views.scene3d && (
-                <Suspense
+                // A chunk that fails to load (e.g. removed by a new deploy, src/pwa/staleChunks.ts) replaces
+                // only this view, not the whole app.
+                <SceneErrorBoundary
                   fallback={
                     <div className={styles.fallback3d}>
-                      <Spinner label={t.loading3d} showLabel />
+                      <Placeholder
+                        detail={
+                          <>
+                            {t.failed3dDetail}{' '}
+                            <Button size="sm" onClick={reloadPage}>
+                              {t.reload}
+                            </Button>
+                          </>
+                        }
+                      >
+                        {t.failed3d}
+                      </Placeholder>
                     </div>
                   }
                 >
-                  <Scene3DLazy />
-                </Suspense>
+                  <Suspense
+                    fallback={
+                      <div className={styles.fallback3d}>
+                        <Spinner label={t.loading3d} showLabel />
+                      </div>
+                    }
+                  >
+                    <Scene3DLazy />
+                  </Suspense>
+                </SceneErrorBoundary>
               )}
               <div className={styles.grid}>
                 {views.frontal && <FrontalView />}
