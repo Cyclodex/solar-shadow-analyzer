@@ -242,8 +242,14 @@ body {
   line-height: var(--lh);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
-  /* Room for the control bar of phones at the end of the page (app/BottomBar sets it). */
+  /* Room for the control bar of phones at the end of the page (app/BottomBar sets it; not printed). */
   padding-bottom: var(--bottom-bar-h, 0px);
+}
+
+@media print {
+  body {
+    padding-bottom: 0;
+  }
 }
 
 /* Installed iOS app: the page runs under the transparent status bar. A fixed strip as tall as the covered
