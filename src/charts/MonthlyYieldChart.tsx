@@ -3,8 +3,10 @@ import { ViewCard } from '../components/ViewCard';
 import { Segmented } from '../components/Segmented';
 import { monthNames, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
+import { clearSkyParts } from '../export/filenames';
 import { useSimulation } from '../hooks/useModel';
 import type { SimulationResult } from '../model/types';
+import { useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { AxisX, AxisY, type AxisTick } from './lib/Axes';
 import { ChartStats } from './lib/ChartStats';
@@ -373,6 +375,7 @@ export function MonthlyYieldChart() {
   const lang = useLang();
   const simulation = useSimulation();
   const weatherStatus = useDataStore((s) => s.weather.status);
+  const locationName = useConfigSection('location').name;
   const labels = useFloorLabels();
   const source = useSourceLabel(simulation);
   const numFloors = simulation?.floors.length ?? 0;
@@ -439,7 +442,18 @@ export function MonthlyYieldChart() {
     ) : undefined;
 
   return (
-    <ViewCard title={t.title} subtitle={t.subtitle} toolbar={toolbar} exportName="monatsertrag" busy={busy}>
+    <ViewCard
+      title={t.title}
+      subtitle={t.subtitle}
+      toolbar={toolbar}
+      exportKind="monthly"
+      exportParts={
+        simulation
+          ? [locationName, simulation.year, ...clearSkyParts(simulation.source, lang)]
+          : [locationName]
+      }
+      busy={busy}
+    >
       {simulation && (
         <ChartStats
           items={[

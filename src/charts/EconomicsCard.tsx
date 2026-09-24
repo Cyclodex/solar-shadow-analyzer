@@ -7,6 +7,7 @@ import { useCommon, type CommonMessages } from '../i18n/common';
 import { useEconomics, useSimulation } from '../hooks/useModel';
 import { economics } from '../model/economics';
 import type { EconomicsConfig, EconomicsResult } from '../model/types';
+import { clearSkyParts } from '../export/filenames';
 import { EXPORT_IGNORE } from '../export/png';
 import { useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
@@ -20,7 +21,6 @@ import styles from './EconomicsCard.module.css';
 const de = {
   title: 'Wirtschaftlichkeit',
   subtitle: (n: number) => `Ersparnis, Amortisation und Bilanz über ${n} ${n === 1 ? 'Jahr' : 'Jahre'}`,
-  exportName: 'wirtschaftlichkeit',
   savings: 'Ersparnis pro Jahr',
   savingsSub: (kwh: string) => `im 1. Jahr, aus ${kwh}`,
   payback: 'Amortisationsdauer',
@@ -57,7 +57,6 @@ const messages: Messages<typeof de> = {
   en: {
     title: 'Economics',
     subtitle: (n) => `Savings, payback and balance over ${n} ${n === 1 ? 'year' : 'years'}`,
-    exportName: 'economics',
     savings: 'Savings per year',
     savingsSub: (kwh) => `in year 1, from ${kwh}`,
     payback: 'Payback period',
@@ -403,6 +402,8 @@ export function EconomicsCard() {
   const t = useMessages(messages);
   const c = useCommon();
   const f = useFormat();
+  const lang = useLang();
+  const locationName = useConfigSection('location').name;
   const e = useConfigSection('economics');
   const numFloors = useConfigSection('building').numFloors;
   const simulation = useSimulation();
@@ -453,7 +454,12 @@ export function EconomicsCard() {
     <ViewCard
       title={t.title}
       subtitle={t.subtitle(e.lifetimeYears)}
-      exportName={t.exportName}
+      exportKind="economics"
+      exportParts={
+        simulation
+          ? [locationName, simulation.year, ...clearSkyParts(simulation.source, lang)]
+          : [locationName]
+      }
       minHeight={200}
       busy={!ready || weatherLoading}
       footer={<p>{t.assumptions(assumptionList, simulation ? basis : c.loading)}</p>}

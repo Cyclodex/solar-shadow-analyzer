@@ -6,15 +6,15 @@ import { cssVars } from '../components/cssVars';
 import { monthNames, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useHeatmapStats, useSimulation } from '../hooks/useModel';
-import { exportFilename } from '../export/filenames';
-import { downloadCsv, userCsvFormat } from '../export/resultsCsv';
+import { clearSkyParts, exportFilename } from '../export/filenames';
+import { downloadCsv, monthlyResultsCsv, userCsvFormat } from '../export/resultsCsv';
 import { useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { DataTable, type DataTableColumn, type DataTableRow } from './lib/DataTable';
 import { floorColor } from './lib/colors';
 import { useFloorLabels, useShadedFloor } from './lib/floors';
-import { monthlyCsv, monthlyRows, type MonthlyRow } from './lib/monthlyTable';
+import { monthlyRows, type MonthlyRow } from './lib/monthlyTable';
 import { useSourceLabel } from './lib/sourceLabel';
 import chart from './lib/chart.module.css';
 import styles from './MonthlyTable.module.css';
@@ -37,14 +37,6 @@ const de = {
   lossNote: 'Verlust: Differenz zum Ertrag ohne Verschattung durch das jeweils obere Stockwerk.',
   single: 'Nur ein Stockwerk: keine Verschattung durch Panels.',
   waiting: 'Die Monatswerte werden berechnet …',
-  /** File name part after "verschattung-monatsertrag-", tells the table export from the export menu's. */
-  fileTag: 'tabelle',
-  clearSkyTag: 'klarer-himmel',
-  csvFloor: (floor: string) => `${floor} (kWh)`,
-  csvTotal: 'Total (kWh)',
-  csvLoss: 'Verlust (kWh)',
-  csvLossPct: 'Verlust (%)',
-  csvShaded: (floor: string) => `Verschattete Stunden ${floor} (h)`,
 };
 type Texts = typeof de;
 const messages: Messages<Texts> = {
@@ -67,13 +59,6 @@ const messages: Messages<Texts> = {
     lossNote: 'Loss: difference to the yield without shading by the floor above.',
     single: 'Single floor: no shading by panels.',
     waiting: 'Computing the monthly values …',
-    fileTag: 'table',
-    clearSkyTag: 'clear-sky',
-    csvFloor: (floor) => `${floor} (kWh)`,
-    csvTotal: 'Total (kWh)',
-    csvLoss: 'Loss (kWh)',
-    csvLossPct: 'Loss (%)',
-    csvShaded: (floor) => `Shaded hours ${floor} (h)`,
   },
 };
 
@@ -149,27 +134,17 @@ export function MonthlyTable() {
     ],
   });
 
+  // The export menu's monthly CSV (same columns and naming scheme) plus the shaded hours of the table.
   const exportCsv = (): void => {
-    if (!data || !simulation) return;
-    const csv = monthlyCsv(
-      data,
-      {
-        month: t.month,
-        floors: Array.from({ length: n }, (_, k) => t.csvFloor(labels[k] ?? String(k))),
-        total: t.csvTotal,
-        lossKwh: multi ? t.csvLoss : null,
-        lossPct: multi ? t.csvLossPct : null,
-        shadedHours: multi ? t.csvShaded(floorName) : null,
-        monthNames: months,
-        year: t.year,
-      },
-      userCsvFormat(lang),
-    );
-    // Same naming scheme as the export menu's CSV files.
-    const clearSky = simulation.source === 'clear-sky' ? [t.clearSkyTag] : [];
+    if (!simulation) return;
+    const shadedHours =
+      multi && stats
+        ? { floor: floorName, monthly: stats.monthly.map((m) => m.shadedHours), year: stats.shadedHours }
+        : undefined;
+    const parts = [locationName, simulation.year, ...clearSkyParts(simulation.source, lang)];
     downloadCsv(
-      csv,
-      exportFilename('monthly', lang, [t.fileTag, locationName, simulation.year, ...clearSky], 'csv'),
+      monthlyResultsCsv(simulation, lang, userCsvFormat(lang), { shadedHours }),
+      exportFilename('monthlyTable', lang, parts, 'csv'),
     );
   };
 

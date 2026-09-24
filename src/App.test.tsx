@@ -98,6 +98,20 @@ describe('App', () => {
     expect(useConfigStore.getState().config.building.numFloors).toBe(3);
   });
 
+  it("prints one inputs appendix for the browser's print command (print mode mounted once)", () => {
+    render(<App />);
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+    expect(screen.getAllByRole('region', { name: 'Eingaben dieses Berichts' })).toHaveLength(1);
+    expect(document.documentElement).toHaveClass('ssa-printing');
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'));
+    });
+    expect(screen.queryByRole('region', { name: 'Eingaben dieses Berichts' })).toBeNull();
+    expect(document.documentElement).not.toHaveClass('ssa-printing');
+  });
+
   it('the skip link focuses the results without replacing the share hash', () => {
     const hash = `#c=${encodeConfig({ ...DEFAULT_CONFIG, panels: { ...DEFAULT_CONFIG.panels, tiltFromVertical: 30 } })}`;
     history.replaceState(null, '', `/${hash}`);

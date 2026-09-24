@@ -29,6 +29,8 @@ function LegendItem({ swatch, label, pressed, onToggle, children }: LegendItemPr
           pressed={pressed}
           onClick={onToggle}
           className={styles.chip}
+          // Printed as a plain label (swatch + name); print.css leaves out the entry when it is off.
+          data-print="label"
         >
           {label}
         </Button>

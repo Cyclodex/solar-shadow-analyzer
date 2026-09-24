@@ -413,6 +413,7 @@ export function DailyProfileChart() {
   const c = useCommon();
   const f = useFormat();
   const date = useTimeStore((s) => s.date);
+  const locationName = useConfigSection('location').name;
   const { numFloors } = useConfigSection('building');
   const { inverterLimitW } = useConfigSection('system');
   const points = useDailyProfile();
@@ -493,7 +494,8 @@ export function DailyProfileChart() {
     <ViewCard
       title={t.title}
       subtitle={t.subtitle(dateText)}
-      exportName="tagesverlauf"
+      exportKind="daily"
+      exportParts={[locationName, date]}
       footer={
         <ChartDataTable
           caption={t.tableCaption(dateText)}

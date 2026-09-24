@@ -8,8 +8,6 @@ import type { CameraPreset } from './sceneLayout';
 const de = {
   title: '3D-Ansicht',
   subtitle: (when: string) => `${when} · ziehen zum Drehen`,
-  /** Base of the PNG file name. */
-  exportName: '3d-ansicht',
   camera: 'Kamera',
   presets: {
     default: 'Übersicht',
@@ -69,7 +67,6 @@ export const sceneMessages: Messages<SceneMessages> = {
   en: {
     title: '3D view',
     subtitle: (when) => `${when} · drag to rotate`,
-    exportName: '3d-view',
     camera: 'Camera',
     presets: {
       default: 'Overview',

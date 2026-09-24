@@ -4,15 +4,14 @@ import {
   useDeferredValue,
   useEffect,
   useId,
-  useLayoutEffect,
   useRef,
   useState,
   type ChangeEvent,
   type KeyboardEvent,
-  type RefObject,
 } from 'react';
 import { Button } from '../components/Button';
 import { DownloadIcon } from '../components/icons';
+import { useDismissOnOutsidePointer, useKeepInViewport } from '../components/usePopover';
 import { floorLabel, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useShadedFloor } from '../charts/lib/floors';
@@ -24,7 +23,7 @@ import {
   readConfigFile,
   type ConfigImportError,
 } from '../export/configFile';
-import { exportFilename } from '../export/filenames';
+import { clearSkyParts, exportFilename } from '../export/filenames';
 import {
   downloadCsv,
   heatmapCsv,
@@ -32,7 +31,6 @@ import {
   tiltSweepCsv,
   userCsvFormat,
 } from '../export/resultsCsv';
-import { PrintRoot } from '../export/PrintRoot';
 import { printReport } from '../export/print';
 import { useConfig, useConfigSection, useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
@@ -51,7 +49,6 @@ const de = {
   computing: 'wird berechnet …',
   print: 'Bericht drucken …',
   printHint: 'auch als PDF',
-  clearSkyTag: 'klarer-himmel',
   imported: (name: string) => `Konfiguration «${name}» geladen.`,
   undo: 'Rückgängig',
   undone: 'Vorherige Konfiguration wiederhergestellt.',
@@ -77,7 +74,6 @@ const messages: Messages<typeof de> = {
     computing: 'computing …',
     print: 'Print report …',
     printHint: 'or save as PDF',
-    clearSkyTag: 'clear-sky',
     imported: (name) => `Configuration “${name}” loaded.`,
     undo: 'Undo',
     undone: 'Previous configuration restored.',
@@ -114,27 +110,10 @@ type Notice =
   | { kind: 'info'; text: string }
   | { kind: 'error'; text: string };
 
-/** Viewport margin kept free by popovers, px. */
-const EDGE = 8;
 /** Success notices disappear after this time (unless focus is inside). */
 const NOTICE_MS = 8000;
 /** Weather series coordinates are rounded to 0.01° (model/weather.ts). */
 const SERIES_COORD_TOLERANCE = 0.01;
-
-/** Shifts an absolutely positioned popover horizontally so it stays inside the viewport. */
-function useKeepInViewport(ref: RefObject<HTMLElement | null>, active: boolean): void {
-  useLayoutEffect(() => {
-    const el = ref.current;
-    if (!active || !el) return;
-    el.style.setProperty('--shift', '0px');
-    const r = el.getBoundingClientRect();
-    const vw = document.documentElement.clientWidth || window.innerWidth;
-    let shift = 0;
-    if (r.left < EDGE) shift = EDGE - r.left;
-    else if (r.right > vw - EDGE) shift = vw - EDGE - r.right;
-    el.style.setProperty('--shift', `${Math.round(shift)}px`);
-  }, [ref, active]);
-}
 
 /**
  * True while the weather series does not belong to the configured year and location: a new series is
@@ -200,11 +179,7 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
           detail: stale || !simulation ? t.computing : undefined,
           onSelect: () => {
             if (stale || !simulation) return;
-            const parts = [
-              name,
-              simulation.year,
-              ...(simulation.source === 'clear-sky' ? [t.clearSkyTag] : []),
-            ];
+            const parts = [name, simulation.year, ...clearSkyParts(simulation.source, lang)];
             downloadCsv(
               monthlyResultsCsv(simulation, lang, userCsvFormat(lang)),
               exportFilename('monthly', lang, parts, 'csv'),
@@ -220,11 +195,7 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
           onSelect: () => {
             if (stale || !sweep || !sweepSeries) return;
             const storeys = placements.map((p) => p.storey);
-            const parts = [
-              name,
-              sweepSeries.year,
-              ...(sweepSeries.source === 'clear-sky' ? [t.clearSkyTag] : []),
-            ];
+            const parts = [name, sweepSeries.year, ...clearSkyParts(sweepSeries.source, lang)];
             downloadCsv(
               tiltSweepCsv(sweep.points, storeys, lang, userCsvFormat(lang)),
               exportFilename('tiltSweep', lang, parts, 'csv'),
@@ -422,8 +393,6 @@ function ImportNotice({
  * The button has aria-haspopup/aria-expanded; the menu takes focus, Arrow keys/Home/End/type-ahead
  * move, Escape closes and returns focus, Tab and outside clicks close. Unavailable entries stay
  * focusable with aria-disabled.
- * Also mounts <PrintRoot/> (print mode for the menu item and the browser's print command) until the
- * app shell renders it itself.
  */
 export function ExportMenu() {
   const t = useMessages(messages);
@@ -434,16 +403,11 @@ export function ExportMenu() {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    if (!open && !notice) return;
-    const onPointerDown = (e: PointerEvent): void => {
-      if (rootRef.current?.contains(e.target as Node)) return;
-      setOpen(false);
-      if (notice?.kind !== 'imported') setNotice(null);
-    };
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open, notice]);
+  // Outside presses close the menu and notices, except an import notice (it offers the undo).
+  useDismissOnOutsidePointer(rootRef, open || notice !== null, () => {
+    setOpen(false);
+    if (notice?.kind !== 'imported') setNotice(null);
+  });
 
   const close = (focusButton: boolean): void => {
     setOpen(false);
@@ -497,7 +461,7 @@ export function ExportMenu() {
           }
         }}
       >
-        <span className={styles.text}>{t.export}</span>
+        <span className="sr-only-narrow">{t.export}</span>
       </Button>
       {open && (
         <Menu
@@ -509,8 +473,7 @@ export function ExportMenu() {
         />
       )}
       {notice && <ImportNotice notice={notice} t={t} onClose={closeNotice} onUndo={undo} />}
-      <input ref={fileRef} type="file" accept={CONFIG_FILE_ACCEPT} hidden onChange={onFile} />
-      <PrintRoot />
+      <input ref={fileRef} type="file" accept={CONFIG_FILE_ACCEPT} hidden onChange={(e) => void onFile(e)} />
     </div>
   );
 }

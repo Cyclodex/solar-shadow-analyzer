@@ -6,6 +6,7 @@ import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useUiStore } from '../state/uiStore';
+import { PrintRoot } from '../export/PrintRoot';
 import { resetStores } from '../test/utils';
 import { ExportMenu } from './ExportMenu';
 
@@ -136,6 +137,29 @@ describe('ExportMenu', () => {
     openMenu();
     fireEvent.pointerDown(screen.getByText('outside'));
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('outside clicks close notices, except the import notice with its undo', async () => {
+    render(
+      <>
+        <ExportMenu />
+        <p>outside</p>
+      </>,
+    );
+    chooseFile('');
+    expect(await screen.findByRole('alert')).toHaveTextContent('Die Datei ist leer.');
+    fireEvent.pointerDown(screen.getByText('outside'));
+    expect(screen.queryByRole('alert')).toBeNull();
+
+    chooseFile(
+      configToJson(
+        sanitizeConfig({ ...DEFAULT_CONFIG, building: { ...DEFAULT_CONFIG.building, numFloors: 4 } }),
+      ),
+    );
+    const status = await screen.findByRole('status');
+    fireEvent.pointerDown(screen.getByText('outside'));
+    expect(status).toBeInTheDocument();
+    expect(within(status).getByRole('button', { name: 'Rückgängig' })).toBeInTheDocument();
   });
 
   it('downloads the configuration as JSON', async () => {
@@ -342,7 +366,13 @@ describe('ExportMenu', () => {
       });
     });
     vi.stubGlobal('print', print);
-    render(<ExportMenu />);
+    // Print mode lives in the app shell (App renders <PrintRoot/>).
+    render(
+      <>
+        <ExportMenu />
+        <PrintRoot />
+      </>,
+    );
     fireEvent.click(within(openMenu()).getByRole('menuitem', { name: /Bericht drucken/ }));
     // The theme switches to light right away, before the print dialog opens.
     expect(useUiStore.getState().theme).toBe('light');

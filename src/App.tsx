@@ -14,6 +14,7 @@ import { ShadeHeatmap } from './charts/ShadeHeatmap';
 import { TiltSweepChart } from './charts/TiltSweepChart';
 import { Spinner } from './components/Spinner';
 import { QuickControls, SettingsSections } from './controls/Sidebar';
+import { PrintRoot } from './export/PrintRoot';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useMessages, type Messages } from './i18n';
 import { useUiStore } from './state/uiStore';
@@ -94,6 +95,7 @@ export default function App() {
         {t.skip}
       </a>
       <DataLoader />
+      <PrintRoot />
       <Header />
       <div className={styles.shell}>
         {wide && (

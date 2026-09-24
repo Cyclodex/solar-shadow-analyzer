@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConfigStore } from '../../state/configStore';
 import { useTimeStore } from '../../state/timeStore';
@@ -8,6 +8,12 @@ import Scene3D from './Scene3D';
 // Pretend WebGL 2 exists: the DOM part of the view renders; R3F never creates a renderer in jsdom
 // (the stubbed ResizeObserver never reports a canvas size).
 vi.mock('./webgl', () => ({ isWebGL2Available: () => true, resetWebGLDetection: () => {} }));
+
+const exportViewPng = vi.hoisted(() => vi.fn(async () => {}));
+vi.mock('../../export/png', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../export/png')>()),
+  exportViewPng,
+}));
 
 /** Renders the view and waits for the lazily loaded WebGL part. */
 async function renderLoaded(): Promise<HTMLElement> {
@@ -30,6 +36,8 @@ describe('Scene3D stage (DOM parts)', () => {
     const layers = screen.getByRole('list', { name: 'Ebenen' });
     const model = within(layers).getByRole('button', { name: 'Modell-Schatten' });
     expect(model).toHaveAttribute('aria-pressed', 'true');
+    // The layer toggles label the legend in the printed report (print.css).
+    expect(model).toHaveAttribute('data-print', 'label');
     fireEvent.click(model);
     expect(model).toHaveAttribute('aria-pressed', 'false');
     expect(within(layers).getByRole('button', { name: 'Schattenwurf' })).toHaveAttribute(
@@ -39,6 +47,18 @@ describe('Scene3D stage (DOM parts)', () => {
     expect(within(layers).getByRole('button', { name: 'Sonnenbahn' })).toHaveAttribute(
       'aria-pressed',
       'true',
+    );
+  });
+
+  it('names the PNG after the site and the selected instant, in the UI language', async () => {
+    useTimeStore.getState().setMinutes(12 * 60 + 30);
+    await renderLoaded();
+    fireEvent.click(screen.getByRole('button', { name: '3D-Ansicht als PNG exportieren' }));
+    await waitFor(() =>
+      expect(exportViewPng).toHaveBeenLastCalledWith(
+        expect.any(HTMLElement),
+        'verschattung-3d-ansicht-47.100-N-7.450-E-2025-06-21-1230.png',
+      ),
     );
   });
 

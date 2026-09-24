@@ -1,6 +1,5 @@
-import { fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { useExportFilename } from '../app/useExportFilename';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { ViewCard } from './ViewCard';
@@ -14,9 +13,9 @@ describe('ViewCard', () => {
     exportViewPng.mockClear();
   });
 
-  it('exports the body as PNG under the given file name', async () => {
+  it('exports the body as PNG, named by kind and parts in the UI language', async () => {
     render(
-      <ViewCard title="Frontalansicht" exportFilename="verschattung-frontalansicht-Bern.png">
+      <ViewCard title="Frontalansicht" exportKind="frontal" exportParts={['Bern', '2025-06-21', '1230']}>
         <svg />
       </ViewCard>,
     );
@@ -24,37 +23,26 @@ describe('ViewCard', () => {
     await waitFor(() => expect(exportViewPng).toHaveBeenCalledTimes(1));
     expect(exportViewPng).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      'verschattung-frontalansicht-Bern.png',
+      'verschattung-frontalansicht-Bern-2025-06-21-1230.png',
+    );
+
+    act(() => useUiStore.getState().setLang('en'));
+    const button = screen.getByRole('button', { name: 'Export Frontalansicht as PNG' });
+    await waitFor(() => expect(button).toBeEnabled());
+    fireEvent.click(button);
+    await waitFor(() => expect(exportViewPng).toHaveBeenCalledTimes(2));
+    expect(exportViewPng).toHaveBeenLastCalledWith(
+      expect.any(HTMLElement),
+      'shading-front-view-Bern-2025-06-21-1230.png',
     );
   });
 
-  it('still accepts a base name (exportName) and hides the button without a name', async () => {
-    const { rerender } = render(
-      <ViewCard title="Sonnenbahn" exportName="sonnen bahn">
-        <svg />
-      </ViewCard>,
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Sonnenbahn als PNG exportieren' }));
-    await waitFor(() =>
-      expect(exportViewPng).toHaveBeenCalledWith(expect.any(HTMLElement), 'sonnen-bahn.png'),
-    );
-    rerender(
+  it('hides the PNG button without an export kind', () => {
+    render(
       <ViewCard title="Sonnenbahn">
         <svg />
       </ViewCard>,
     );
     expect(screen.queryByRole('button', { name: /als PNG exportieren/ })).not.toBeInTheDocument();
-  });
-});
-
-describe('useExportFilename', () => {
-  beforeEach(resetStores);
-
-  it('names exports like the Export menu, in the UI language, with the location', () => {
-    const { result, rerender } = renderHook(() => useExportFilename('monthly', [2025]));
-    expect(result.current).toBe('verschattung-monatsertrag-47.100-N-7.450-E-2025.png');
-    useUiStore.getState().setLang('en');
-    rerender();
-    expect(result.current).toBe('shading-monthly-yield-47.100-N-7.450-E-2025.png');
   });
 });

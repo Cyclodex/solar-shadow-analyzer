@@ -409,6 +409,7 @@ export function ShadeHeatmap() {
   const c = useCommon();
   const f = useFormat();
   const lang = useLang();
+  const locationName = useConfigSection('location').name;
   const { numFloors } = useConfigSection('building');
   const floor = useShadedFloor();
   const heatmap = useHeatmap(floor);
@@ -537,7 +538,8 @@ export function ShadeHeatmap() {
         aboveName ? t.subtitle(floorName, aboveName, heatmap.year) : t.subtitleTop(floorName, heatmap.year)
       }
       toolbar={toolbar}
-      exportName={`heatmap-${floorName.replace(/\./g, '')}`}
+      exportKind="heatmap"
+      exportParts={[locationName, floorName, heatmap.year]}
       footer={
         <ChartDataTable caption={t.tableCaption(floorName, heatmap.year)} context={t.title} {...table} />
       }

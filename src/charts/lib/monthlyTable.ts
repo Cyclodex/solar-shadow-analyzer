@@ -1,6 +1,5 @@
 import type { HeatmapStats } from '../../model/analysis';
 import type { SimulationResult } from '../../model/types';
-import { toCsv, type CsvCell, type CsvOptions } from '../../export/csv';
 
 // ─────────────────────────────────────────────
 // MONTHLY TABLE DATA
@@ -55,55 +54,4 @@ export function monthlyRows(
     shadedHours: stats ? stats.shadedHours : null,
   };
   return { months, year };
-}
-
-/** Rounds for the CSV export like the export menu's CSVs: no float noise, −0 → 0, non-finite → empty. */
-function round(value: number, digits: number): number {
-  if (!Number.isFinite(value)) return NaN;
-  const r = Number(value.toFixed(digits));
-  return r === 0 ? 0 : r;
-}
-
-const kwh = (v: number): number => round(v, 2);
-
-export interface MonthlyCsvLabels {
-  month: string;
-  /** Column header per floor (index = floor). */
-  floors: readonly string[];
-  total: string;
-  /** Headers of the loss columns (both omitted when null, e.g. a single floor). */
-  lossKwh: string | null;
-  lossPct: string | null;
-  /** Header of the shaded-hours column (omitted when null). */
-  shadedHours: string | null;
-  /** Row label per month (12) and of the year row. */
-  monthNames: readonly string[];
-  year: string;
-}
-
-/**
- * CSV text (RFC 4180, dot decimals; kWh and % to 2 decimals, hours to 1) of the monthly table incl. the
- * year row. Pass the user's spreadsheet dialect (userCsvFormat from export/resultsCsv), as the export menu does.
- */
-export function monthlyCsv(
-  rows: { months: MonthlyRow[]; year: MonthlyRow },
-  labels: MonthlyCsvLabels,
-  format: Pick<CsvOptions, 'separator' | 'decimal'> = {},
-): string {
-  const withTotal = labels.floors.length > 1;
-  const header: CsvCell[] = [
-    labels.month,
-    ...labels.floors,
-    ...(withTotal ? [labels.total] : []),
-    ...(labels.lossKwh && labels.lossPct ? [labels.lossKwh, labels.lossPct] : []),
-    ...(labels.shadedHours ? [labels.shadedHours] : []),
-  ];
-  const line = (r: MonthlyRow): CsvCell[] => [
-    r.month === null ? labels.year : labels.monthNames[r.month],
-    ...r.floorsKwh.map(kwh),
-    ...(withTotal ? [kwh(r.totalKwh)] : []),
-    ...(labels.lossKwh && labels.lossPct ? [kwh(r.lossKwh), round(r.lossPct, 2)] : []),
-    ...(labels.shadedHours ? [round(r.shadedHours ?? 0, 1)] : []),
-  ];
-  return toCsv([header, ...rows.months.map(line), line(rows.year)], format);
 }

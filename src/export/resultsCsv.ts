@@ -19,6 +19,7 @@ const de = {
   unshadedKwh: (who: string) => `${who}: ohne Verschattung (kWh)`,
   lossKwh: (who: string) => `${who}: Verschattungsverlust (kWh)`,
   lossPct: (who: string) => `${who}: Verschattungsverlust (%)`,
+  shadedHours: (who: string) => `${who}: verschattete Stunden (h)`,
   tiltFromVertical: 'Neigung ab Senkrechte θ (°)',
   tiltFromHorizontal: 'Neigung ab Horizontal β (°)',
   annualKwh: (who: string) => `${who}: Jahresertrag (kWh)`,
@@ -35,6 +36,7 @@ const messages: Messages<typeof de> = {
     unshadedKwh: (who) => `${who}: without shading (kWh)`,
     lossKwh: (who) => `${who}: shading loss (kWh)`,
     lossPct: (who) => `${who}: shading loss (%)`,
+    shadedHours: (who) => `${who}: shaded hours (h)`,
     tiltFromVertical: 'Tilt from vertical θ (°)',
     tiltFromHorizontal: 'Tilt from horizontal β (°)',
     annualKwh: (who) => `${who}: annual yield (kWh)`,
@@ -61,19 +63,37 @@ function round(value: number, digits: number): number {
 
 const kwh = (v: number): number => round(v, 2);
 
+/** Shaded hours of one floor (heatmap statistics), for an extra column of monthlyResultsCsv. */
+export interface ShadedHoursColumn {
+  /** Floor name for the header, e.g. "1. OG". */
+  floor: string;
+  /** Shaded hours per month (12). */
+  monthly: readonly number[];
+  /** Shaded hours of the year. */
+  year: number;
+}
+
 /**
  * Monthly AC yield per floor (bottom floor first) and in total: yield, yield without shading by the
- * floor above, shading loss; last row = year (model totals).
+ * floor above, shading loss; last row = year (model totals). Optionally a last column with the shaded
+ * hours of one floor (1 decimal).
  */
-export function monthlyResultsCsv(sim: SimulationResult, lang: Lang, format: CsvFormat): string {
+export function monthlyResultsCsv(
+  sim: SimulationResult,
+  lang: Lang,
+  format: CsvFormat,
+  opts: { shadedHours?: ShadedHoursColumn } = {},
+): string {
   const t = messages[lang];
   const months = monthNames(lang, 'long');
+  const { shadedHours } = opts;
   const header: CsvCell[] = [t.month];
   for (const fl of sim.floors) {
     const who = floorLabel(fl.storey, lang);
     header.push(t.yieldKwh(who), t.unshadedKwh(who), t.lossKwh(who));
   }
   header.push(t.yieldKwh(t.total), t.unshadedKwh(t.total), t.lossKwh(t.total), t.lossPct(t.total));
+  if (shadedHours) header.push(t.shadedHours(shadedHours.floor));
 
   const rows: CsvCell[][] = [header];
   for (let m = 0; m < 12; m++) {
@@ -92,6 +112,7 @@ export function monthlyResultsCsv(sim: SimulationResult, lang: Lang, format: Csv
       kwh(loss),
       round(unshaded > 0 ? (loss / unshaded) * 100 : 0, 2),
     );
+    if (shadedHours) row.push(round(shadedHours.monthly[m] ?? NaN, 1));
     rows.push(row);
   }
 
@@ -107,6 +128,7 @@ export function monthlyResultsCsv(sim: SimulationResult, lang: Lang, format: Csv
     kwh(sim.totalShadingLossKwh),
     round(unshadedYear > 0 ? (sim.totalShadingLossKwh / unshadedYear) * 100 : 0, 2),
   );
+  if (shadedHours) annual.push(round(shadedHours.year, 1));
   rows.push(annual);
   return toCsv(rows, format);
 }
