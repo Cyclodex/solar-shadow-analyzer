@@ -4,6 +4,7 @@ import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { PanelShadowView } from './PanelShadowView';
+import { SUN_GLYPH_EXTENT } from './svg/primitives';
 import {
   EXTREME_CASES,
   WALL_OBSTACLE,
@@ -172,6 +173,25 @@ describe('PanelShadowView', () => {
     const blocked = render(<PanelShadowView />);
     expect(figureOf(blocked.container)).toHaveAccessibleDescription(/Sonne hinter Gelände\/Hindernis/);
   });
+
+  it.each([
+    ['24 Sep 12:00', 720],
+    ['24 Sep 13:20 (sun straight behind)', 800],
+  ])(
+    'keeps the inset sun glyph below the facade label with the sun behind a north facade: %s',
+    (_, minutes) => {
+      setConfig({ building: { facadeAzimuth: 0 } });
+      useTimeStore.setState({ date: '2025-09-24', minutes });
+      const { container } = render(<PanelShadowView />);
+      const svg = figureOf(container);
+      const label = Array.from(svg.querySelectorAll('text')).find((t) => t.textContent === 'Fassade');
+      const core = svg.querySelector('circle[class*="sunDimCore"]');
+      expect(label).toBeDefined();
+      expect(core).not.toBeNull();
+      const top = Number(core?.getAttribute('cy')) - Number(core?.getAttribute('r')) * SUN_GLYPH_EXTENT;
+      expect(top).toBeGreaterThan(Number(label?.getAttribute('y')));
+    },
+  );
 
   it('lists per-module values in the text when the modules are too narrow for labels', () => {
     setConfig({

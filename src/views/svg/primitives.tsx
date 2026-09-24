@@ -55,6 +55,8 @@ export interface DimensionLineProps {
   from?: [Pt, Pt];
   /** Rotate the label to run along a vertical line (side 'left' / 'right'). */
   rotate?: boolean;
+  /** Explicit label position (baseline) and anchor instead of `side` (placed by the caller). */
+  labelAt?: { x: number; y: number; anchor: Anchor };
 }
 
 /** Architectural dimension line with 45° end ticks and a value label. */
@@ -66,6 +68,7 @@ export function DimensionLine({
   tone = 'default',
   from,
   rotate = false,
+  labelAt,
 }: DimensionLineProps) {
   const len = Math.hypot(b.x - a.x, b.y - a.y) || 1;
   const ux = (b.x - a.x) / len;
@@ -86,9 +89,9 @@ export function DimensionLine({
     below: { x: mid.x, y: mid.y + 14, anchor: 'middle' },
   };
   const vertical = rotate && (side === 'left' || side === 'right');
-  const p = vertical
-    ? { x: mid.x + (side === 'left' ? -6 : 14), y: mid.y, anchor: 'middle' as const }
-    : pos[side];
+  const p =
+    labelAt ??
+    (vertical ? { x: mid.x + (side === 'left' ? -6 : 14), y: mid.y, anchor: 'middle' as const } : pos[side]);
   const lineClass = tone === 'bad' ? s.dimBad : s.dim;
   return (
     <g>

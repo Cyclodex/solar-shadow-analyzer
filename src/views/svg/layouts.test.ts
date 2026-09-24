@@ -28,6 +28,7 @@ import {
   buildScene,
   criticalLabel,
   placedBox,
+  reachLabel,
   sunRay,
   thetaLabel,
 } from './profileLayout';
@@ -381,6 +382,27 @@ describe('side view layout', () => {
         expect(b.x1, at).toBeLessThanOrEqual(box.x1);
         const theta = placedBox(thetaLabel(v.scene, v.pair, v.layout, 'θ 45°'));
         expect(overlaps(b, theta), at).toBe(false);
+      }
+    }
+  });
+
+  it.each(labelCases)('keeps the reach label clear of the balcony slab: $name', ({ c, focus }) => {
+    for (const width of [302, 332, 472, 900]) {
+      for (const word of ['Ausladung', 'Reach']) {
+        const v = sideView(c, width, focus ?? 0);
+        if (!v.pair.showReach) continue;
+        const { fit, lower, box } = v.scene;
+        const text = `${word} ${Math.round(v.layout.reach * 100)} cm`;
+        const b = placedBox(reachLabel(v.scene, v.pair, text));
+        const slab = {
+          x0: fit.x(-WALL_T - INTERIOR),
+          y0: fit.y(lower.slabZ),
+          x1: fit.x(lower.railN),
+          y1: fit.y(lower.slabZ - SLAB_T),
+        };
+        const at = `${width} px, "${text}"`;
+        expect(overlaps(b, slab), at).toBe(false);
+        expect(b.x1, at).toBeLessThanOrEqual(box.x1);
       }
     }
   });

@@ -29,6 +29,7 @@ import {
   buildScene,
   criticalLabel,
   fitLabel,
+  reachLabel,
   sunRay,
   thetaLabel,
   type Building,
@@ -175,6 +176,15 @@ const SectionDrawing = memo(function SectionDrawing({
   const critical = f.deg(layout.criticalProfileAngle, 1);
   const critLabel = criticalLabel(scene, pair, layout, t.critical(critical), critical);
   const thetaText = t.theta(f.deg(theta));
+  const reach = pair.showReach
+    ? reachLabel(
+        scene,
+        pair,
+        upper !== null || pair.panelPx >= 90
+          ? fitLabel(t.reach(cm(layout.reach)), cm(layout.reach), layout.reach * fit.k + 60)
+          : cm(layout.reach),
+      )
+    : null;
   return (
     <g>
       <path d={building.interior} className={styles.interior} />
@@ -253,16 +263,13 @@ const SectionDrawing = memo(function SectionDrawing({
           tone={overlap ? 'bad' : 'default'}
         />
       )}
-      {pair.showReach && (
+      {reach && (
         <DimensionLine
           a={{ x: x(lower.railN), y: tip.y + REACH_DIM_DY }}
           b={{ x: tip.x, y: tip.y + REACH_DIM_DY }}
-          label={
-            upper !== null || pair.panelPx >= 90
-              ? fitLabel(t.reach(cm(layout.reach)), cm(layout.reach), layout.reach * fit.k + 60)
-              : cm(layout.reach)
-          }
+          label={reach.text}
           side="below"
+          labelAt={reach}
         />
       )}
 

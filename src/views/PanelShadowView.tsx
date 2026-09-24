@@ -170,10 +170,14 @@ interface SunInsetProps {
 /** Plan-view inset: facade on top, outward normal pointing down, sun direction relative to the facade. */
 function SunInset({ x, y, sun, dim, t }: SunInsetProps) {
   const c = { x: x + INSET / 2, y: y + INSET / 2 + 4 };
-  const r = INSET / 2 - 12;
   const horiz = sun ? Math.hypot(sun.u, sun.n) : 0;
   const dir = sun && horiz > 1e-6 ? { x: sun.u / horiz, y: sun.n / horiz } : null;
   const glyphR = 5;
+  const glyphExtent = glyphR * SUN_GLYPH_EXTENT;
+  const labelY = y + 12;
+  // Sun behind the facade (dir.y < 0): closer to the centre, so the glyph stays 3 px below the "Facade" label.
+  const r =
+    dir && dir.y < 0 ? Math.min(INSET / 2 - 12, (c.y - labelY - 3 - glyphExtent) / -dir.y) : INSET / 2 - 12;
   return (
     <g>
       <path d={rectD(x, y, INSET, INSET)} className={s.frameRect} />
@@ -185,7 +189,7 @@ function SunInset({ x, y, sun, dim, t }: SunInsetProps) {
         ])}
         className={s.railTop}
       />
-      <text x={px(c.x)} y={px(y + 13)} textAnchor="middle" className={styles.insetWallLabel}>
+      <text x={px(c.x)} y={px(labelY)} textAnchor="middle" className={styles.insetWallLabel}>
         {t.facade}
       </text>
       <text x={px(x + INSET / 2)} y={px(y + INSET + 13)} textAnchor="middle" className={s.small}>
@@ -195,8 +199,8 @@ function SunInset({ x, y, sun, dim, t }: SunInsetProps) {
         <>
           <Arrow
             from={{
-              x: c.x + dir.x * (r - glyphR * SUN_GLYPH_EXTENT),
-              y: c.y + dir.y * (r - glyphR * SUN_GLYPH_EXTENT),
+              x: c.x + dir.x * (r - glyphExtent),
+              y: c.y + dir.y * (r - glyphExtent),
             }}
             to={{ x: c.x + dir.x * 6, y: c.y + dir.y * 6 }}
             head={6}

@@ -272,6 +272,18 @@ export function buildPair(scene: Scene, layout: PanelLayout): PairGeometry {
   };
 }
 
+/**
+ * Reach label below its dimension line: centred on the line, but never left of the railing, where it would
+ * run into the balcony slab; kept inside the drawing.
+ */
+export function reachLabel(scene: Scene, pair: PairGeometry, text: string): PlacedText {
+  const rail = scene.fit.x(scene.lower.railN);
+  const w = textWidth(text, FONT);
+  const centred = (rail + pair.tip.x) / 2 - w / 2;
+  const x = Math.min(Math.max(centred, rail + 4), scene.box.x1 - w);
+  return { x, y: pair.tip.y + REACH_DIM_DY + 14, anchor: 'start', text };
+}
+
 /** Estimated screen box of a placed label (FONT). */
 export function placedBox(l: PlacedText): Box {
   return labelBox(l.x, l.y, textWidth(l.text, FONT), l.anchor, FONT);
