@@ -17,6 +17,7 @@ import { QuickControls, SettingsSections } from './controls/Sidebar';
 import { PrintRoot } from './export/PrintRoot';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useMessages, type Messages } from './i18n';
+import { PwaToast } from './pwa/PwaToast';
 import { useUiStore } from './state/uiStore';
 import { FrontalView } from './views/FrontalView';
 import { PanelShadowView } from './views/PanelShadowView';
@@ -169,6 +170,7 @@ export default function App() {
           <Footer />
         </div>
       </div>
+      <PwaToast />
     </>
   );
 }

@@ -1,0 +1,36 @@
+/* Bottom right, above the home indicator and beside a landscape notch; lets clicks through where empty. */
+.region {
+  position: fixed;
+  z-index: 60;
+  right: calc(var(--space-4) + var(--safe-right));
+  bottom: calc(var(--space-4) + var(--safe-bottom));
+  left: calc(var(--space-4) + var(--safe-left));
+  display: flex;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.toast {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2) var(--space-3);
+  max-width: 26rem;
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  box-shadow: var(--shadow);
+  pointer-events: auto;
+}
+
+.text {
+  flex: 1 1 12rem;
+  font-size: var(--fs-sm);
+}
+
+.actions {
+  display: flex;
+  gap: var(--space-2);
+}
