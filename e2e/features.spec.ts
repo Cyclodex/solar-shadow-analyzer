@@ -22,7 +22,9 @@ test('3D view renders a WebGL canvas with content', async ({ page }) => {
           ctx.drawImage(el, 0, 0, 64, 64);
           const data = ctx.getImageData(0, 0, 64, 64).data;
           const colours = new Set<number>();
-          for (let i = 0; i < data.length; i += 4) colours.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+          for (let i = 0; i < data.length; i += 4) {
+            colours.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+          }
           return colours.size;
         }),
       { timeout: 20_000 },

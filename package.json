@@ -1,8 +1,18 @@
 {
   "name": "solar-shadow-analyzer",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
-  "description": "Interaktive Verschattungsanalyse für Balkon-Solarpanels",
+  "description": "Verschattungsanalyse für geneigt an übereinanderliegenden Balkongeländern hängende Solarpanels: exakte 3D-Verschattung, Jahresertrag mit Open-Meteo-Wetterdaten, Geländehorizont und Wirtschaftlichkeit (DE/EN)",
+  "license": "MIT",
+  "author": "Fabian Gander",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Cyclodex/solar-shadow-analyzer.git"
+  },
+  "homepage": "https://github.com/Cyclodex/solar-shadow-analyzer#readme",
+  "bugs": {
+    "url": "https://github.com/Cyclodex/solar-shadow-analyzer/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=22"
