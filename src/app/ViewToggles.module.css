@@ -28,3 +28,10 @@
 .chip[aria-pressed='false'] {
   color: var(--text-muted);
 }
+
+/* Phones: the chips alone (the group keeps its name for screen readers), one row of chips less. */
+@media (max-width: 479.98px) {
+  .label {
+    display: none;
+  }
+}
