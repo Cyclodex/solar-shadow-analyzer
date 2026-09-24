@@ -1,0 +1,10 @@
+.chart {
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+
+/* The chart renders nothing when there is no horizon at all. */
+.chart:empty {
+  display: none;
+}

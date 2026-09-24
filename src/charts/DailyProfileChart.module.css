@@ -1,0 +1,14 @@
+/* Sunrise / sunset */
+.event {
+  stroke: var(--sun);
+  stroke-width: 1;
+  shape-rendering: crispEdges;
+}
+
+/* Inverter limit: a threshold, hence dashed (grid lines stay solid) */
+.limit {
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+  shape-rendering: crispEdges;
+}

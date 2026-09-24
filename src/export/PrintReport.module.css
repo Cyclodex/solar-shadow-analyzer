@@ -1,0 +1,73 @@
+/* Print-only appendix (rendered while printing, hidden on screen as a safety net). */
+
+.report {
+  display: none;
+}
+
+@media print {
+  .report {
+    display: block;
+    padding: 0 var(--space-4);
+    break-before: page;
+    color: var(--text);
+  }
+}
+
+.title {
+  font-size: var(--fs-lg);
+}
+
+.meta {
+  margin: var(--space-1) 0 var(--space-4);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.groups {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-4) var(--space-6);
+}
+
+.groupTitle {
+  margin-bottom: var(--space-1);
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--fs-sm);
+}
+
+.list {
+  display: grid;
+  gap: 1px;
+  font-size: var(--fs-xs);
+}
+
+/* Label at its natural width, the value wraps in the rest (a long value never covers its label). */
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-3);
+}
+
+.row dt {
+  color: var(--text-muted);
+}
+
+.row dd {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.link {
+  margin-top: var(--space-4);
+  font-size: var(--fs-xs);
+}
+
+.linkLabel {
+  color: var(--text-muted);
+}
+
+.url {
+  font-family: var(--font-mono);
+  word-break: break-all;
+}

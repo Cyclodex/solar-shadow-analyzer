@@ -1,15 +1,55 @@
-<!DOCTYPE html>
-<html lang="de">
+<!doctype html>
+<html lang="de" data-theme="dark">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Solar Verschattungsanalyse</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      body { background: #0f172a; }
-    </style>
+    <!-- viewport-fit=cover: the page runs to the screen edges (notch, home indicator); global.css keeps the
+         content inside env(safe-area-inset-*). -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Verschattungsanalyse · Balkon-Solarpanels</title>
+    <meta
+      name="description"
+      content="Verschattungsanalyse für Balkon-Solarpanels: gegenseitige Verschattung übereinanderliegender Panels, Jahresertrag mit Wetterdaten, Geländehorizont und Wirtschaftlichkeit – im Browser berechnet."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Verschattungsanalyse · Balkon-Solarpanels" />
+    <meta
+      property="og:description"
+      content="Verschattungsanalyse für Balkon-Solarpanels: gegenseitige Verschattung übereinanderliegender Panels, Jahresertrag mit Wetterdaten, Geländehorizont und Wirtschaftlichkeit – im Browser berechnet."
+    />
+    <meta name="color-scheme" content="dark light" />
+    <meta name="theme-color" content="#0b1120" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <!-- Home screen app (iOS/iPadOS; the manifest link is added by vite-plugin-pwa). Status bar
+         black-translucent: the page runs under it, global.css paints a dark strip for its white symbols. -->
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Verschattung" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <script>
+      // Apply the stored (or OS-preferred) theme and language before the first paint (no flash).
+      (function () {
+        var theme, lang;
+        try {
+          var ui = JSON.parse(localStorage.getItem('ssa.ui') || 'null');
+          if (ui && ui.state) {
+            theme = ui.state.theme;
+            lang = ui.state.lang;
+          }
+        } catch (e) {}
+        if (theme !== 'dark' && theme !== 'light') {
+          theme = window.matchMedia && matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        }
+        document.documentElement.setAttribute('data-theme', theme);
+        // Browser chrome in the theme's page background: must match --bg in src/styles/global.css.
+        var themeColor = document.querySelector('meta[name="theme-color"]');
+        if (themeColor) themeColor.setAttribute('content', theme === 'light' ? '#f3f5f9' : '#0b1120');
+        if (lang === 'de' || lang === 'en') document.documentElement.lang = lang;
+      })();
+    </script>
   </head>
   <body>
+    <noscript>Diese Anwendung benötigt JavaScript. / This application requires JavaScript.</noscript>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -1,0 +1,60 @@
+/* Panel shadow detail specifics (shared drawing classes: svg/svg.module.css). */
+
+/* Whole shadow of the row above (also where it misses the modules). */
+.cast {
+  fill: var(--shade);
+  fill-opacity: 0.35;
+  stroke: var(--text-faint);
+  stroke-width: 1;
+  stroke-dasharray: 4 3;
+}
+
+/* Bypass substrings touched by the shadow (substring model). */
+.hit {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 2;
+}
+
+.hitSwatch {
+  fill: none;
+  stroke: var(--warn);
+  stroke-width: 2;
+}
+
+.insetWall {
+  fill: var(--wall);
+}
+
+/* "Facade" on the inset's wall: --text on --wall is 8.2:1 (dark) / 12:1 (light); --text-faint fails AA there. */
+.insetWallLabel {
+  fill: var(--text);
+  font-size: 10px;
+}
+
+/* Compact floor <select> in the card toolbar (many floors). */
+.select {
+  min-height: 28px;
+  max-width: 11rem;
+  padding: 0 var(--space-6) 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background-color: var(--surface-2);
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--text-muted) 50%),
+    linear-gradient(135deg, var(--text-muted) 50%, transparent 50%);
+  background-position:
+    calc(100% - 14px) 50%,
+    calc(100% - 9px) 50%;
+  background-size: 5px 5px;
+  background-repeat: no-repeat;
+  color: var(--text);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  appearance: none;
+}
+
+.select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}

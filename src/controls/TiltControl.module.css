@@ -1,0 +1,78 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  border: 1px solid var(--accent-strong);
+  border-radius: var(--radius);
+  background: linear-gradient(160deg, var(--accent-soft), transparent 75%), var(--surface);
+}
+
+.head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.heading {
+  font-size: var(--fs-md);
+}
+
+.big {
+  font-size: var(--fs-2xl);
+  font-weight: 750;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+
+.symbol {
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.beta {
+  margin-top: calc(-1 * var(--space-1));
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.optimum {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: var(--touch);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border);
+}
+
+.optimumText {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  font-size: var(--fs-sm);
+}
+
+.sub {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.badge {
+  padding: 2px var(--space-2);
+  border-radius: var(--radius-pill);
+  background: var(--ok-soft);
+  color: var(--ok);
+  font-size: var(--fs-xs);
+  font-weight: 600;
+}
+
+/* Previous optimum while the sweep is recomputed for changed inputs (dimmed only if that takes a while). */
+.updating {
+  opacity: 0.6;
+  transition: opacity 0.2s 0.2s linear;
+}

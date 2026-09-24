@@ -1,0 +1,86 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.label {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
+.inputWrap {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: 32px;
+  padding: 0 var(--space-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  transition: border-color var(--transition);
+}
+
+.inputWrap:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.inputWrap[data-invalid] {
+  border-color: var(--bad);
+}
+
+.input {
+  width: 6.5ch;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.input:focus-visible {
+  outline: none;
+}
+
+.unit {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.hint {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+.error {
+  font-size: var(--fs-xs);
+  color: var(--bad);
+}
+
+/* Touch targets: the whole 36 px box is the input on phones/tablets and touch screens. */
+@media (max-width: 1099px), (pointer: coarse) {
+  .inputWrap {
+    height: var(--touch);
+  }
+
+  .input {
+    align-self: stretch;
+  }
+}

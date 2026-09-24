@@ -1,0 +1,104 @@
+/* ─────────────────────────────────────────────
+   PRINT REPORT (global; imported by export/print.ts)
+   Applies to "Bericht drucken" and to the browser's own print command. The width of a printed page
+   puts the app into its one-column layout; usePrintMode() switches to the light theme, so all colours
+   still come from the tokens in styles/global.css.
+   Controls are not part of the report: the sidebar, buttons, button groups, radio groups, sliders,
+   menus, dialogs and closed <details> are hidden. Mark anything else with data-print="hide".
+   Exception: a toggle button that labels printed content (3D legend: swatch + layer name) is marked
+   data-print="label" and prints as a plain label; if it is off (aria-pressed="false"), its whole list
+   entry is left out, because that layer is not in the printed image.
+   Canvases that re-render for print (see export/print.ts) are printed as a 2D copy placed next to
+   them ([data-print-stand-in], never shown on screen); the canvas itself is [data-print-replaced].
+   Selectors with :has() are kept in rules of their own: a browser without :has() then only drops those.
+   Page breaks: when content moves to the next page as a whole (a chart: <svg> and <canvas> are never
+   split; anything with `break-inside: avoid`), Chromium does not grow a flex container around it, and
+   the following content overlaps it. The report's columns and cards are therefore blocks in print
+   (App, ViewCard and EconomicsCard modules), and `break-inside: avoid` is only set on block children
+   (3D stage, economics table), never on flex/grid items. Cards may continue on the next page.
+   ───────────────────────────────────────────── */
+
+canvas[data-print-stand-in] {
+  display: none !important;
+}
+
+@media print {
+  @page {
+    margin: 12mm 12mm 14mm;
+  }
+
+  html {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body {
+    background: var(--surface);
+  }
+
+  aside,
+  button:not([data-print='label']),
+  input[type='range'],
+  input[type='file'],
+  [role='radiogroup'],
+  [role='menu'],
+  [role='dialog'],
+  details:not([open]),
+  [data-print='hide'],
+  a[href='#results'],
+  canvas[data-print-replaced] {
+    display: none !important;
+  }
+
+  [role='group']:has(> button) {
+    display: none !important;
+  }
+
+  li:has(> button[data-print='label'][aria-pressed='false']) {
+    display: none !important;
+  }
+
+  /* Legend swatches draw their outline with an inset shadow: keep it. */
+  *:not([data-print='label'] *),
+  *::before,
+  *::after {
+    box-shadow: none !important;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+
+  button[data-print='label'] {
+    min-height: 0 !important;
+    padding: 0 !important;
+    border: 0 !important;
+    background: none !important;
+    color: var(--text) !important;
+    pointer-events: none;
+  }
+
+  canvas[data-print-stand-in] {
+    display: block !important;
+  }
+
+  h2,
+  h3 {
+    break-after: avoid;
+  }
+
+  tr {
+    break-inside: avoid;
+  }
+
+  /* External links (sources in the footer) with their address. */
+  footer a[href^='http']::after {
+    content: ' (' attr(href) ')';
+    font-size: 0.85em;
+    word-break: break-all;
+    color: var(--text-muted);
+  }
+}

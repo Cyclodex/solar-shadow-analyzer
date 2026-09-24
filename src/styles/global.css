@@ -1,0 +1,361 @@
+/* ─────────────────────────────────────────────
+   DESIGN TOKENS & BASE STYLES
+   The only place with literal colours. Components use var(--…) (CSS Modules), SVG views use
+   var(--…) for fill/stroke so they follow the theme. Theme = :root[data-theme="dark" | "light"]
+   (set by App from uiStore; index.html sets it before the first paint).
+
+   WCAG 2.x contrast ratios, computed (scratch script, relative luminance formula), not estimated:
+   dark theme                       bg #0b1120   surface #131b2e   surface-2 #1c2740
+     --text        #e6ebf4             15.74          14.34            12.42
+     --text-muted  #a6b1c4              8.70           7.93             6.87
+     --text-faint  #8c99ae              6.53           5.95             5.15
+     --accent      #9aa3ff              8.12           7.40             6.41
+     --ok          #4ade80             10.81           9.85             8.53
+     --warn        #fbbf24             11.28          10.28             8.90
+     --bad         #fb8b8b              8.22           7.49             6.49
+     --on-accent #ffffff on --accent-strong #4f46e5: 6.29
+     on --wall #3a4459 (SVG views): --text 8.16, --text-muted 4.51, --text-faint 3.39 (fails AA)
+     --border-strong #61708c on surface: 3.44 (non-text ≥ 3:1: input borders, slider track)
+   light theme                      bg #f3f5f9   surface #ffffff   surface-2 #eaeef5
+     --text        #111827             16.25          17.74            15.25
+     --text-muted  #465164              7.34           8.01             6.88
+     --text-faint  #5b6678              5.32           5.81             4.99
+     --accent      #4338ca              7.24           7.90             6.79
+     --ok          #047857              5.02           5.48             4.71
+     --warn        #a14a06              5.50           6.00             5.16
+     --bad         #b91c1c              5.93           6.47             5.56
+     --sun-ink     #b45309              4.60           5.02             4.32 (use on bg/surface only)
+     --on-accent #ffffff on --accent-strong #4338ca: 7.90
+     on --wall #d9d4ca (SVG views): --text 12.01, --text-muted 5.42, --text-faint 3.93 (fails AA)
+     --border-strong #8793a8 on surface: 3.10
+   All text pairs ≥ 4.5:1 (AA normal text) except --text-faint on --wall: text on the wall uses --text
+   (e.g. the "Fassade" label), never --text-faint. --border is decorative (card outlines), not a control boundary.
+
+   Floor colours (--floor-0 … --floor-7): categorical palette of the dataviz reference instance, fixed order
+   (never cycle, colour follows the floor index). Validated with its validator (OKLab ΔE, Machado 2009 CVD):
+     light on #ffffff: worst adjacent CVD ΔE 9.1, normal-vision 19.6; slots 3–5 < 3:1 on white
+                       → charts must direct-label floors or offer a table view (MonthlyTable).
+     dark on #131b2e:  worst adjacent CVD ΔE 8.4, normal-vision 19.3; all ≥ 3:1.
+   ───────────────────────────────────────────── */
+
+:root {
+  /* Typography */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: ui-monospace, 'SFMono-Regular', 'Cascadia Mono', Menlo, Consolas, monospace;
+  --fs-xs: 0.75rem; /* 12px */
+  --fs-sm: 0.8125rem; /* 13px */
+  --fs-md: 0.9375rem; /* 15px */
+  --fs-lg: 1.125rem; /* 18px */
+  --fs-xl: 1.5rem; /* 24px */
+  --fs-2xl: 2rem; /* 32px */
+  --lh: 1.45;
+
+  /* Spacing scale (4 px base) */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+
+  /* Shape & layout */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+  --sidebar-w: 340px;
+  --content-max: 1680px;
+  --touch: 36px; /* minimum touch target */
+  --focus-ring: 0 0 0 2px var(--bg), 0 0 0 4px var(--accent);
+  --transition: 150ms ease;
+
+  /* Safe areas (index.html: viewport-fit=cover): screen parts covered by the notch, the status bar of the
+     installed iOS app or the home indicator; 0 wherever nothing covers the page. */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  /* Behind the status bar of the installed iOS app (black-translucent: always white symbols), both themes. */
+  --statusbar: #0b1120;
+}
+
+/* ── Dark theme (default) ─────────────────── */
+:root,
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #0b1120;
+  --surface: #131b2e;
+  --surface-2: #1c2740;
+  --surface-3: #25324f;
+  --border: #26324a;
+  --border-strong: #61708c;
+  --text: #e6ebf4;
+  --text-muted: #a6b1c4;
+  --text-faint: #8c99ae;
+  --accent: #9aa3ff;
+  --accent-strong: #4f46e5;
+  --accent-soft: rgb(99 102 241 / 0.18);
+  --on-accent: #ffffff;
+  --sun: #fbbf24;
+  --sun-ink: #fbbf24;
+  --sun-glow: rgb(251 191 36 / 0.35);
+  --shade: rgb(2 6 23 / 0.6);
+  --ok: #4ade80;
+  --warn: #fbbf24;
+  --bad: #fb8b8b;
+  --ok-soft: rgb(74 222 128 / 0.12);
+  --warn-soft: rgb(251 191 36 / 0.12);
+  --bad-soft: rgb(248 113 113 / 0.14);
+  --shadow: 0 1px 2px rgb(0 0 0 / 0.35), 0 6px 20px rgb(0 0 0 / 0.25);
+  --skeleton: #22304b;
+  --skeleton-hi: #2c3b5a;
+
+  /* Scene / view colours */
+  --sky-top: #0f2a52;
+  --sky-bottom: #1d4476;
+  --ground: #243021;
+  --wall: #3a4459;
+  --wall-edge: #56637d;
+  --railing: #8a96ad;
+  --panel: #1e3a8a;
+  --panel-cell: #2c4fae;
+  --panel-edge: #93a4c8;
+
+  /* Chart chrome */
+  --grid: #26324a;
+  --axis: #56637d;
+
+  /* Floors (categorical, dark steps) */
+  --floor-0: #3987e5;
+  --floor-1: #d95926;
+  --floor-2: #199e70;
+  --floor-3: #c98500;
+  --floor-4: #d55181;
+  --floor-5: #008300;
+  --floor-6: #9085e9;
+  --floor-7: #e66767;
+
+  /* Sequential ramp (blue), --seq-1 = near zero (closest to the surface) … --seq-7 = max */
+  --seq-1: #104281;
+  --seq-2: #184f95;
+  --seq-3: #256abf;
+  --seq-4: #3987e5;
+  --seq-5: #6da7ec;
+  --seq-6: #9ec5f4;
+  --seq-7: #cde2fb;
+}
+
+/* ── Light theme ──────────────────────────── */
+:root[data-theme='light'] {
+  color-scheme: light;
+  --bg: #f3f5f9;
+  --surface: #ffffff;
+  --surface-2: #eaeef5;
+  --surface-3: #dde3ee;
+  --border: #d3dae6;
+  --border-strong: #8793a8;
+  --text: #111827;
+  --text-muted: #465164;
+  --text-faint: #5b6678;
+  --accent: #4338ca;
+  --accent-strong: #4338ca;
+  --accent-soft: rgb(67 56 202 / 0.1);
+  --on-accent: #ffffff;
+  --sun: #f59e0b;
+  --sun-ink: #b45309;
+  --sun-glow: rgb(245 158 11 / 0.3);
+  --shade: rgb(15 23 42 / 0.45);
+  --ok: #047857;
+  --warn: #a14a06;
+  --bad: #b91c1c;
+  --ok-soft: rgb(4 120 87 / 0.1);
+  --warn-soft: rgb(217 119 6 / 0.12);
+  --bad-soft: rgb(185 28 28 / 0.09);
+  --shadow: 0 1px 2px rgb(15 23 42 / 0.08), 0 6px 20px rgb(15 23 42 / 0.06);
+  --skeleton: #e3e8f0;
+  --skeleton-hi: #eef2f7;
+
+  --sky-top: #7fb4ea;
+  --sky-bottom: #d6e8fa;
+  --ground: #b9c9a3;
+  --wall: #d9d4ca;
+  --wall-edge: #9c9486;
+  --railing: #5b6678;
+  --panel: #1e3a8a;
+  --panel-cell: #2f55b8;
+  --panel-edge: #0f1f4d;
+
+  --grid: #e3e8f0;
+  --axis: #8793a8;
+
+  --floor-0: #2a78d6;
+  --floor-1: #eb6834;
+  --floor-2: #1baf7a;
+  --floor-3: #eda100;
+  --floor-4: #e87ba4;
+  --floor-5: #008300;
+  --floor-6: #4a3aa7;
+  --floor-7: #e34948;
+
+  --seq-1: #cde2fb;
+  --seq-2: #9ec5f4;
+  --seq-3: #6da7ec;
+  --seq-4: #3987e5;
+  --seq-5: #256abf;
+  --seq-6: #184f95;
+  --seq-7: #0d366b;
+}
+
+/* ── Base ─────────────────────────────────── */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  font-size: var(--fs-md);
+  line-height: var(--lh);
+  -webkit-font-smoothing: antialiased;
+  overflow-x: hidden;
+}
+
+/* Installed iOS app: the page runs under the transparent status bar. A fixed strip as tall as the covered
+   area keeps its white symbols readable in the light theme and over scrolled content. */
+body::before {
+  content: '';
+  position: fixed;
+  z-index: 1000;
+  inset: 0 0 auto;
+  height: var(--safe-top);
+  background: var(--statusbar);
+  pointer-events: none;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  line-height: 1.2;
+  font-weight: 650;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 2px;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+svg text {
+  font-family: var(--font-sans);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+/* Values: aligned digits */
+output,
+.num,
+td,
+th {
+  font-variant-numeric: tabular-nums;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+/* Visually hidden, still announced by screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@media (forced-colors: active) {
+  :focus-visible {
+    outline: 2px solid CanvasText;
+  }
+}
+
+/* Visually hidden on narrow screens only (≤ 480 px), like .sr-only: e.g. the text of a header button
+   that keeps its icon there. */
+@media (max-width: 480px) {
+  .sr-only-narrow {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}

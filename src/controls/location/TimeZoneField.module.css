@@ -1,0 +1,20 @@
+/* Same look as the generic TextField (its focus and invalid states come with the composed input class). */
+.field {
+  composes: field from '../../components/TextField.module.css';
+}
+
+.label {
+  composes: label from '../../components/TextField.module.css';
+}
+
+.input {
+  composes: input from '../../components/TextField.module.css';
+}
+
+.hint {
+  composes: hint from '../../components/TextField.module.css';
+}
+
+.error {
+  composes: error from '../../components/TextField.module.css';
+}

@@ -1,0 +1,82 @@
+.card {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4) var(--space-2);
+}
+
+.titles {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.title {
+  font-size: var(--fs-md);
+  font-weight: 650;
+}
+
+.subtitle {
+  margin-top: 2px;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.body {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: var(--min-h);
+  min-width: 0;
+  padding: 0 var(--space-4) var(--space-4);
+}
+
+.busy {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+}
+
+.footer {
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--border);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.error {
+  padding: 0 var(--space-4) var(--space-2);
+  font-size: var(--fs-xs);
+  color: var(--bad);
+}
+
+/* Print: a block, not a flex column (see export/print.css), with the header kept next to the body. */
+@media print {
+  .card {
+    display: block;
+  }
+
+  .header {
+    break-after: avoid;
+  }
+}

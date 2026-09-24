@@ -1,0 +1,245 @@
+/* 3D view: canvas stage with overlaid camera bar and model status, legend below (styled as card footer). */
+
+.stage,
+.loading {
+  position: relative;
+  height: clamp(300px, 60vh, 640px);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  background: var(--surface-2);
+  isolation: isolate;
+}
+
+@media (min-width: 1100px) {
+  .stage,
+  .loading {
+    height: clamp(380px, 56vh, 780px);
+  }
+}
+
+.loading {
+  display: grid;
+  place-items: center;
+}
+
+/* R3F's wrapper div (inline position: relative; 100 % size) fills the stage. */
+.canvas {
+  position: absolute !important;
+  inset: 0;
+}
+
+.canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* Floating panels over the canvas */
+.status,
+.cameraBar {
+  position: absolute;
+  z-index: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--surface) 86%, transparent);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(6px);
+}
+
+.status {
+  top: var(--space-2);
+  right: var(--space-2);
+  /* Wide enough for "< 1 % der Fläche verschattet" on one line next to the floor name. */
+  max-width: min(17.5rem, calc(100% - 2 * var(--space-2)));
+  padding: var(--space-2) var(--space-3);
+  font-size: var(--fs-xs);
+  pointer-events: none;
+}
+
+.statusTitle {
+  margin-bottom: 2px;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.floorList {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.floorItem {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  align-items: center;
+  gap: var(--space-2);
+  font-variant-numeric: tabular-nums;
+}
+
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dot);
+}
+
+.floorName {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.floorValue {
+  color: var(--text-muted);
+  text-align: right;
+}
+
+.cameraBar {
+  left: var(--space-2);
+  bottom: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  max-width: calc(100% - 2 * var(--space-2));
+  padding: var(--space-1);
+}
+
+.lost {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: center;
+}
+
+/* Legend: toggle chip + explanation per layer; spans the card like the ViewCard footer. */
+.legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+  gap: var(--space-2) var(--space-5);
+  margin: var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--border);
+  list-style: none;
+}
+
+.legendItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 0;
+}
+
+.chip {
+  color: var(--text);
+}
+
+.legendLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 32px;
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.legendText {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.swatch {
+  display: block;
+  flex: none;
+  width: 20px;
+  height: 12px;
+  border-radius: 2px;
+}
+
+/* The Button icon slot is square: widen it for the swatches and centre them. */
+.chip :global(span[aria-hidden='true']) {
+  width: auto;
+  align-items: center;
+}
+
+.swatchModel {
+  background:
+    repeating-linear-gradient(135deg, var(--sun) 0 1.5px, transparent 1.5px 5px),
+    linear-gradient(var(--shade), var(--shade)), var(--panel);
+  box-shadow: inset 0 0 0 1.5px var(--sun);
+}
+
+.swatchCast {
+  background: linear-gradient(var(--shade), var(--shade)), var(--panel);
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+}
+
+.swatchPath {
+  height: 3px;
+  background: var(--sun);
+  border-radius: var(--radius-pill);
+}
+
+.swatchHorizon {
+  background: color-mix(in srgb, var(--ground) 55%, var(--sky-bottom));
+  border-top: 2px solid var(--axis);
+}
+
+.short {
+  display: none;
+}
+
+/*
+ * Touch devices: vertical one-finger swipes scroll the page (the view is tall on phones), horizontal swipes
+ * rotate, two fingers zoom. !important beats the inline touch-action: none set by OrbitControls.
+ * Full touch targets in the floating camera bar (incl. the icon-only reset button) and the legend's layer
+ * toggles (.legend .chip outranks the small Button size regardless of stylesheet order).
+ */
+@media (pointer: coarse) {
+  .canvas {
+    touch-action: pan-y !important;
+  }
+
+  .cameraBar button {
+    min-height: var(--touch);
+    min-width: var(--touch);
+  }
+
+  .legend .chip {
+    min-height: var(--touch);
+  }
+}
+
+@media (max-width: 520px) {
+  .status {
+    padding: var(--space-1) var(--space-2);
+  }
+
+  .statusTitle {
+    display: none;
+  }
+
+  .long {
+    display: none;
+  }
+
+  .short {
+    display: inline;
+  }
+}
+
+/* Print: the stand-in image of the scene and its overlays move to the next page together. */
+@media print {
+  .stage {
+    break-inside: avoid;
+  }
+}

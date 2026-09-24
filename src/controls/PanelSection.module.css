@@ -1,0 +1,85 @@
+.orientation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.orientationOption {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.landscapeGlyph,
+.portraitGlyph {
+  display: inline-block;
+  flex: 0 0 auto;
+  border: 1.5px solid currentColor;
+  border-radius: 2px;
+  background: var(--panel-cell);
+}
+
+.landscapeGlyph {
+  width: 16px;
+  height: 10px;
+}
+
+.portraitGlyph {
+  width: 10px;
+  height: 16px;
+}
+
+.derived {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.derivedRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  min-height: 32px;
+  padding: var(--space-1) var(--space-3);
+}
+
+.derivedRow + .derivedRow {
+  border-top: 1px solid var(--border);
+}
+
+.term {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  min-width: 0;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.value {
+  flex: 0 0 auto;
+  margin: 0;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+  text-align: right;
+}
+
+.derivedRow[data-tone='bad'] .term,
+.derivedRow[data-tone='bad'] .value {
+  color: var(--bad);
+}
+
+.overlap {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--bad);
+  border-radius: var(--radius-sm);
+  background: var(--bad-soft);
+  font-size: var(--fs-xs);
+  color: var(--bad);
+}

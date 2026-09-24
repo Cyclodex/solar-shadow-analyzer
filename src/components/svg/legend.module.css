@@ -1,0 +1,5 @@
+/* Legend label of the charts and 2D views (font size = LEGEND_FONT_SIZE in legend.ts). */
+.text {
+  fill: var(--text-muted);
+  font-size: 12px;
+}

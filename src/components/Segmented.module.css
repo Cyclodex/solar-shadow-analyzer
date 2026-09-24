@@ -1,0 +1,90 @@
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.group {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  max-width: 100%;
+}
+
+.full {
+  display: flex;
+}
+
+.full .option {
+  flex: 1 1 0;
+}
+
+.option {
+  min-height: calc(var(--touch) - 6px);
+  padding: 0 var(--space-3);
+  border: 0;
+  border-radius: calc(var(--radius-sm) - 2px);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  white-space: nowrap;
+  transition:
+    background-color var(--transition),
+    color var(--transition);
+}
+
+.sm .option {
+  min-height: 28px;
+  padding: 0 var(--space-2);
+  font-size: var(--fs-xs);
+}
+
+.option:hover:not(:disabled):not([aria-checked='true']) {
+  background: var(--surface-3);
+  color: var(--text);
+}
+
+.option[aria-checked='true'] {
+  background: var(--accent-strong);
+  color: var(--on-accent);
+}
+
+.option:disabled {
+  opacity: 0.5;
+}
+
+.option:focus-visible {
+  outline-offset: -2px;
+}
+
+/* Touch targets: every option ≥ 36 px on phones/tablets and touch screens. */
+@media (max-width: 1099px), (pointer: coarse) {
+  .option,
+  .sm .option {
+    min-height: var(--touch);
+  }
+}
+
+/* Forced colours: the checked option by system colours (backgrounds are dropped otherwise). */
+@media (forced-colors: active) {
+  .option[aria-checked='true'] {
+    forced-color-adjust: none;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .option:disabled {
+    color: GrayText;
+  }
+}
