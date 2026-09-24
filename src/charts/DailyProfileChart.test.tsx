@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { useConfigStore } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
@@ -33,6 +33,52 @@ describe('DailyProfileChart', () => {
     // Legend inside the SVG (part of the PNG export)
     expect(screen.getByText('Verschattung durch oberes Stockwerk')).toBeInTheDocument();
     expect(screen.getByText(/^Aufgang 05:\d\d$/)).toBeInTheDocument();
+  });
+
+  it('fits sunrise/sunset labels and the legend into a narrow phone width', () => {
+    // An iPhone SE card: the chart root is 262 px wide.
+    const rect = vi
+      .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+      .mockReturnValue(DOMRect.fromRect({ width: 262 }));
+    onTestFinished(() => rect.mockRestore());
+    render(<DailyProfileChart />);
+    // "Aufgang 05:3x" and "Untergang 21:2x" would overlap: times only.
+    expect(screen.getByText(/^05:\d\d$/, { selector: 'text' })).toBeInTheDocument();
+    expect(screen.getByText(/^21:\d\d$/, { selector: 'text' })).toBeInTheDocument();
+    expect(screen.queryByText(/^Aufgang/)).not.toBeInTheDocument();
+    // The long legend label (estimated 258 px incl. swatch in jsdom) moves left to end inside the SVG.
+    const legend = screen.getByText('Verschattung durch oberes Stockwerk').closest('g[aria-hidden]');
+    const x = Number(/translate\(([\d.]+) /.exec(legend?.getAttribute('transform') ?? '')?.[1]);
+    expect(x).toBeLessThanOrEqual(262 - 258);
+  });
+
+  it('keeps the words of the sunrise/sunset labels while a small gap stays between them', () => {
+    // Chart widths where the estimated labels (81 and 93 px, 4 px from their lines) leave a gap of about
+    // 5.6 px (290 px) and 3.6 px (288 px) between them.
+    const labels = (width: number): string[] => {
+      const rect = vi
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockReturnValue(DOMRect.fromRect({ width }));
+      const { container, unmount } = render(<DailyProfileChart />);
+      const texts = [...container.querySelectorAll('text[text-anchor="start"], text[text-anchor="end"]')]
+        .map((t) => t.textContent ?? '')
+        .filter((t) => /\d\d:\d\d$/.test(t));
+      unmount();
+      rect.mockRestore();
+      return texts;
+    };
+    expect(labels(290)).toEqual([
+      expect.stringMatching(/^Aufgang 05:\d\d$/),
+      expect.stringMatching(/^Untergang 21:\d\d$/),
+    ]);
+    expect(labels(288)).toEqual([expect.stringMatching(/^05:\d\d$/), expect.stringMatching(/^21:\d\d$/)]);
+  });
+
+  it('keeps the legend at the plot edge where it fits', () => {
+    const { container } = render(<DailyProfileChart />);
+    const legend = screen.getByText('Verschattung durch oberes Stockwerk').closest('g[aria-hidden]');
+    expect(legend).toHaveAttribute('transform', 'translate(48 4)');
+    expect(container.querySelector('svg')).toHaveAttribute('width', '600');
   });
 
   it('arrow keys move the selected time in 10-minute steps', () => {
@@ -70,6 +116,47 @@ describe('DailyProfileChart', () => {
     fireEvent.pointerUp(slider, { clientX: 100, clientY: 50, pointerId: 1, pointerType: 'mouse' });
     fireEvent.pointerMove(slider, { clientX: 300, clientY: 50, pointerId: 1, pointerType: 'mouse' });
     expect(useTimeStore.getState().minutes).toBe(minutesAt(100));
+  });
+
+  it('touch: a vertical swipe (pointercancel) neither sets the time nor leaves a tooltip', () => {
+    render(<DailyProfileChart />);
+    const slider = screen.getByRole('slider', { name: 'Uhrzeit im Tagesverlauf' });
+    const touch = { pointerId: 3, pointerType: 'touch' } as const;
+    fireEvent.pointerDown(slider, { ...touch, clientX: 100, clientY: 80 });
+    expect(screen.getByText(/· Sonnenhöhe/)).toBeInTheDocument();
+    fireEvent.pointerMove(slider, { ...touch, clientX: 102, clientY: 60 });
+    fireEvent.pointerCancel(slider, touch);
+    expect(useTimeStore.getState().minutes).toBe(720);
+    expect(screen.queryByText(/· Sonnenhöhe/)).not.toBeInTheDocument();
+  });
+
+  it('touch: a tap sets the time; a sideways drag scrubs and is undone if the page scrolls after all', () => {
+    act(() => useTimeStore.getState().setPlaying(true));
+    render(<DailyProfileChart />);
+    const slider = screen.getByRole('slider', { name: 'Uhrzeit im Tagesverlauf' });
+    const touch = { pointerId: 3, pointerType: 'touch' } as const;
+    fireEvent.pointerDown(slider, { ...touch, clientX: 100, clientY: 80 });
+    fireEvent.pointerUp(slider, { ...touch, clientX: 101, clientY: 81 });
+    expect(useTimeStore.getState().minutes).toBe(720); // the click that follows a tap selects
+    fireEvent.click(slider, { clientX: 101, clientY: 81 });
+    expect(useTimeStore.getState().minutes).toBe(minutesAt(101));
+    expect(screen.getByText('Tippen oder seitwärts ziehen setzt die Uhrzeit')).toBeInTheDocument();
+
+    act(() => useTimeStore.getState().setPlaying(true));
+    fireEvent.pointerDown(slider, { ...touch, clientX: 200, clientY: 80 });
+    fireEvent.pointerMove(slider, { ...touch, clientX: 205, clientY: 80 }); // within the slop
+    expect(useTimeStore.getState().minutes).toBe(minutesAt(101));
+    fireEvent.pointerMove(slider, { ...touch, clientX: 300, clientY: 82 });
+    expect(useTimeStore.getState().minutes).toBe(minutesAt(300));
+    expect(useTimeStore.getState().playing).toBe(false);
+    fireEvent.pointerCancel(slider, touch);
+    expect(useTimeStore.getState().minutes).toBe(minutesAt(101));
+    expect(useTimeStore.getState().playing).toBe(true);
+
+    fireEvent.pointerDown(slider, { ...touch, clientX: 200, clientY: 80 });
+    fireEvent.pointerMove(slider, { ...touch, clientX: 300, clientY: 82 });
+    fireEvent.pointerUp(slider, { ...touch, clientX: 300, clientY: 82 });
+    expect(useTimeStore.getState().minutes).toBe(minutesAt(300));
   });
 
   it('shows a tooltip with every floor on hover', () => {

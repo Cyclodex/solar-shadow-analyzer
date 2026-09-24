@@ -8,7 +8,7 @@ import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
-import { useInstant, useLayout } from '../hooks/useModel';
+import { PROVISIONAL_DELAY_MS, useInstant, useLayout } from '../hooks/useModel';
 import { ANNOUNCE_MS, KpiBar } from './KpiBar';
 
 const series = clearSkyYear(DEFAULT_CONFIG.location.latitude, DEFAULT_CONFIG.location.longitude, 2025);
@@ -46,6 +46,8 @@ describe('KpiBar', () => {
       const [specific, installed] = dds(kpi('Spezifischer Ertrag'));
       expect(installed).toMatch(/^bei 1\.72\skWp installiert$/); // 2 floors × 2 × 430 Wp
       expect(num(specific)).toBeCloseTo(total / 1.72, -1);
+      // A normal space before the unit: on a 320 px phone "kWh/kWp" moves onto the next line.
+      expect(kpi('Spezifischer Ertrag').querySelector('dd')?.textContent).toMatch(/^[\d’']+ kWh\/kWp$/);
     });
 
     it('stays busy while the terrain horizon loads (values would be without terrain)', () => {
@@ -61,6 +63,41 @@ describe('KpiBar', () => {
       act(() => useDataStore.getState().setTerrain({ status: 'error', error: 'x' }));
       expect(annual).not.toHaveAttribute('aria-busy');
       expect(kpi('Jahresertrag')).toHaveTextContent(/kWh/);
+    });
+
+    it('shows the numbers without terrain as provisional while only the terrain horizon loads', () => {
+      vi.useFakeTimers();
+      patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setWeather({ status: 'loading' });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+      render(<KpiBar />);
+      const annual = screen.getByRole('heading', { name: 'Jahr 2025' }).parentElement as HTMLElement;
+      // The weather gates: never numbers from another site or year, however long it takes.
+      act(() => {
+        vi.advanceTimersByTime(PROVISIONAL_DELAY_MS * 2);
+      });
+      expect(annual).toHaveAttribute('aria-busy', 'true');
+      expect(kpi('Jahresertrag')).not.toHaveTextContent(/kWh/);
+
+      act(() => useDataStore.getState().setWeather({ status: 'ready', series }));
+      // A fast terrain download finishes within the delay: skeletons until then, no provisional flash.
+      act(() => {
+        vi.advanceTimersByTime(PROVISIONAL_DELAY_MS - 1);
+      });
+      expect(kpi('Jahresertrag')).not.toHaveTextContent(/kWh/);
+      expect(within(annual).queryByText(/vorläufig/)).not.toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(1);
+      });
+      expect(annual).not.toHaveAttribute('aria-busy');
+      expect(within(annual).getByText('vorläufig – Geländehorizont wird geladen')).toBeInTheDocument();
+      const provisional = num(dds(kpi('Jahresertrag'))[0]);
+      expect(provisional).toBeGreaterThan(0);
+      expect(kpi('Amortisation')).toHaveTextContent(/Jahre|nie/);
+
+      act(() => useDataStore.getState().setTerrain({ status: 'ready', profile: null, profiles: {} }));
+      expect(within(annual).queryByText(/vorläufig/)).not.toBeInTheDocument();
+      expect(num(dds(kpi('Jahresertrag'))[0])).toBe(provisional); // no terrain profile: same numbers
     });
 
     it('never combines a new site with the previous site’s weather', () => {

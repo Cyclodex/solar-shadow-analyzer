@@ -67,7 +67,7 @@ type Tone = 'bad' | 'warn' | 'info';
 interface Notice {
   id: string;
   tone: Tone;
-  text: string;
+  text: ReactNode;
   detail?: string | null;
   /** Buttons after the text (e.g. restore, close). */
   actions?: ReactNode;
@@ -179,7 +179,18 @@ export function WarningsBar() {
   if (config.horizon.terrainEnabled && terrain.status === 'error') {
     notices.push({ id: 'terrain-error', tone: 'warn', text: t.terrainError, detail: terrain.error });
   } else if (config.horizon.terrainEnabled && terrain.status === 'loading') {
-    notices.push({ id: 'terrain-loading', tone: 'info', text: t.terrainLoading });
+    // The download progress is for the eyes only: the live region announces the notice once, not every tile.
+    const progress = terrain.progress > 0 ? ` ${f.pct(terrain.progress * 100)}` : null;
+    notices.push({
+      id: 'terrain-loading',
+      tone: 'info',
+      text: (
+        <>
+          {t.terrainLoading}
+          {progress && <span aria-hidden="true">{progress}</span>}
+        </>
+      ),
+    });
   }
   if (numFloors === 1) notices.push({ id: 'single-floor', tone: 'info', text: t.singleFloor });
 

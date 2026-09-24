@@ -14,6 +14,9 @@ import { getStorage, touchCacheEntry, writeCacheEntry } from './storageCache';
 // deep Alpine valleys. The residual is mostly PVGIS itself: its profiles match ours best ~105 m S / 45 m W
 // of the requested point (our DEM is registered within 5 m, checked on 208 summits; shifted RMS 0.5–0.6°),
 // and it quantizes heights to 1/150 rad ≈ 0.38°. EU-DEM flattens sharp summits (median −55 m).
+// Several observer heights share one download and one pass over the ray samples (fetchTerrainHorizons,
+// computeHorizons). The app runs the download, PNG decoding and computation (computeTerrainHorizons) in a
+// Web Worker (workers/terrainClient.ts); the localStorage result cache stays on the page.
 // ─────────────────────────────────────────────
 
 /** AWS Terrain Tiles, Terrarium encoding ({z}/{x}/{y} template, CORS *). */
@@ -321,27 +324,50 @@ export function computeHorizon(
   site: HorizonSite,
   opts: HorizonOptions = {},
 ): TerrainHorizon {
+  return computeHorizons(sampler, site, [site.observerHeight], opts)[0];
+}
+
+/**
+ * computeHorizon for several observer heights at one site, in a single pass over the ray samples: the
+ * samples and the terrain heights do not depend on the observer height, only h₀ does. Every result equals
+ * computeHorizon at that height (same arithmetic); the cost is close to one height. Throws like it.
+ */
+export function computeHorizons(
+  sampler: ElevationSampler,
+  site: Omit<HorizonSite, 'observerHeight'>,
+  observerHeights: readonly number[],
+  opts: HorizonOptions = {},
+): TerrainHorizon[] {
   const n = azimuthCount(opts.stepDeg ?? 1);
   const minElevation = opts.minElevationDeg ?? 0;
   const ground = site.elevation ?? sampler(site.latitude, site.longitude);
   if (ground === null || !Number.isFinite(ground)) throw new Error('No elevation data at the site');
-  if (!Number.isFinite(site.observerHeight))
-    throw new RangeError(`Invalid observer height: ${site.observerHeight}`);
-  const h0 = ground + site.observerHeight;
+  for (const height of observerHeights) {
+    if (!Number.isFinite(height)) throw new RangeError(`Invalid observer height: ${height}`);
+  }
+  const m = observerHeights.length;
+  if (m === 0) return [];
+  const h0 = observerHeights.map((height) => ground + height);
   const distances = horizonSampleDistances(opts.minDistanceM, opts.maxDistanceM);
   const drop = distances.map((d) => ((d * d) / (2 * EARTH_RADIUS_M)) * (1 - REFRACTION_K));
-  // Track the max tangent (atan is monotonic) → one atan per azimuth.
-  const best = new Float64Array(n).fill(-Infinity);
+  // Track the max tangent (atan is monotonic) → one atan per azimuth and height.
+  const best = Array.from({ length: m }, () => new Float64Array(n).fill(-Infinity));
   forEachRaySample(site.latitude, site.longitude, n, distances, (i, k, lat, lon) => {
     const h = sampler(lat, lon);
     if (h === null) return;
-    const t = (h - drop[k] - h0) / distances[k];
-    if (t > best[i]) best[i] = t;
+    const hk = h - drop[k];
+    const d = distances[k];
+    for (let j = 0; j < m; j++) {
+      const t = (hk - h0[j]) / d;
+      if (t > best[j][i]) best[j][i] = t;
+    }
   });
-  const elevations = Array.from(best, (t) =>
-    t === -Infinity ? minElevation : Math.max(minElevation, toDeg(Math.atan(t))),
-  );
-  return { profile: { stepDeg: 360 / n, elevations }, siteElevation: ground };
+  return best.map((b) => {
+    const elevations = Array.from(b, (t) =>
+      t === -Infinity ? minElevation : Math.max(minElevation, toDeg(Math.atan(t))),
+    );
+    return { profile: { stepDeg: 360 / n, elevations }, siteElevation: ground };
+  });
 }
 
 /**
@@ -392,10 +418,16 @@ export function planTerrainTiles(
 
 // ── Fetching ─────────────────────────────────
 
-/** Options of fetchTerrainHorizon. */
-export interface FetchTerrainOptions {
+/** Options of computeTerrainHorizons: download and computation, without the localStorage result cache. */
+export interface TerrainComputeOptions {
   signal?: AbortSignal;
   fetchImpl?: typeof fetch;
+  /** (tiles done, tiles total): (0, n) before the first download … (n, n). */
+  onProgress?: (done: number, total: number) => void;
+}
+
+/** Options of fetchTerrainHorizon. */
+export interface FetchTerrainOptions extends TerrainComputeOptions {
   /** Eye height above the DEM ground, m. Default DEFAULT_OBSERVER_HEIGHT_M. */
   observerHeight?: number;
   /** (tiles done, tiles total): (0, n) before the first download … (n, n); a cached result reports (n, n) once. */
@@ -404,6 +436,32 @@ export interface FetchTerrainOptions {
   cache?: boolean;
   /** Results kept in the localStorage cache (least recently used evicted). Default TERRAIN_RESULT_CACHE_MAX. */
   cacheMax?: number;
+}
+
+/**
+ * Downloads the tiles of a site and computes its horizon for each observer height (results in the order of
+ * `observerHeights`). computeTerrainHorizons in this thread by default; a Web Worker can take its place.
+ */
+export type TerrainComputer = (
+  latitude: number,
+  longitude: number,
+  observerHeights: readonly number[],
+  opts: TerrainComputeOptions,
+) => Promise<TerrainHorizonResult[]>;
+
+/** Options of fetchTerrainHorizons. */
+export interface FetchTerrainHorizonsOptions extends Omit<FetchTerrainOptions, 'observerHeight'> {
+  /** Eye heights above the DEM ground, m (duplicates are computed once). Default [DEFAULT_OBSERVER_HEIGHT_M]. */
+  observerHeights?: readonly number[];
+  /**
+   * Awaited once before any tile is downloaded (never when every height comes from the result cache), e.g.
+   * to let more urgent downloads have the link first. Its rejection rejects the call.
+   */
+  beforeDownload?: () => Promise<void>;
+  /** Computes the heights missing in the result cache. Default computeTerrainHorizons (this thread). */
+  compute?: TerrainComputer;
+  /** Called with the heights found in the result cache before the missing ones are computed. */
+  onCached?: (cached: Record<number, TerrainHorizonResult>) => void;
 }
 
 /** Result of fetchTerrainHorizon. */
@@ -424,6 +482,22 @@ export const TILE_RETRY_DELAY_MS = 400;
 const TILE_CACHE_MAX = 96;
 const tileCache = new Map<string, Promise<Float32Array>>();
 
+/**
+ * Tile plans (default options) of the most recent sites (LRU by insertion order). A plan does not depend on
+ * the observer height, so a changed floor or railing height does not redo it (≈ 40 ms on a desktop).
+ */
+const PLAN_CACHE_MAX = 5;
+const planCache = new Map<string, readonly TileId[]>();
+
+function tilePlan(latitude: number, longitude: number): readonly TileId[] {
+  const key = `${latitude},${longitude}`;
+  const plan = planCache.get(key) ?? planTerrainTiles(latitude, longitude);
+  planCache.delete(key);
+  planCache.set(key, plan);
+  while (planCache.size > PLAN_CACHE_MAX) planCache.delete(planCache.keys().next().value as string);
+  return plan;
+}
+
 const RESULT_CACHE_PREFIX = 'ssa.terrain.v1:';
 /** Sites whose horizon results are kept in localStorage. */
 const RESULT_CACHE_SITES = 5;
@@ -433,9 +507,10 @@ const RESULT_CACHE_SITES = 5;
  */
 export const TERRAIN_RESULT_CACHE_MAX = LIMITS.building.numFloors.max * RESULT_CACHE_SITES;
 
-/** Empties the in-memory tile cache (tests, memory pressure). */
+/** Empties the in-memory tile cache and the tile plans (tests, memory pressure). */
 export function clearTerrainTileCache(): void {
   tileCache.clear();
+  planCache.clear();
 }
 
 function abortError(signal: AbortSignal): unknown {
@@ -572,6 +647,12 @@ function writeCachedResult(key: string, r: TerrainHorizonResult, max: number): v
   writeCacheEntry(storage, RESULT_CACHE_PREFIX, max, key, value);
 }
 
+function checkLocation(latitude: number, longitude: number): void {
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 85) {
+    throw new RangeError(`Terrain horizon: invalid location ${latitude}, ${longitude}`);
+  }
+}
+
 /**
  * Terrain horizon for a site from AWS Terrarium DEM tiles (multi-resolution, see TERRAIN_ZOOM_BANDS).
  * Downloads at most TILE_CONCURRENCY tiles at once, keeps decoded tiles in memory and the result in
@@ -584,24 +665,97 @@ export async function fetchTerrainHorizon(
   longitude: number,
   opts: FetchTerrainOptions = {},
 ): Promise<TerrainHorizonResult> {
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 85) {
-    throw new RangeError(`Terrain horizon: invalid location ${latitude}, ${longitude}`);
-  }
-  const { signal, onProgress } = opts;
+  const { signal, fetchImpl, onProgress, cache, cacheMax } = opts;
   const observerHeight = opts.observerHeight ?? DEFAULT_OBSERVER_HEIGHT_M;
+  const results = await fetchTerrainHorizons(latitude, longitude, {
+    signal,
+    fetchImpl,
+    onProgress,
+    cache,
+    cacheMax,
+    observerHeights: [observerHeight],
+  });
+  return results[observerHeight];
+}
+
+/** The results of `observerHeights` at a site that are in the localStorage result cache (keyed by height). */
+export function cachedTerrainHorizons(
+  latitude: number,
+  longitude: number,
+  observerHeights: readonly number[],
+): Record<number, TerrainHorizonResult> {
+  const out: Record<number, TerrainHorizonResult> = {};
+  for (const h of observerHeights) {
+    const cached = readCachedResult(resultCacheKey(latitude, longitude, h));
+    if (cached) out[h] = cached;
+  }
+  return out;
+}
+
+/**
+ * fetchTerrainHorizon for several observer heights of one site (keyed by height): each height comes from
+ * the localStorage result cache if there, the others are computed together from one download (`compute`,
+ * computeHorizons) and cached. Progress as fetchTerrainHorizon: all heights cached → (n, n) once.
+ */
+export async function fetchTerrainHorizons(
+  latitude: number,
+  longitude: number,
+  opts: FetchTerrainHorizonsOptions = {},
+): Promise<Record<number, TerrainHorizonResult>> {
+  checkLocation(latitude, longitude);
+  const { signal, onProgress } = opts;
+  const heights = [...new Set(opts.observerHeights ?? [DEFAULT_OBSERVER_HEIGHT_M])];
   const useCache = opts.cache ?? true;
   throwIfAborted(signal);
-  const key = resultCacheKey(latitude, longitude, observerHeight);
-  if (useCache) {
-    const cached = readCachedResult(key);
-    if (cached) {
-      onProgress?.(cached.tiles, cached.tiles);
-      return cached;
-    }
+  const out = useCache ? cachedTerrainHorizons(latitude, longitude, heights) : {};
+  const missing = heights.filter((h) => !out[h]);
+  if (missing.length === 0) {
+    const tiles = heights.length > 0 ? out[heights[0]].tiles : 0;
+    onProgress?.(tiles, tiles);
+    return out;
   }
+  if (missing.length < heights.length) opts.onCached?.({ ...out });
+  if (opts.beforeDownload) {
+    const ready = opts.beforeDownload();
+    await (signal ? raceAbort(ready, signal) : ready);
+  }
+  throwIfAborted(signal);
+  const compute = opts.compute ?? computeTerrainHorizons;
+  const results = await compute(latitude, longitude, missing, {
+    signal,
+    fetchImpl: opts.fetchImpl,
+    onProgress,
+  });
+  throwIfAborted(signal);
+  missing.forEach((h, i) => {
+    out[h] = results[i];
+    if (useCache) {
+      writeCachedResult(
+        resultCacheKey(latitude, longitude, h),
+        results[i],
+        opts.cacheMax ?? TERRAIN_RESULT_CACHE_MAX,
+      );
+    }
+  });
+  return out;
+}
 
+/**
+ * Downloads (or reuses from memory) the tiles of a site and computes its horizon for every observer height
+ * in one pass (computeHorizons); results in the order of `observerHeights`. No localStorage: this is what a
+ * Web Worker runs for fetchTerrainHorizons. Rejects like fetchTerrainHorizon.
+ */
+export async function computeTerrainHorizons(
+  latitude: number,
+  longitude: number,
+  observerHeights: readonly number[],
+  opts: TerrainComputeOptions = {},
+): Promise<TerrainHorizonResult[]> {
+  checkLocation(latitude, longitude);
+  const { signal, onProgress } = opts;
+  throwIfAborted(signal);
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch.bind(globalThis);
-  const plan = planTerrainTiles(latitude, longitude);
+  const plan = tilePlan(latitude, longitude);
   const total = plan.length;
   const tiles: TerrainTile[] = new Array<TerrainTile>(total);
   // Internal controller: stops the remaining downloads on the first error or on the caller's abort.
@@ -638,8 +792,6 @@ export async function fetchTerrainHorizon(
   }
   throwIfAborted(signal);
 
-  const horizon = computeHorizon(createTileSampler(tiles), { latitude, longitude, observerHeight });
-  const result: TerrainHorizonResult = { ...horizon, tiles: total };
-  if (useCache) writeCachedResult(key, result, opts.cacheMax ?? TERRAIN_RESULT_CACHE_MAX);
-  return result;
+  const horizons = computeHorizons(createTileSampler(tiles), { latitude, longitude }, observerHeights);
+  return horizons.map((horizon) => ({ ...horizon, tiles: total }));
 }

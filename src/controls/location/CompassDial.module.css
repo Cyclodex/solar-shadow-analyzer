@@ -5,7 +5,8 @@
   aspect-ratio: 1;
   border-radius: 50%;
   cursor: grab;
-  touch-action: none;
+  /* A vertical swipe scrolls the page (CompassDial turns on taps and sideways drags); pinch zoom still works. */
+  touch-action: pan-y pinch-zoom;
   user-select: none;
   -webkit-user-select: none;
 }

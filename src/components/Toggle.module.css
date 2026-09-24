@@ -31,11 +31,17 @@
     border-color var(--transition);
 }
 
-/* 36 px hit area */
+/* 36 px hit area, 44 px on touch screens */
 .switch::after {
   content: '';
   position: absolute;
   inset: -6px -2px;
+}
+
+@media (pointer: coarse) {
+  .switch::after {
+    inset: -10px -1px;
+  }
 }
 
 .thumb {

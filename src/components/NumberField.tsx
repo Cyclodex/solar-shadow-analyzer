@@ -58,6 +58,9 @@ const toInputText = (v: number, digits: number): string => String(Number(v.toFix
  * Labelled number input + slider. The text input keeps a local draft while typing (intermediate values
  * like "", "-" or "1" for 150 are never rejected) and commits on blur, Enter or ArrowUp/Down, clamped to
  * min…max; Escape discards the draft. The slider commits live.
+ * The decimal keypad of iOS has no minus key: fields that accept both signs get the text keyboard (its
+ * number layer has "-"), and in fields that only accept negative values (e.g. the temperature coefficient,
+ * printed "−0.35 %/K" on datasheets) a number typed without a sign counts as negative.
  */
 export function NumberField({
   label,
@@ -90,8 +93,10 @@ export function NumberField({
   const rangeId = `${autoId}-range`;
   const shownDigits = digits ?? digitsOf(step);
   const [draft, setDraft] = useState<string | null>(null);
+  const onlyNegative = min < 0 && max <= 0;
+  const signed = (v: number | null): number | null => (onlyNegative && v !== null && v > 0 ? -v : v);
 
-  const parsed = draft === null ? value : parseNumberInput(draft);
+  const parsed = draft === null ? value : signed(parseNumberInput(draft));
   const invalid = draft !== null && (parsed === null || parsed < min || parsed > max);
   /** Value with the unit, formatted like everywhere else in the app ("45°", "280 cm", "14 %"). */
   const withUnit = (v: number, d: number): string => {
@@ -105,7 +110,7 @@ export function NumberField({
   const commit = (): void => {
     if (draft === null) return;
     setDraft(null);
-    const v = parseNumberInput(draft);
+    const v = signed(parseNumberInput(draft));
     if (v === null) return;
     const c = clamp(v, min, max);
     if (c !== value) onChange(c);
@@ -144,8 +149,11 @@ export function NumberField({
             id={inputId}
             className={styles.input}
             type="text"
-            inputMode="decimal"
+            inputMode={min < 0 && max > 0 ? 'text' : 'decimal'}
+            enterKeyHint="done"
             autoComplete="off"
+            autoCapitalize="off"
+            autoCorrect="off"
             spellCheck={false}
             value={draft ?? toInputText(value, shownDigits)}
             onChange={(e) => setDraft(e.target.value)}

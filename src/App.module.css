@@ -41,6 +41,19 @@
   outline: none;
 }
 
+/* Targets of the control bar's "jump to" links on phones (app/BottomBar). */
+.quick,
+.block,
+.settings {
+  scroll-margin-top: var(--space-4);
+}
+
+.quick:focus,
+.block:focus,
+.settings:focus {
+  outline: none;
+}
+
 .quick {
   min-width: 0;
 }

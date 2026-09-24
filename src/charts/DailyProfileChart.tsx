@@ -1,4 +1,4 @@
-import { useMemo, useState, type KeyboardEvent } from 'react';
+import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { useFormat, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
@@ -14,7 +14,13 @@ import { ChartTooltip, type TooltipRow } from './lib/ChartTooltip';
 import { ChartLegend } from './lib/ChartLegend';
 import { SHADE_STEP_TOKENS } from './lib/colors';
 import { topDown, useFloorLabels } from './lib/floors';
-import { LEGEND_TOP, layoutChartLegend, type ChartLegendItem, type ChartLegendLayout } from './lib/legend';
+import {
+  LEGEND_TOP,
+  chartLegendX,
+  layoutChartLegend,
+  type ChartLegendItem,
+  type ChartLegendLayout,
+} from './lib/legend';
 import { linePath } from '../components/svg/paths';
 import {
   nearestIndex,
@@ -24,7 +30,7 @@ import {
   ticksInRange,
   type LinearScale,
 } from './lib/scale';
-import { estimateTextWidth } from '../components/svg/text';
+import { estimateTextWidth, measureTextWidth } from '../components/svg/text';
 import {
   daylightWindow,
   hourTickStep,
@@ -55,6 +61,7 @@ const de = {
   slider: 'Uhrzeit im Tagesverlauf',
   keys: 'Pfeiltasten: ±10 Minuten, mit Umschalt ±1 Stunde.',
   clickHint: 'Klicken oder ziehen setzt die Uhrzeit',
+  tapHint: 'Tippen oder seitwärts ziehen setzt die Uhrzeit',
   summaryDay: (date: string) => `Tagesverlauf am ${date} bei klarem Himmel.`,
   summaryPeak: (floor: string, w: string, time: string) => `${floor}: Spitze ${w} um ${time}`,
   summaryShaded: (floor: string, periods: string) => `${floor} verschattet ${periods}.`,
@@ -80,6 +87,7 @@ const messages: Messages<Texts> = {
     slider: 'Time of day',
     keys: 'Arrow keys: ±10 minutes, with Shift ±1 hour.',
     clickHint: 'Click or drag to set the time',
+    tapHint: 'Tap or drag sideways to set the time',
     summaryDay: (date) => `Daily profile on ${date} under clear skies.`,
     summaryPeak: (floor, w, time) => `${floor}: peak ${w} at ${time}`,
     summaryShaded: (floor, periods) => `${floor} shaded ${periods}.`,
@@ -101,6 +109,12 @@ const M = { left: 48, right: Math.ceil(estimateTextWidth('24:00', 11) / 2) + 2, 
 const SNAP = 5;
 const TOP_GAP = 6;
 /**
+ * Sunrise/sunset labels: offset from their line and the least gap between the two labels, px (11 px font).
+ * The gap is small: the widths are measured (rounded up), and the labels have a halo.
+ */
+const EVENT_PAD = 4;
+const EVENT_GAP = 4;
+/**
  * Shaded periods (any floor above SHADED_THRESHOLD) as one class, drawn exactly like the legend swatch; the
  * shaded share itself is in the tooltip, the summary and the table.
  */
@@ -121,6 +135,8 @@ interface Geometry {
   y: LinearScale;
   win: TimeWindow;
   legend: ChartLegendLayout;
+  /** Left edge of the legend (the plot's, unless a long label needs more room). */
+  legendX: number;
   xTicks: AxisTick[];
   yTicks: AxisTick[];
   lines: { floor: number; d: string }[];
@@ -141,7 +157,8 @@ function buildGeometry(
   f: Format,
   t: Texts,
 ): Geometry {
-  const legend = layoutChartLegend(legendItems, width - M.left);
+  const legendX = chartLegendX(legendItems, width, M.left);
+  const legend = layoutChartLegend(legendItems, width - legendX);
   const plotH = width < 420 ? 170 : width < 640 ? 200 : 220;
   const top = LEGEND_TOP + (legend.height > 0 ? legend.height + TOP_GAP : 0) + M.band;
   const plot: Plot = { left: M.left, right: width - M.right, top, bottom: top + plotH };
@@ -173,22 +190,24 @@ function buildGeometry(
     return { key: `${r.from}`, x: x0, w: Math.max(1, x1 - x0) };
   });
 
+  const inWindow = (m: number | null): m is number => m !== null && m >= win.start && m <= win.end;
+  const rise = inWindow(sun.sunrise) ? sun.sunrise : null;
+  const set = inWindow(sun.sunset) ? sun.sunset : null;
+  const riseFull = rise === null ? '' : `${t.sunriseShort} ${f.time(rise)}`;
+  const setFull = set === null ? '' : `${t.sunsetShort} ${f.time(set)}`;
+  // Both full labels between the two lines, else times only (the sun-coloured lines, the summary and the
+  // table still name the events): on a narrow phone "Aufgang 07:19" and "Untergang 19:24" would overlap.
+  const compact =
+    rise !== null &&
+    set !== null &&
+    x(set) - x(rise) <
+      2 * EVENT_PAD + measureTextWidth(riseFull, 11) + EVENT_GAP + measureTextWidth(setFull, 11);
   const events: Geometry['events'] = [];
-  if (sun.sunrise !== null && sun.sunrise >= win.start && sun.sunrise <= win.end) {
-    events.push({
-      key: 'rise',
-      x: x(sun.sunrise),
-      label: `${t.sunriseShort} ${f.time(sun.sunrise)}`,
-      anchor: 'start',
-    });
+  if (rise !== null) {
+    events.push({ key: 'rise', x: x(rise), label: compact ? f.time(rise) : riseFull, anchor: 'start' });
   }
-  if (sun.sunset !== null && sun.sunset >= win.start && sun.sunset <= win.end) {
-    events.push({
-      key: 'set',
-      x: x(sun.sunset),
-      label: `${t.sunsetShort} ${f.time(sun.sunset)}`,
-      anchor: 'end',
-    });
+  if (set !== null) {
+    events.push({ key: 'set', x: x(set), label: compact ? f.time(set) : setFull, anchor: 'end' });
   }
 
   return {
@@ -199,6 +218,7 @@ function buildGeometry(
     y,
     win,
     legend,
+    legendX,
     xTicks,
     yTicks,
     lines,
@@ -299,11 +319,19 @@ function ProfileInteraction({ geom, points, labels, numFloors, f, t, keysId }: I
     setPlaying(false);
     setMinutes(clampToWindow(m));
   };
+  /** Time and animation state when the current press began (restored if it turns into a scroll). */
+  const beforePress = useRef<{ minutes: number; playing: boolean } | null>(null);
 
   const pointer = usePlotPointer({
     locate: (px) => Math.round(clampToWindow(geom.x.invert(plot.left + px)) / SNAP) * SNAP,
     onSelect: setTime,
     drag: true,
+    onDragCancel: () => {
+      const before = beforePress.current;
+      if (!before) return;
+      setMinutes(before.minutes);
+      setPlaying(before.playing);
+    },
   });
 
   const activeMinutes = pointer.hover ?? (keyboard ? clampToWindow(minutes) : null);
@@ -390,6 +418,8 @@ function ProfileInteraction({ geom, points, labels, numFloors, f, t, keysId }: I
         {...pointer.handlers}
         onPointerDown={(e) => {
           setKeyboard(false);
+          const { minutes: m, playing } = useTimeStore.getState();
+          beforePress.current = { minutes: m, playing };
           pointer.handlers.onPointerDown(e);
         }}
       />
@@ -401,7 +431,7 @@ function ProfileInteraction({ geom, points, labels, numFloors, f, t, keysId }: I
           boundsHeight={geom.height}
           title={`${f.time(point.minutes)} · ${t.altitude(f.deg(point.altitude, 1))}`}
           rows={tooltipRows}
-          note={keyboard ? undefined : t.clickHint}
+          note={keyboard ? undefined : pointer.touch ? t.tapHint : t.clickHint}
         />
       )}
     </>
@@ -518,7 +548,7 @@ export function DailyProfileChart() {
         >
           <title id={titleId}>{t.title}</title>
           <desc id={descId}>{summary}</desc>
-          {geom.legend.height > 0 && <ChartLegend layout={geom.legend} x={plot.left} y={LEGEND_TOP} />}
+          {geom.legend.height > 0 && <ChartLegend layout={geom.legend} x={geom.legendX} y={LEGEND_TOP} />}
           <g aria-hidden="true">
             {geom.bands.map((b) => (
               <rect
@@ -558,7 +588,7 @@ export function DailyProfileChart() {
               <text
                 key={e.key}
                 className={`${chart.note} ${chart.halo}`}
-                x={e.anchor === 'start' ? e.x + 4 : e.x - 4}
+                x={e.anchor === 'start' ? e.x + EVENT_PAD : e.x - EVENT_PAD}
                 y={plot.top + 12}
                 textAnchor={e.anchor}
               >

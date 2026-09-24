@@ -290,28 +290,38 @@ export function buildDiagram(input: DiagramInput): Diagram {
   const { facadeAz, width } = input;
   const polar = makePolar(width);
   const { cx, cy, R, pos } = polar;
+  const hours = hourMarks(input.selected, polar);
+  const hourBoxes = hours.flatMap((h) => (h.label ? [smallLabelBox(h.lx, h.ly, h.label)] : []));
+  // Date label at the path's peak, on the zenith side; on the horizon side where that would cover an hour
+  // label or an earlier date label (and the other side is free and inside the disc).
+  const placedRefs: Box[] = [];
+  const inDisc = (b: Box): boolean =>
+    [b.x0, b.x1].every((x) => [b.y0, b.y1].every((y) => Math.hypot(x - cx, y - cy) <= R));
   const refs = input.refPaths.map((pts, i) => {
     const top = input.refDates[i] === input.selectedDate ? null : peak(pts);
     const p = top ? pos(top.sun.azimuth, top.sun.altitude) : null;
     const text = input.refLabels[i] ?? '';
-    return {
-      date: input.refDates[i],
-      d: polylinesD(pathPieces(pts, polar)),
-      label: p
-        ? {
-            x: clampLabelX(p.x, textWidth(text, SMALL), 'middle', PAD, width - PAD),
-            y: p.y + (cy > p.y ? 13 : -6),
-            anchor: 'middle' as const,
-            text,
-          }
-        : null,
-    };
+    let label: PlacedText | null = null;
+    if (p) {
+      const x = clampLabelX(p.x, textWidth(text, SMALL), 'middle', PAD, width - PAD);
+      const [first, second] = (cy > p.y ? [13, -6] : [-6, 13]).map((dy) => ({
+        x,
+        y: p.y + dy,
+        anchor: 'middle' as const,
+        text,
+      }));
+      const free = (l: PlacedText): boolean => {
+        const b = smallLabelBox(l.x, l.y, l.text);
+        return inDisc(b) && ![...hourBoxes, ...placedRefs].some((o) => boxesOverlap(b, o));
+      };
+      label = free(first) || !free(second) ? first : second;
+      placedRefs.push(smallLabelBox(label.x, label.y, text));
+    }
+    return { date: input.refDates[i], d: polylinesD(pathPieces(pts, polar)), label };
   });
   const ends = [pos(facadeAz - 90, 0), pos(facadeAz + 90, 0)];
   const normalTip = pos(facadeAz, 0);
-  const hours = hourMarks(input.selected, polar);
   const compass = compassLabels(polar, facadeAz, input.lang);
-  const hourBoxes = hours.flatMap((h) => (h.label ? [smallLabelBox(h.lx, h.ly, h.label)] : []));
   const refBoxes = refs.flatMap((r) => (r.label ? [smallLabelBox(r.label.x, r.label.y, r.label.text)] : []));
   const compassBoxes = compass.map((c) => labelBox(c.x, c.y, textWidth(c.label, FONT), 'middle', FONT));
   const facadeLabel = placeFacadeLabel(polar, facadeAz, input.facadeText, width, [
@@ -408,6 +418,8 @@ const unit = (x: number, y: number): Pt => {
  * Hour labels at their places, except where the current sun glyph (circle of radius `ext` around `sun`)
  * would cover one: that label moves just clear of the glyph (away from the sun, else radially or along the
  * path) to a spot free of the other labels (`fixed` and the other hours), or is left out if there is none.
+ * A label on one of the `fixed` labels (date, compass, facade, ring) moves at most 8 px, so it stays by its
+ * dot, or is left out.
  */
 export function hourLabels(
   hours: readonly HourMark[],
@@ -419,22 +431,26 @@ export function hourLabels(
   const labelled = hours.flatMap((h) =>
     h.label ? [{ h, label: h.label, box: smallLabelBox(h.lx, h.ly, h.label) }] : [],
   );
+  const covered = (b: Box): boolean => sun !== null && boxHitsCircle(b, sun, ext + 1);
+  const blocked = (b: Box): boolean => covered(b) || fixed.some((o) => overlapArea(b, o) > 0);
   return labelled.flatMap(({ h, label, box }) => {
-    if (!sun || !boxHitsCircle(box, sun, ext + 1)) return [{ x: h.lx, y: h.ly, label }];
-    const others = [...fixed, ...labelled.filter((o) => o.h !== h).map((o) => o.box)];
+    if (!blocked(box)) return [{ x: h.lx, y: h.ly, label }];
+    const others = labelled.filter((o) => o.h !== h).map((o) => o.box);
     const radial = unit(h.x - polar.cx, h.y - polar.cy);
+    const underSun = sun !== null && covered(box);
     const dirs = [
-      unit((box.x0 + box.x1) / 2 - sun.x, (box.y0 + box.y1) / 2 - sun.y),
+      ...(underSun ? [unit((box.x0 + box.x1) / 2 - sun.x, (box.y0 + box.y1) / 2 - sun.y)] : []),
       radial,
       { x: -radial.x, y: -radial.y },
       { x: -radial.y, y: radial.x },
       { x: radial.y, y: -radial.x },
     ];
+    const maxShift = underSun ? 60 : 8;
     for (const u of dirs) {
       let s = 1;
-      while (s < 60 && boxHitsCircle(shiftBox(box, u.x * s, u.y * s), sun, ext + 1)) s++;
+      while (s < maxShift && blocked(shiftBox(box, u.x * s, u.y * s))) s++;
       const moved = shiftBox(box, u.x * s, u.y * s);
-      if (s < 60 && !others.some((o) => boxesOverlap(moved, o))) {
+      if (s < maxShift && !others.some((o) => boxesOverlap(moved, o))) {
         return [{ x: h.lx + u.x * s, y: h.ly + u.y * s, label }];
       }
     }

@@ -26,6 +26,7 @@ import { useScenePalette } from './palette';
 import { SceneContent } from './SceneContent';
 import { SceneErrorBoundary } from './SceneErrorBoundary';
 import { DEFAULT_FOV, SUN_VIEW_MIN_ALTITUDE, type CameraPreset } from './sceneLayout';
+import { useKeptWhileHidden } from './useKeptWhileHidden';
 import type { SceneData } from './useSceneData';
 import styles from './Scene3D.module.css';
 
@@ -55,11 +56,11 @@ const KEY_ACTIONS: Partial<Record<string, ((api: CameraApi) => void) | 'reset'>>
 };
 
 /**
- * Whether the view card around `ref` is on screen (with a margin). Starts true, so the first paint is never
- * blank (and stays true where IntersectionObserver reports nothing, e.g. jsdom). The whole card is
- * observed, not the canvas: its header holds the PNG export, which reads the canvas.
+ * Whether `ref` (with `card`: the view card around it) is on screen, extended by `rootMargin`. Starts true,
+ * so the first paint is never blank (and stays true where IntersectionObserver reports nothing, e.g.
+ * jsdom).
  */
-function useInView(ref: RefObject<HTMLElement | null>): boolean {
+function useInView(ref: RefObject<HTMLElement | null>, rootMargin: string, card: boolean): boolean {
   const [inView, setInView] = useState(true);
   useEffect(() => {
     const el = ref.current;
@@ -69,11 +70,11 @@ function useInView(ref: RefObject<HTMLElement | null>): boolean {
         const last = entries[entries.length - 1];
         if (last) setInView(last.isIntersecting);
       },
-      { rootMargin: '200px 0px' },
+      { rootMargin },
     );
-    observer.observe(el.closest('section') ?? el);
+    observer.observe(card ? (el.closest('section') ?? el) : el);
     return () => observer.disconnect();
-  }, [ref]);
+  }, [ref, rootMargin, card]);
   return inView;
 }
 
@@ -101,13 +102,21 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
   const rootRef = useRef<RootState | null>(null);
   // Off screen the canvas does not render at all (time animation would otherwise re-render the scene and
   // its shadow map for nobody). Invalidations are dropped while frameloop is 'never', so the scene is
-  // rendered once explicitly when it comes back (the Canvas has switched to 'demand' by then).
-  const inView = useInView(stageRef);
+  // rendered once explicitly when it comes back (the Canvas has switched to 'demand' by then). The whole
+  // card is observed, not the canvas: its header holds the PNG export, which reads the canvas.
+  const inView = useInView(stageRef, '200px 0px', true);
   useEffect(() => {
     if (inView) rootRef.current?.invalidate();
   }, [inView]);
+  // While no pixel of the stage is on screen (e.g. dragging the tilt slider far above it on a phone), the
+  // scene graph keeps the data it last showed: config and time steps then neither re-render nor rebuild it.
+  // It catches up as soon as the stage scrolls in, and for a PNG export or print (capture listener below).
+  // The status overlay and the accessible description stay live.
+  const onScreen = useInView(stageRef, '0px', false);
+  const [capturing, setCapturing] = useState(false);
+  const scene = useKeptWhileHidden(data, onScreen || capturing);
 
-  const { instant, dims, labels } = data;
+  const { instant, labels } = data;
   const { sun } = instant;
   const sunAvailable = sun.altitude >= SUN_VIEW_MIN_ALTITUDE;
   // While the sun is down, "from the sun" shows the overview: its narrow view from beyond the sun path would
@@ -147,10 +156,22 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
     canvas.addEventListener(CANVAS_RENDER_EVENT, (event) => {
       const detail = (event as CustomEvent<CanvasRenderDetail>).detail;
       // Print has just switched <html data-theme> to light; the palette's observer would only fire after
-      // the capture. Commit the scene with the new palette first, synchronously in both React roots (the
-      // page and the canvas). Nothing here may be deferred or awaited.
-      if (detail.reason === 'print') flushSceneSync(() => flushSync(refreshPalette));
+      // the capture. Commit the scene with the new palette and the current data (it may be frozen while off
+      // screen) first, synchronously in both React roots (the page and the canvas). Nothing here may be
+      // deferred or awaited.
+      flushSceneSync(() =>
+        flushSync(() => {
+          setCapturing(true);
+          if (detail.reason === 'print') refreshPalette();
+        }),
+      );
       renderForCapture(state.get(), detail);
+      // Afterwards the scene freezes again (at the data just captured) if it is off screen.
+      const restore = detail.restore;
+      detail.restore = () => {
+        restore?.();
+        setCapturing(false);
+      };
     });
   }, []);
 
@@ -172,8 +193,10 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
     .reverse()
     .join('; ');
 
+  // data-jump-reveal: "Springe zu › Ansichten (3D)" of phones scrolls on until the whole stage with its camera
+  // buttons is above the control bar (app/jumpTo.ts, JUMP_REVEAL_ATTR).
   return (
-    <div ref={stageRef} className={styles.stage}>
+    <div ref={stageRef} className={styles.stage} data-jump-reveal="">
       <SceneErrorBoundary fallback={<Placeholder>{t.failed}</Placeholder>}>
         <Canvas
           key={canvasKey}
@@ -194,16 +217,16 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
         >
           <SceneContent
             palette={palette}
-            dims={dims}
-            instant={instant}
-            sunDir={data.sunDir}
-            sunBlocked={data.sunBlocked}
-            segments={data.segments}
-            hours={data.hours}
-            farHorizon={data.farHorizon}
-            observerHeight={data.observerHeight}
-            obstacles={data.obstacles}
-            labels={labels}
+            dims={scene.dims}
+            instant={scene.instant}
+            sunDir={scene.sunDir}
+            sunBlocked={scene.sunBlocked}
+            segments={scene.segments}
+            hours={scene.hours}
+            farHorizon={scene.farHorizon}
+            observerHeight={scene.observerHeight}
+            obstacles={scene.obstacles}
+            labels={scene.labels}
             lang={lang}
             format={f}
             showModelShade={showModelShade}

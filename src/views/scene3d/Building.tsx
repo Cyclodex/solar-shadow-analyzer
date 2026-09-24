@@ -34,10 +34,9 @@ interface WindowRect {
   y1: number;
 }
 
-/** Window openings per storey (balcony doors on panel floors). */
-function windowRects(dims: SceneDims): WindowRect[] {
-  const { buildingWidth, storeyHeight: H, topStorey, rows } = dims;
-  const panelStoreys = new Set(rows.map((r) => r.storey));
+/** Window openings per storey (balcony doors on the panel storeys, `doorStoreys` as "2,3,4"). */
+function windowRects(buildingWidth: number, H: number, topStorey: number, doorStoreys: string): WindowRect[] {
+  const panelStoreys = new Set(doorStoreys ? doorStoreys.split(',').map(Number) : []);
   const cols = Math.max(1, Math.floor((buildingWidth - 1) / WINDOW_PITCH));
   const span = (cols - 1) * WINDOW_PITCH;
   const out: WindowRect[] = [];
@@ -53,11 +52,11 @@ function windowRects(dims: SceneDims): WindowRect[] {
 }
 
 /**
- * Railing of one balcony relative to its slab top (y = 0): posts, top and bottom rail, side rails. Null
- * when it does not fit between the wall and the panel plane (panels mounted directly on the facade).
+ * Railing of one balcony (width w, height h, at railN from the wall) relative to its slab top (y = 0):
+ * posts, top and bottom rail, side rails. Null when it does not fit between the wall and the panel plane
+ * (panels mounted directly on the facade).
  */
-function railingGeometry(dims: SceneDims): BufferGeometry | null {
-  const { balconyWidth: w, railN, railHeight: h } = dims;
+function railingGeometry(w: number, railN: number, h: number): BufferGeometry | null {
   if (!hasRailing(railN)) return null;
   const parts: BufferGeometry[] = [];
   const n = railN - RAIL / 2 - RAIL_CLEARANCE; // ≥ RAIL / 2: clear of the wall
@@ -92,12 +91,21 @@ export interface BuildingProps {
 
 export const Building = memo(function Building({ palette, dims, day }: BuildingProps) {
   const invalidate = useThree((s) => s.invalidate);
-  const { buildingWidth: bw, buildingHeight: bh, buildingDepth: bd, railN } = dims;
+  const { buildingWidth: bw, buildingHeight: bh, buildingDepth: bd, railN, balconyWidth, railHeight } = dims;
+  const { storeyHeight, topStorey } = dims;
+  const doorStoreys = dims.rows.map((r) => r.storey).join(',');
 
+  // Keyed on the sizes they use, not on dims: a tilt step changes dims but none of these.
   const body = useMemo(() => new BoxGeometry(bw, bh, bd), [bw, bh, bd]);
   const edges = useMemo(() => new EdgesGeometry(body), [body]);
-  const windows = useMemo(() => windowRects(dims), [dims]);
-  const railing = useMemo(() => railingGeometry(dims), [dims]);
+  const windows = useMemo(
+    () => windowRects(bw, storeyHeight, topStorey, doorStoreys),
+    [bw, storeyHeight, topStorey, doorStoreys],
+  );
+  const railing = useMemo(
+    () => railingGeometry(balconyWidth, railN, railHeight),
+    [balconyWidth, railN, railHeight],
+  );
   // The slab ends just behind vertical panels (its front would otherwise lie in their plane).
   const slabDepth = railN >= 0.05 ? railN - BEHIND_PANELS : 0;
   const slab = useMemo(

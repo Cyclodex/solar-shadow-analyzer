@@ -11,6 +11,7 @@ import {
   panelLayout,
   panelsOverlap,
   profileAngle,
+  shadeFractionFromAbove,
   shadeFromAbove,
   substringBeamLoss,
   sunInFacade,
@@ -916,5 +917,26 @@ describe('instantState', () => {
     const want = instantStateFromSun(c, t, sunPosition(t, c.location.latitude, c.location.longitude), flat);
     expect(instantState(c, t, flat)).toEqual(want);
     expect(want.floors[0].state).toBe('lit');
+  });
+});
+
+describe('shadeFractionFromAbove', () => {
+  it('equals shadeFromAbove(…).fraction exactly (random suns, tilts, module rows and gaps)', () => {
+    const rnd = prng(31);
+    for (let k = 0; k < 400; k++) {
+      const layout = panelLayout(
+        cfg({
+          panels: {
+            tiltFromVertical: Math.round(rnd() * 90),
+            count: 1 + Math.floor(rnd() * 4),
+            gap: Math.round(rnd() * 30),
+            ...(rnd() < 0.5 ? { length: 113, width: 172 } : {}), // landscape
+          },
+          building: { floorHeight: 200 + Math.round(rnd() * 200) },
+        }),
+      );
+      const sf = sunInFacade(sunAt(rnd() * 90 - 5, rnd() * 360), 180);
+      expect(shadeFractionFromAbove(sf, layout)).toBe(shadeFromAbove(sf, layout).fraction);
+    }
   });
 });

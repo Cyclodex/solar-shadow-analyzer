@@ -15,7 +15,7 @@ import {
 import { panelLayout, shadeFromAbove } from './geometry';
 import { emptyHorizon } from './horizon';
 import { DEFAULT_CONFIG } from './defaults';
-import type { Config, FacadeVector, HorizonProfile } from './types';
+import type { Config, FacadeVector, HorizonProfile, PanelLayout } from './types';
 
 const D = Math.PI / 180;
 
@@ -299,5 +299,78 @@ describe('skyViewFactor', () => {
     expect(skyViewFromGrid(g, hz, 190, true)).toBe(skyViewFactor(layout, hz, 190, true));
     expect(skyViewFromGrid(g, null, 190, false)).toBe(skyViewFactor(layout, null, 190, false));
     expect(() => skyViewGrid(layout, { gridDeg: 0 })).toThrow(RangeError);
+  });
+});
+
+/**
+ * skyViewGrid before its trigonometry was tabulated (every angle's sine and cosine computed per cell):
+ * the reference for "identical results".
+ */
+function directSkyViewGrid(layout: PanelLayout, gridDeg: number, facade: boolean) {
+  const KINK = 8;
+  const nAlt = Math.max(2, Math.round(90 / gridDeg));
+  const step = 90 / nAlt;
+  const span = facade ? 180 : 360;
+  const nPhi = Math.round(span / step);
+  const phiStart = -span / 2;
+  const { n: Nn, z: Nz, u: Nu } = layout.normal;
+  const altEdges = Array.from({ length: nAlt + 1 }, (_, r) => r * step);
+  const open = new Float64Array(nPhi * nAlt);
+  const belowRow = new Float64Array(nPhi * nAlt);
+  const dN = (a: number, f: number): number =>
+    -Math.cos(a) * Math.sin(f) * Nu + Math.cos(a) * Math.cos(f) * Nn + Math.sin(a) * Nz;
+  for (let c = 0; c < nPhi; c++) {
+    const f0 = (phiStart + c * step) * D;
+    const f1 = f0 + step * D;
+    const fm = (f0 + f1) / 2;
+    for (let r = 0; r < nAlt; r++) {
+      const a0 = altEdges[r] * D;
+      const a1 = altEdges[r + 1] * D;
+      const am = (a0 + a1) / 2;
+      const k = [dN(a0, f0), dN(a0, f1), dN(a1, f0), dN(a1, f1)];
+      let w: number;
+      if (Math.min(...k) >= 0 && Nu === 0) {
+        const ic = (a1 - a0) / 2 + (Math.sin(2 * a1) - Math.sin(2 * a0)) / 4;
+        const is = (Math.sin(a1) ** 2 - Math.sin(a0) ** 2) / 2;
+        w = Nn * (Math.sin(f1) - Math.sin(f0)) * ic + Nz * (f1 - f0) * is;
+      } else if (Math.max(...k) <= 0) {
+        w = 0;
+      } else {
+        const ha = (a1 - a0) / KINK;
+        const hf = (f1 - f0) / KINK;
+        w = 0;
+        for (let i = 0; i < KINK; i++) {
+          const a = a0 + (i + 0.5) * ha;
+          for (let j = 0; j < KINK; j++) w += Math.max(0, dN(a, f0 + (j + 0.5) * hf)) * Math.cos(a) * ha * hf;
+        }
+      }
+      w /= Math.PI;
+      open[c * nAlt + r] = w;
+      if (w > 0) {
+        const ca = Math.cos(am);
+        const d = { u: -ca * Math.sin(fm), n: ca * Math.cos(fm), z: Math.sin(am) };
+        belowRow[c * nAlt + r] = w * (1 - rowAboveBlockedFraction(d, layout));
+      }
+    }
+  }
+  return { open, belowRow };
+}
+
+describe('skyViewGrid (tabulated trigonometry)', () => {
+  it('gives exactly the cell weights of the direct computation', () => {
+    const cases: [PanelLayout, number, boolean][] = [];
+    for (const t of [0, 5, 13, 45, 72, 90]) {
+      for (const facade of [true, false]) cases.push([panelLayout(cfg(t)), 1, facade]);
+    }
+    cases.push([panelLayout(cfg(30)), 3, true], [panelLayout(cfg(60)), 0.5, false]);
+    // A normal with a u component (not produced by the app's layouts) takes the sub-sampled path everywhere.
+    const skew = panelLayout(cfg(40));
+    cases.push([{ ...skew, normal: { u: 0.2, n: skew.normal.n, z: skew.normal.z } }, 2, true]);
+    for (const [layout, gridDeg, facade] of cases) {
+      const g = skyViewGrid(layout, { gridDeg, facade });
+      const ref = directSkyViewGrid(layout, gridDeg, facade);
+      expect(g.open).toEqual(ref.open);
+      expect(g.belowRow).toEqual(ref.belowRow);
+    }
   });
 });

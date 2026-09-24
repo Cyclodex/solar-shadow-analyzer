@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 import type {
   Config,
   DailyProfilePoint,
@@ -22,6 +23,7 @@ import {
   createFloorModel,
   createStepResult,
   evaluateStep,
+  stepMonths,
   sunTrack,
   type FloorModel,
   type SunTrack,
@@ -29,10 +31,12 @@ import {
 import {
   DEFAULT_SWEEP_TILTS,
   dailyProfile,
+  heatmapFromSunCells,
   heatmapStats,
-  shadeHeatmapFromGrid,
+  heatmapSunCells,
   sunGrid,
   type HeatmapStats,
+  type HeatmapSunCells,
   type SunGrid,
 } from '../model/analysis';
 import { economics } from '../model/economics';
@@ -84,7 +88,11 @@ const floorModelCache = createCache<FloorModel>(4);
 // Sun positions shared by every tilt/geometry step: the heatmap's day × slot grid (site + year) and the
 // weather series' sun track (site + facade + series).
 const sunGridCache = createCache<SunGrid>(2);
+// Heatmap cells in the facade frame and against the floor's horizon (grid + facade + horizon, no panels).
+const sunCellsCache = createCache<HeatmapSunCells>(2);
 const sunTrackCache = createCache<SunTrack>(2);
+// Local month of every weather step (series + time zone): shared by every simulation of a series.
+const monthsCache = createCache<Uint8Array>(2);
 
 /** Heatmap resolution: local clock slots of 10 minutes. */
 const HEATMAP_SLOT_MINUTES = 10;
@@ -105,7 +113,9 @@ export function clearModelCaches(): void {
     economicsCache,
     floorModelCache,
     sunGridCache,
+    sunCellsCache,
     sunTrackCache,
+    monthsCache,
   ]) {
     c.clear();
   }
@@ -145,6 +155,12 @@ function trackOf(config: Config, weather: WeatherSeries): SunTrack {
   return sunTrackCache.get([latitude, longitude, config.building.facadeAzimuth, weather], () =>
     sunTrack(config, weather),
   );
+}
+
+/** Local month (0…11) of every step of a weather series in the site's time zone (no geometry). */
+function monthsOf(config: Config, weather: WeatherSeries): Uint8Array {
+  const tz = config.location.timezone;
+  return monthsCache.get([weather, tz], () => stepMonths(weather.timesUtc, weather.year, tz));
 }
 
 /** Sun positions of the heatmap grid (10-min slots of every day of `year`; site only). */
@@ -295,21 +311,37 @@ function useAnnualWeather(config: Config): WeatherSeries | null {
 }
 
 /**
- * True while inputs of the annual results are still arriving: the weather series is loading, or the
- * terrain horizon is enabled and loading — and while a newly arrived series or terrain horizon has not
- * reached the (deferred) annual results yet. Annual numbers computed meanwhile are provisional.
+ * True while the weather series of the annual results is still arriving: it is loading, or a newly
+ * arrived series has not reached the (deferred) annual results yet.
  */
-export function useAnnualInputsPending(): boolean {
-  const terrainEnabled = useConfigSection('horizon').terrainEnabled;
-  const loading = useDataStore(
-    (s) => s.weather.status === 'loading' || (terrainEnabled && s.terrain.status === 'loading'),
-  );
+export function useWeatherPending(): boolean {
+  const loading = useDataStore((s) => s.weather.status === 'loading');
   const weather = useDataStore((s) => s.weather.series);
-  const terrain = useDataStore(terrainSourceOf);
   // Same deferral as useDeferredInputs / useAnnualWeather: differs only in the urgent render.
   const deferredWeather = useDeferredValue(weather);
+  return loading || deferredWeather !== weather;
+}
+
+/**
+ * True while the terrain horizon is enabled and still arriving: it is loading, or a newly arrived horizon
+ * has not reached the (deferred) annual results yet. Annual numbers computed meanwhile lack the terrain.
+ */
+export function useTerrainPending(): boolean {
+  const terrainEnabled = useConfigSection('horizon').terrainEnabled;
+  const loading = useDataStore((s) => s.terrain.status === 'loading');
+  const terrain = useDataStore(terrainSourceOf);
   const deferredTerrain = useDeferredValue(terrain);
-  return loading || deferredWeather !== weather || (terrainEnabled && deferredTerrain !== terrain);
+  return terrainEnabled && (loading || deferredTerrain !== terrain);
+}
+
+/**
+ * True while inputs of the annual results are still arriving: the weather series (useWeatherPending) or
+ * the enabled terrain horizon (useTerrainPending). Annual numbers computed meanwhile are provisional.
+ */
+export function useAnnualInputsPending(): boolean {
+  const weather = useWeatherPending();
+  const terrain = useTerrainPending();
+  return weather || terrain;
 }
 
 /**
@@ -321,6 +353,48 @@ export function useResultsReady(): boolean {
   const pending = useAnnualInputsPending();
   const weatherBusy = useWeatherBusy();
   return !pending && !weatherBusy;
+}
+
+/**
+ * How long the terrain horizon may be pending before annual results without it are shown as provisional
+ * (ms). A fast link or a cached horizon finishes within it: skeleton → final, without a provisional flash.
+ */
+export const PROVISIONAL_DELAY_MS = 1500;
+
+/** Presentation state of the annual results, see useAnnualResultsState. */
+export type AnnualResultsState = 'loading' | 'provisional' | 'final';
+
+/**
+ * Presentation state of the annual results (headline numbers, optimum tilt):
+ * - 'loading': the weather of the configured site and year has not reached the results (numbers would
+ *   belong to another site or year: never show them), or the terrain horizon is pending for less than
+ *   PROVISIONAL_DELAY_MS;
+ * - 'provisional': only the terrain horizon is still pending (a slow download, ~2 MB): the results are
+ *   computed without it — show them marked as provisional, but offer no export or derived action;
+ * - 'final': as useResultsReady().
+ */
+export function useAnnualResultsState(): AnnualResultsState {
+  const weatherPending = useWeatherPending();
+  const weatherBusy = useWeatherBusy();
+  const terrainPending = useTerrainPending();
+  const weatherReady = !weatherPending && !weatherBusy;
+  const waited = useHeldFor(weatherReady && terrainPending, PROVISIONAL_DELAY_MS);
+  if (!weatherReady) return 'loading';
+  if (!terrainPending) return 'final';
+  return waited ? 'provisional' : 'loading';
+}
+
+/** True once `active` has been true for `ms` without interruption (false while inactive). */
+function useHeldFor(active: boolean, ms: number): boolean {
+  const [held, setHeld] = useState(false);
+  // Reset during render (not in an effect): the next activation waits again.
+  if (!active && held) setHeld(false);
+  useEffect(() => {
+    if (!active) return;
+    const id = setTimeout(() => setHeld(true), ms);
+    return () => clearTimeout(id);
+  }, [active, ms]);
+  return active && held;
 }
 
 /**
@@ -350,7 +424,11 @@ export function useSimulation(): SimulationResult | null {
         weather,
         horizons,
         {},
-        { model: floorModelOf(config, horizons), track: trackOf(config, weather) },
+        {
+          model: floorModelOf(config, horizons),
+          track: trackOf(config, weather),
+          months: monthsOf(config, weather),
+        },
       ),
   );
 }
@@ -464,9 +542,9 @@ function asUpdating(result: TiltSweepResult): TiltSweepResult {
 }
 
 // ── Background sweep ──
-// A sweep takes 50–150 ms (19 annual runs); on a slow phone several times that. When a previous result
-// can be shown meanwhile, the new one is computed in slices of ≈ SWEEP_SLICE_MS between frames instead of
-// blocking the main thread; the hooks re-render when it is done.
+// A sweep takes 50–150 ms (19 annual runs); on a slow phone several times that (≈ 0.4–0.5 s at 4× CPU
+// throttling). It is always computed in slices of ≈ SWEEP_SLICE_MS between frames instead of blocking the
+// main thread; the hooks re-render when it is done.
 
 /** Time budget of one background slice (one tilt at least). */
 const SWEEP_SLICE_MS = 8;
@@ -485,9 +563,14 @@ function subscribeSweeps(listener: () => void): () => void {
 
 const getSweepVersion = (): number => sweepVersion;
 
+/** Remembers the sweep shown for `req`: the "previous" result for the next change of the inputs. */
+function rememberSweep(req: SweepRequest, result: TiltSweepResult): void {
+  lastSweep = { req, result };
+}
+
 function finishSweep(req: SweepRequest, points: TiltSweepPoint[]): TiltSweepResult {
   const result = sweepCache.get(req.deps, () => sweepResult(points, req.weather));
-  lastSweep = { req, result };
+  rememberSweep(req, result);
   return result;
 }
 
@@ -502,11 +585,32 @@ function runSweepSlice(): void {
     sweepTimer = setTimeout(runSweepSlice, 0);
     return;
   }
+  completeSweep(job);
+}
+
+function completeSweep(job: NonNullable<typeof sweepJob>): void {
   sweepJob = null;
   finishSweep(job.req, job.sweep.points);
   sweepVersion++;
   sweepListeners.forEach((l) => l());
 }
+
+/**
+ * Finishes the pending background sweep at once and re-renders its hooks. For the print snapshot (taken
+ * right after the beforeprint handlers) and for tests (`act(() => flushSweeps())`).
+ */
+export function flushSweeps(): void {
+  const job = sweepJob;
+  if (!job) return;
+  clearTimeout(sweepTimer);
+  sweepTimer = undefined;
+  while (!job.sweep.done()) job.sweep.step();
+  completeSweep(job);
+}
+
+// Registered on load, i.e. before the print mode's own handler (export/print.ts): a sweep still computing
+// (e.g. printed right after a location change) is in the report.
+if (typeof window !== 'undefined') window.addEventListener('beforeprint', () => flushSync(flushSweeps));
 
 /** Starts (or keeps) the background sweep for `req`; a job for other inputs is dropped. */
 function startSweep(req: SweepRequest): void {
@@ -538,8 +642,9 @@ function previousSweep(req: SweepRequest): TiltSweepResult | null {
  * dragging the tilt never recomputes it. Other building/panel/system/horizon changes are applied once
  * they have settled (SWEEP_SETTLE_MS), so a slider drag computes one sweep instead of one per step, and
  * that sweep runs in the background in short slices. Meanwhile the previous result is returned with
- * `updating: true`. The first result for a site and weather series is computed at once. Null without a
- * matching weather series; pass enabled = false to skip the computation (returns null).
+ * `updating: true`. The first result for a site and weather series is computed in the background as well
+ * and is null until then (the hook re-renders when it is done). Null without a matching weather series;
+ * pass enabled = false to skip the computation (returns null).
  */
 export function useTiltSweep(enabled = true): TiltSweepResult | null {
   const { config, terrain } = useDeferredInputs();
@@ -557,25 +662,22 @@ export function useTiltSweep(enabled = true): TiltSweepResult | null {
   const previous = req && !cached ? previousSweep(req) : null;
   useEffect(() => {
     if (!req) return;
-    if (cached)
-      lastSweep = { req, result: cached }; // the one shown: "previous" for the next change
-    else if (previous) startSweep(req);
+    if (cached) rememberSweep(req, cached);
+    else startSweep(req);
   });
   if (!req || !weather) return null;
   const updating = !sameDeps(sweepRequest(config, shape, terrain, weather).deps, req.deps);
   if (cached) return updating ? asUpdating(cached) : cached;
   if (previous) return asUpdating(previous);
-  const sweep = createSweep(req);
-  while (!sweep.done()) sweep.step();
-  return finishSweep(req, sweep.points);
+  return null; // first result for this site and weather: computing in the background (startSweep)
 }
 
 /**
  * Shade heatmap (day × 10-min local slot) of `floor` (default: the shaded floor, see useShadedFloor) for
  * config.weather.year. Geometry only (no weather), so it is available immediately; the sun positions are
- * cached per site and year (sunGrid), so a tilt or geometry step only re-evaluates the shade. With
- * enabled = false nothing is computed and null is returned (e.g. `useDeferredValue(true, false)` to keep
- * it out of the first render).
+ * cached per site and year (sunGrid) and in the facade frame per facade and horizon (heatmapSunCells), so a
+ * tilt or geometry step only re-evaluates the shade. With enabled = false nothing is computed and null is
+ * returned (e.g. `useDeferredValue(true, false)` to keep it out of the first render).
  */
 export function useHeatmap(floor?: number): HeatmapData;
 export function useHeatmap(floor: number | undefined, enabled: boolean): HeatmapData | null;
@@ -586,9 +688,13 @@ export function useHeatmap(floor?: number, enabled = true): HeatmapData | null {
   const k = clamp(Math.round(floor ?? shaded), 0, config.building.numFloors - 1);
   const { building, panels } = config;
   const grid = sunGridOf(config, config.weather.year);
-  return heatmapCache.get([grid, building, panelGeometryKey(panels), horizons, k], () =>
-    shadeHeatmapFromGrid(grid, config, horizons, k),
-  );
+  return heatmapCache.get([grid, building, panelGeometryKey(panels), horizons, k], () => {
+    const horizon = horizons[k] ?? null;
+    const cells = sunCellsCache.get([grid, building.facadeAzimuth, horizon], () =>
+      heatmapSunCells(grid, building.facadeAzimuth, horizon),
+    );
+    return heatmapFromSunCells(cells, config, k);
+  });
 }
 
 /**
@@ -615,7 +721,17 @@ export function useDailyProfile(date?: string): DailyProfilePoint[] {
   const { building, panels, system } = config;
   const { latitude, longitude, timezone } = config.location;
   return dailyCache.get([d, latitude, longitude, timezone, building, panels, system, horizons], () =>
-    dailyProfile(config, d, horizons, 10, floorModelOf(config, horizons)),
+    dailyProfile(
+      config,
+      d,
+      horizons,
+      10,
+      floorModelOf(config, horizons),
+      // Same sun positions as useSolarPath(d): a tilt or geometry step only re-evaluates the power.
+      solarPathCache.get([d, latitude, longitude, timezone, 10], () =>
+        solarPath(d, latitude, longitude, timezone, 10),
+      ),
+    ),
   );
 }
 

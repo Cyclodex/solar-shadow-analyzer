@@ -117,7 +117,8 @@ export interface AngleArcProps {
   /** Screen angles in radians (0 = +x, clockwise positive). */
   a0: number;
   a1: number;
-  label: string;
+  /** Omitted: the arc only (the caller draws the label, e.g. above a later layer). */
+  label?: string;
   /** Radius of the label position on the bisector (default r + 10). */
   labelR?: number;
   /** Explicit label position (baseline) and anchor instead of the bisector (placed by the caller). */
@@ -126,7 +127,7 @@ export interface AngleArcProps {
   textClassName?: string;
 }
 
-/** Angle marker: arc between two directions at a vertex and a label (on the bisector unless `labelAt`). */
+/** Angle marker: arc between two directions at a vertex and a label (on the bisector unless `labelAt`), if any. */
 export function AngleArc({ c, r, a0, a1, label, labelR, labelAt, className, textClassName }: AngleArcProps) {
   const mid = (a0 + a1) / 2;
   const lr = labelR ?? r + 10;
@@ -139,14 +140,16 @@ export function AngleArc({ c, r, a0, a1, label, labelR, labelAt, className, text
   return (
     <g>
       <path d={arcD(c, r, a0, a1)} className={className ?? s.arc} />
-      <text
-        x={px(at.x)}
-        y={px(at.y)}
-        textAnchor={at.anchor}
-        className={[s.label, s.num, s.halo, textClassName].filter(Boolean).join(' ')}
-      >
-        {label}
-      </text>
+      {label !== undefined && (
+        <text
+          x={px(at.x)}
+          y={px(at.y)}
+          textAnchor={at.anchor}
+          className={[s.label, s.num, s.halo, textClassName].filter(Boolean).join(' ')}
+        >
+          {label}
+        </text>
+      )}
     </g>
   );
 }

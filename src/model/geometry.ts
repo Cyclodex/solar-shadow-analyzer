@@ -237,6 +237,40 @@ export function shadeFromAbove(sf: FacadeVector, layout: PanelLayout): ShadeResu
 }
 
 /**
+ * shadeFromAbove(sf, layout).fraction without building the per-module shares and rectangles (same
+ * arithmetic, same result): for loops over many sun positions, e.g. the heatmap.
+ */
+export function shadeFractionFromAbove(sf: FacadeVector, layout: PanelLayout): number {
+  const { modules, length: L, moduleWidth: w } = layout;
+  const count = modules.length;
+  const cosT = layout.normal.n;
+  const sinT = layout.normal.z;
+  const cosInc = sf.n * cosT + sf.z * sinT;
+  if (sf.n <= 0 || sf.z <= 0 || cosInc <= 0 || sinT < VERTICAL_SIN_EPS) return 0;
+  const H = layout.floorHeight;
+  const du = (H * sinT * sf.u) / cosInc;
+  const dv = (H * sf.n) / cosInc;
+  const v0 = Math.max(0, -dv);
+  const v1 = Math.min(L, L - dv);
+  if (v1 - v0 <= 0 || Math.abs(du) >= layout.rowWidth || count === 0 || !(w > 0)) return 0;
+  const bandShare = (v1 - v0) / L;
+  let sum = 0;
+  for (let i = 0; i < count; i++) {
+    const a = modules[i].u0;
+    const b = modules[i].u1;
+    let covered = 0;
+    for (let j = 0; j < count; j++) {
+      const lo = Math.max(a, modules[j].u0 - du);
+      const hi = Math.min(b, modules[j].u1 - du);
+      if (hi - lo <= U_EPS) continue;
+      covered += hi - lo;
+    }
+    sum += Math.min(1, (covered / w) * bandShare);
+  }
+  return sum / count;
+}
+
+/**
  * Beam loss per module (0…1) under the bypass-substring model: 3 substrings parallel to the module's long side,
  * each 2 cell rows; 6 square cells across the short side (cell = short/6), round(long/cell) cells along the long
  * side (grid covers the module exactly). A substring's beam output is limited by its most shaded cell

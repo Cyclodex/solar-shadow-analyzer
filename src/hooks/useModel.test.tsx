@@ -11,8 +11,11 @@ import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import {
+  PROVISIONAL_DELAY_MS,
   SWEEP_SETTLE_MS,
+  flushSweeps,
   useAnnualInputsPending,
+  useAnnualResultsState,
   useDailyProfile,
   useEconomics,
   useFocusFloor,
@@ -27,8 +30,10 @@ import {
   useSolarPath,
   useSunTimes,
   useResultsReady,
+  useTerrainPending,
   useTerrainProfile,
   useTiltSweep,
+  useWeatherPending,
 } from './useModel';
 import { useWeatherBusy } from './useWeather';
 
@@ -36,6 +41,9 @@ const { latitude, longitude } = DEFAULT_CONFIG.location;
 const series = clearSkyYear(latitude, longitude, 2025);
 const patch = useConfigStore.getState().patch;
 const setWeather = (s = series): void => useDataStore.getState().setWeather({ status: 'ready', series: s });
+
+/** Finishes the tilt sweep computed in the background (useTiltSweep). */
+const finishSweep = (): void => act(() => flushSweeps());
 
 /** Flat terrain profile of `deg` degrees (1° step). */
 const flat = (deg: number): HorizonProfile => ({ stepDeg: 1, elevations: new Array<number>(360).fill(deg) });
@@ -73,10 +81,25 @@ describe('model hooks', () => {
     expect(result.current.sweep).toBeNull();
     act(() => setWeather(clearSkyYear(53.55, 9.99, 2025)));
     expect(result.current.sim).not.toBeNull();
+    expect(result.current.sweep).toBeNull(); // first result for this site: computed in the background
+    finishSweep();
     expect(result.current.sweep).not.toBeNull();
     act(() => patch('weather', { year: 2024 }));
     expect(result.current.sim).toBeNull();
     expect(result.current.sweep).toBeNull();
+  });
+
+  it('computes the first tilt sweep in the background, and at once when printing starts', () => {
+    vi.useFakeTimers();
+    setWeather();
+    const { result } = renderHook(() => useTiltSweep());
+    expect(result.current).toBeNull();
+    // The print snapshot is taken right after the beforeprint handlers: no "computing" in the report.
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+    expect(result.current?.points).toHaveLength(19);
+    expect(vi.getTimerCount()).toBe(0); // no slice left
   });
 
   it('results are ready only for final inputs: matching weather, nothing loading', () => {
@@ -87,6 +110,7 @@ describe('model hooks', () => {
       sweep: useTiltSweep(),
     }));
     expect(result.current).toMatchObject({ busy: false, ready: true });
+    finishSweep();
     expect(result.current.sweep).toMatchObject({ year: 2025, source: 'clear-sky' });
 
     // New site: the previous series is stale even before the loader has set 'loading'.
@@ -115,6 +139,11 @@ describe('model hooks', () => {
       sim: useSimulation(),
       layout: useLayout(),
     }));
+    expect(result.current.sweep).toBeNull();
+    // The first result is computed in the background, in slices between frames.
+    act(() => {
+      vi.runAllTimers();
+    });
     const sweep = result.current.sweep;
     const sim = result.current.sim;
     expect(sweep?.points).toHaveLength(19);
@@ -160,6 +189,7 @@ describe('model hooks', () => {
     patch('panels', { tiltFromVertical: 25 });
     setWeather();
     const { result } = renderHook(() => ({ sweep: useTiltSweep(), sim: useSimulation() }));
+    finishSweep();
     const at25 = result.current.sweep!.points.find((p) => p.tiltFromVertical === 25)!;
     expect(at25.totalKwh).toBeCloseTo(result.current.sim!.totalAnnualKwh, 6);
     result.current.sim!.floors.forEach((fl, k) => expect(at25.floorsKwh[k]).toBeCloseTo(fl.annualKwh, 6));
@@ -183,7 +213,9 @@ describe('model hooks', () => {
       sunTimes: useSunTimes(),
       path: useSolarPath(),
     }));
+    finishSweep();
     const before = result.current;
+    expect(before.sweep).not.toBeNull();
     act(() => patch('location', { name: 'Zuhause' }));
     act(() => patch('location', { elevation: DEFAULT_CONFIG.location.elevation + 1 }));
     for (const key of Object.keys(before) as (keyof typeof before)[])
@@ -265,6 +297,45 @@ describe('model hooks', () => {
     expect(result.current).toBe(false);
     act(() => useDataStore.getState().setWeather({ status: 'loading' }));
     expect(result.current).toBe(true);
+  });
+
+  it('annual results: loading until the weather is final, provisional while only the terrain loads', () => {
+    vi.useFakeTimers();
+    patch('horizon', { terrainEnabled: true });
+    useDataStore.getState().setTerrain({ status: 'loading' });
+    useDataStore.getState().setWeather({ status: 'loading' });
+    const { result } = renderHook(() => ({
+      state: useAnnualResultsState(),
+      weather: useWeatherPending(),
+      terrain: useTerrainPending(),
+    }));
+    expect(result.current).toEqual({ state: 'loading', weather: true, terrain: true });
+    act(() => {
+      vi.advanceTimersByTime(PROVISIONAL_DELAY_MS * 3);
+    });
+    expect(result.current.state).toBe('loading'); // the weather gates, however long it takes
+
+    act(() => setWeather());
+    expect(result.current).toEqual({ state: 'loading', weather: false, terrain: true });
+    act(() => {
+      vi.advanceTimersByTime(PROVISIONAL_DELAY_MS);
+    });
+    expect(result.current.state).toBe('provisional');
+    // New site: its weather is not there yet → loading again (no numbers of the previous site) …
+    act(() => patch('location', { latitude: 53.55, longitude: 9.99 }));
+    expect(result.current.state).toBe('loading');
+    // … and the delay starts again once it is.
+    act(() => setWeather(clearSkyYear(53.55, 9.99, 2025)));
+    expect(result.current.state).toBe('loading');
+    act(() => {
+      vi.advanceTimersByTime(PROVISIONAL_DELAY_MS);
+    });
+    expect(result.current.state).toBe('provisional');
+    act(() => useDataStore.getState().setTerrain({ status: 'ready', profile: flat(3), profiles: null }));
+    expect(result.current).toEqual({ state: 'final', weather: false, terrain: false });
+    act(() => patch('horizon', { terrainEnabled: false }));
+    act(() => useDataStore.getState().setTerrain({ status: 'loading' }));
+    expect(result.current.state).toBe('final'); // a disabled terrain horizon never pends
   });
 
   it('each floor gets the terrain horizon of its own height', () => {

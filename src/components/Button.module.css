@@ -106,6 +106,13 @@
   }
 }
 
+/* Touch screens: also as wide as tall, e.g. header buttons whose text is hidden on narrow screens. */
+@media (pointer: coarse) {
+  .button {
+    min-width: var(--touch);
+  }
+}
+
 /*
  * Forced colours (Windows High Contrast) drop author backgrounds: show the pressed state with system
  * colours. forced-color-adjust: none, else the text backplate paints Canvas behind HighlightText.

@@ -6,7 +6,7 @@ import { useCommon } from '../i18n/common';
 import { shadingTotals } from '../charts/lib/shadingTotals';
 import { criticalAngleKind, substringBeamLoss, type CriticalAngleKind } from '../model/geometry';
 import {
-  useAnnualInputsPending,
+  useAnnualResultsState,
   useEconomics,
   useFloorPlacements,
   useInstant,
@@ -48,6 +48,7 @@ const de = {
   power: 'Leistung jetzt',
   powerSub: 'bei klarem Himmel, AC',
   loading: 'Jahresergebnisse werden berechnet …',
+  provisional: 'vorläufig – Geländehorizont wird geladen',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -78,6 +79,7 @@ const messages: Messages<typeof de> = {
     power: 'Power now',
     powerSub: 'clear sky, AC',
     loading: 'Computing annual results …',
+    provisional: 'provisional – loading terrain horizon',
   },
 };
 
@@ -99,12 +101,21 @@ function useSettledText(text: string, paused: boolean): string {
   return settled;
 }
 
-/** Number with a smaller unit, e.g. <Num value="2’855" unit="kWh" />. */
+/**
+ * Number with a smaller unit, e.g. <Num value="2’855" unit="kWh" />. A normal space (in the unit's size):
+ * where the value and a long unit do not fit (1’070 kWh/kWp on a 320 px phone), the unit goes onto the next
+ * line, in one piece.
+ */
 function Num({ value, unit }: { value: string; unit?: string }) {
   return (
     <>
       {value}
-      {unit && <span className={styles.unit}>{`\u00a0${unit}`}</span>}
+      {unit && (
+        <span className={styles.unit}>
+          {' '}
+          <span className={styles.unitText}>{unit}</span>
+        </span>
+      )}
     </>
   );
 }
@@ -113,17 +124,19 @@ function Kpi({
   label,
   value,
   sub,
+  className,
   children,
 }: {
   label: string;
   value: ReactNode;
   /** Secondary text; several entries become separate lines. */
   sub?: ReactNode | readonly string[];
+  className?: string;
   children?: ReactNode;
 }) {
   const lines = Array.isArray(sub) ? sub : null;
   return (
-    <div className={styles.kpi}>
+    <div className={className ? `${styles.kpi} ${className}` : styles.kpi}>
       <dt className={styles.label}>{label}</dt>
       <dd className={styles.value}>{value}</dd>
       {lines
@@ -158,8 +171,9 @@ function FloorList({ items }: { items: { floor: number; label: string; value: st
 
 /**
  * Headline numbers: annual results (simulation) and the state at the selected instant.
- * Every annual number comes from one snapshot (the simulation and the config it was computed from), and
- * the annual group stays busy while its inputs are still loading (weather, terrain horizon).
+ * Every annual number comes from one snapshot (the simulation and the config it was computed from). The
+ * annual group stays busy while the weather is loading; while only the terrain horizon is still loading,
+ * it shows the numbers computed without it, marked as provisional (useAnnualResultsState).
  */
 export function KpiBar() {
   const t = useMessages(messages);
@@ -170,7 +184,7 @@ export function KpiBar() {
   const simulation = useSimulation();
   const simConfig = useSimulationConfig();
   const econ = useEconomics();
-  const pending = useAnnualInputsPending();
+  const annualState = useAnnualResultsState();
   const instant = useInstant();
   const power = useInstantPower();
   const layout = useLayout();
@@ -181,8 +195,9 @@ export function KpiBar() {
   const playing = useTimeStore((s) => s.playing);
 
   const { numFloors } = config.building;
-  const loading = pending || simulation === null;
+  const loading = annualState === 'loading' || simulation === null;
   const ready = simulation !== null && !loading;
+  const provisional = ready && annualState === 'provisional';
   const topDown = [...placements].reverse();
 
   // ── Annual (one snapshot: simulation + simConfig) ──
@@ -248,11 +263,15 @@ export function KpiBar() {
       <h2 id={headingId} className="sr-only">
         {t.heading}
       </h2>
-      <div className={styles.group} aria-busy={loading || undefined}>
+      <div
+        className={provisional ? `${styles.group} ${styles.provisional}` : styles.group}
+        aria-busy={loading || undefined}
+      >
         <h3 className={styles.groupTitle}>
           {t.year} {config.weather.year}
         </h3>
         {loading && <span className="sr-only">{t.loading}</span>}
+        {provisional && <p className={styles.provisionalNote}>{t.provisional}</p>}
         <dl className={styles.grid}>
           <Kpi
             label={t.annualYield}
@@ -323,6 +342,7 @@ export function KpiBar() {
         <dl className={styles.grid}>
           <Kpi
             label={t.sun}
+            className={styles.explain}
             value={sun.altitude > 0 ? f.deg(sun.altitude, 1) : '–'}
             sub={[
               t.azimuth(`${f.deg(sun.azimuth)} ${compassPoint(sun.azimuth, lang)}`),
@@ -335,7 +355,7 @@ export function KpiBar() {
               .filter(Boolean)
               .join(' · ')}
           />
-          <Kpi label={t.profile} value={profileValue} sub={profileSub} />
+          <Kpi label={t.profile} value={profileValue} sub={profileSub} className={styles.explain} />
           <Kpi label={t.shadeOn(shadedName)} value={shadeValue} sub={shadeSub} />
           <Kpi label={t.power} value={<Num value={totalPower} unit="W" />} sub={t.powerSub}>
             {numFloors > 1 && (

@@ -120,6 +120,52 @@ describe('NumberField', () => {
     expect(input).toHaveAccessibleDescription('Erlaubt: 0 bis 90°');
     expect(screen.getByRole('status')).toHaveTextContent('Erlaubt: 0 bis 90°');
   });
+
+  it('keyboards: decimal keypad, text keyboard (with a minus key on iOS) for fields accepting both signs', () => {
+    render(
+      <>
+        <NumberField label="Höhe" value={280} onChange={() => {}} limit={{ min: 200, max: 500, step: 1 }} />
+        <NumberField
+          label="Längengrad"
+          value={7.45}
+          onChange={() => {}}
+          limit={{ min: -180, max: 180, step: 0.0001 }}
+          slider={false}
+        />
+      </>,
+    );
+    const positive = screen.getByRole('textbox', { name: 'Höhe' });
+    expect(positive).toHaveAttribute('inputmode', 'decimal');
+    expect(positive).toHaveAttribute('enterkeyhint', 'done');
+    const signed = screen.getByRole('textbox', { name: 'Längengrad' });
+    expect(signed).toHaveAttribute('inputmode', 'text');
+    expect(signed).toHaveAttribute('autocapitalize', 'off');
+    expect(signed).toHaveAttribute('autocorrect', 'off');
+  });
+
+  it('a field for negative values only reads a number without a sign as negative', () => {
+    const onChange = vi.fn();
+    render(
+      <NumberField
+        label="Temperaturkoeffizient"
+        value={-0.35}
+        onChange={onChange}
+        limit={{ min: -0.6, max: 0, step: 0.01 }}
+        unit="%/K"
+      />,
+    );
+    const input = screen.getByRole('textbox', { name: 'Temperaturkoeffizient' });
+    expect(input).toHaveAttribute('inputmode', 'decimal');
+    fireEvent.change(input, { target: { value: '0.42' } });
+    expect(input).not.toHaveAttribute('aria-invalid');
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(onChange).toHaveBeenLastCalledWith(-0.42);
+    fireEvent.change(input, { target: { value: '-0.3' } });
+    fireEvent.blur(input);
+    expect(onChange).toHaveBeenLastCalledWith(-0.3);
+    fireEvent.change(input, { target: { value: '0.9' } });
+    expect(input).toHaveAttribute('aria-invalid', 'true');
+  });
 });
 
 describe('number input helpers', () => {

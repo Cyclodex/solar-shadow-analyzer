@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { useConfigStore } from '../../state/configStore';
 import { useTimeStore } from '../../state/timeStore';
 import { resetStores } from '../../test/utils';
@@ -51,6 +51,23 @@ describe('Scene3D stage (DOM parts)', { timeout: 20_000 }, () => {
     );
   });
 
+  it('opens and closes the legend explanations (shown collapsed on phones)', async () => {
+    await renderLoaded();
+    const layers = screen.getByRole('list', { name: 'Ebenen' });
+    const toggle = screen.getByRole('button', { name: 'Legende erklären' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(toggle).toHaveAttribute('aria-controls', layers.id);
+    // The explanations stay in the DOM (desktop and print show them); CSS hides them on phones when closed.
+    expect(within(layers).getByText(/Schraffiert:/)).toBeInTheDocument();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveAccessibleName('Erklärungen ausblenden');
+    expect(layers.className).toMatch(/_explained_/);
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAccessibleName('Legende erklären');
+    expect(layers.className).not.toMatch(/_explained_/);
+  });
+
   it('names the PNG after the site and the selected instant, in the UI language', async () => {
     useTimeStore.getState().setMinutes(12 * 60 + 30);
     await renderLoaded();
@@ -84,6 +101,41 @@ describe('Scene3D stage (DOM parts)', { timeout: 20_000 }, () => {
     await renderLoaded();
     expect(screen.getByRole('button', { name: 'Aus Sonnenrichtung' })).toBeDisabled();
     expect(screen.getAllByText('Sonne unter dem Horizont')).toHaveLength(2);
+  });
+
+  describe('with the stage scrolled off screen', () => {
+    /** IntersectionObservers created by the stage, with their root margin and callback. */
+    const observers: { margin: string; callback: IntersectionObserverCallback }[] = [];
+    beforeEach(() => {
+      observers.length = 0;
+      vi.stubGlobal(
+        'IntersectionObserver',
+        class {
+          constructor(callback: IntersectionObserverCallback, options?: IntersectionObserverInit) {
+            observers.push({ margin: options?.rootMargin ?? '', callback });
+          }
+          observe(): void {}
+          disconnect(): void {}
+        },
+      );
+    });
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('keeps the model status and the scene description live (only the scene graph waits)', async () => {
+      await renderLoaded();
+      const stage = observers.find((o) => o.margin === '0px');
+      expect(stage).toBeDefined();
+      act(() => {
+        stage?.callback([{ isIntersecting: false } as IntersectionObserverEntry], {} as IntersectionObserver);
+      });
+      const scene = screen.getByRole('group', { name: /^3D-Modell von Gebäude und Panels/ });
+      expect(scene).toHaveAccessibleName(expect.stringMatching(/1\. OG: \d+\s% der Fläche verschattet/));
+      act(() => useTimeStore.getState().setMinutes(60));
+      expect(scene).toHaveAccessibleName(expect.stringMatching(/1\. OG: Sonne unter dem Horizont/));
+      expect(screen.getAllByText('Sonne unter dem Horizont')).toHaveLength(2);
+    });
   });
 
   it('follows the configuration (floor labels from the storey numbers)', async () => {

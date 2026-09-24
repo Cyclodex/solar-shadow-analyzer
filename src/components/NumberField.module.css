@@ -74,7 +74,8 @@
   color: var(--bad);
 }
 
-/* Touch targets: the whole 36 px box is the input on phones/tablets and touch screens. */
+/* Touch targets: the whole --touch box (36 px, 44 px on touch screens) is the input on phones/tablets and
+   touch screens. */
 @media (max-width: 1099px), (pointer: coarse) {
   .inputWrap {
     height: var(--touch);

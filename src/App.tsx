@@ -1,10 +1,13 @@
 import { Suspense, useId, type MouseEvent } from 'react';
+import { BottomBar } from './app/BottomBar';
 import { DataLoader } from './app/DataLoader';
 import { Footer } from './app/Footer';
 import { Header } from './app/Header';
 import { KpiBar } from './app/KpiBar';
 import { ViewToggles } from './app/ViewToggles';
 import { WarningsBar } from './app/WarningsBar';
+import { jumpTo } from './app/jumpTo';
+import { BOTTOM_BAR_LAYOUT, WIDE_LAYOUT } from './app/layout';
 import { useDocumentSettings } from './app/useDocumentSettings';
 import { DailyProfileChart } from './charts/DailyProfileChart';
 import { EconomicsCard } from './charts/EconomicsCard';
@@ -58,27 +61,19 @@ const messages: Messages<typeof de> = {
   },
 };
 
-/** Desktop layout (sidebar | main); same breakpoint as App.module.css. */
-const WIDE_LAYOUT = '(min-width: 1100px)';
-
-/**
- * Skip link: focuses and scrolls to the results without navigating to '#results', which would replace
- * the '#c=' share hash and add a history entry. Without the target the native jump remains.
- */
+/** Skip link: focuses and scrolls to the results without replacing the '#c=' share hash (jumpTo). */
 function skipToResults(e: MouseEvent<HTMLAnchorElement>): void {
-  const target = document.getElementById('results');
-  if (!target) return;
-  e.preventDefault();
-  target.scrollIntoView?.({ block: 'start' });
-  target.focus({ preventScroll: true });
+  jumpTo(e, 'results');
 }
 
 /**
  * Layout (App.module.css): header, then the page. The DOM order is the reading order of each layout, so
  * keyboard focus and screen readers follow what is seen:
  * - desktop (≥ 1100 px): sticky sidebar (quick controls + settings) | main (KPIs, views, analysis);
- * - below: one column KPIs → time/tilt → views → analysis → settings.
- * Quick controls and settings move between the wrappers at the breakpoint; <main> and the results keep
+ * - below: one column KPIs → time/tilt → views → analysis → settings;
+ * - phones and touch tablets (BOTTOM_BAR_LAYOUT): KPIs → views → time/tilt → analysis → settings, with the
+ *   control bar (time, tilt, "jump to" the regions) at the bottom of the screen.
+ * Quick controls and settings move between the wrappers at the breakpoints; <main> and the results keep
  * their place in the tree (no remount of e.g. the 3D view's WebGL context).
  */
 export default function App() {
@@ -88,16 +83,19 @@ export default function App() {
   const viewsId = useId();
   const analysisId = useId();
   const wide = useMediaQuery(WIDE_LAYOUT);
+  const bar = useMediaQuery(BOTTOM_BAR_LAYOUT);
   const anyView = Object.values(views).some(Boolean);
+  // Targets of the bar's "jump to" links (app/BottomBar): focusable only there.
+  const jumpTarget = bar ? -1 : undefined;
 
   const quick = (
     // Time and tilt are inputs, not part of the printed report (print.css hides the <aside> only).
-    <div className={styles.quick} data-print="hide">
+    <div id="quick" className={styles.quick} data-print="hide" tabIndex={jumpTarget}>
       <QuickControls />
     </div>
   );
   const settings = (
-    <div className={styles.settings}>
+    <div id="settings" className={styles.settings} tabIndex={jumpTarget}>
       <SettingsSections />
     </div>
   );
@@ -124,10 +122,10 @@ export default function App() {
             <KpiBar />
           </div>
 
-          {!wide && quick}
+          {!wide && !bar && quick}
 
           <div className={styles.results}>
-            <section className={styles.block} aria-labelledby={viewsId}>
+            <section id="views" className={styles.block} aria-labelledby={viewsId} tabIndex={jumpTarget}>
               <div className={styles.blockHead}>
                 <h2 id={viewsId} className={styles.blockTitle}>
                   {t.views}
@@ -175,7 +173,14 @@ export default function App() {
               {!anyView && <p className={styles.empty}>{t.noViews}</p>}
             </section>
 
-            <section className={styles.block} aria-labelledby={analysisId}>
+            {bar && quick}
+
+            <section
+              id="analysis"
+              className={styles.block}
+              aria-labelledby={analysisId}
+              tabIndex={jumpTarget}
+            >
               <div className={styles.blockHead}>
                 <h2 id={analysisId} className={styles.blockTitle}>
                   {t.analysis}
@@ -203,6 +208,7 @@ export default function App() {
           <Footer />
         </div>
       </div>
+      {bar && <BottomBar />}
       <PwaToast />
     </>
   );

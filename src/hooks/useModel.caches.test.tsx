@@ -2,12 +2,20 @@ import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { sunGrid } from '../model/analysis';
 import { DEFAULT_CONFIG } from '../model/defaults';
-import { createFloorModel, sunTrack } from '../model/simulation';
+import { createFloorModel, stepMonths, sunTrack } from '../model/simulation';
+import { solarPath } from '../model/sun';
 import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
-import { useDailyProfile, useHeatmap, useInstantPower, useSimulation, useTiltSweep } from './useModel';
+import {
+  flushSweeps,
+  useDailyProfile,
+  useHeatmap,
+  useInstantPower,
+  useSimulation,
+  useTiltSweep,
+} from './useModel';
 
 // Count the expensive model builders (mocks are hoisted above the imports); the hooks must share their results.
 vi.mock('../model/analysis', async (importOriginal) => {
@@ -16,7 +24,16 @@ vi.mock('../model/analysis', async (importOriginal) => {
 });
 vi.mock('../model/simulation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../model/simulation')>();
-  return { ...actual, sunTrack: vi.fn(actual.sunTrack), createFloorModel: vi.fn(actual.createFloorModel) };
+  return {
+    ...actual,
+    sunTrack: vi.fn(actual.sunTrack),
+    createFloorModel: vi.fn(actual.createFloorModel),
+    stepMonths: vi.fn(actual.stepMonths),
+  };
+});
+vi.mock('../model/sun', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../model/sun')>();
+  return { ...actual, solarPath: vi.fn(actual.solarPath) };
 });
 
 const { latitude, longitude } = DEFAULT_CONFIG.location;
@@ -30,6 +47,8 @@ describe('model hook caches', () => {
     vi.mocked(sunGrid).mockClear();
     vi.mocked(sunTrack).mockClear();
     vi.mocked(createFloorModel).mockClear();
+    vi.mocked(stepMonths).mockClear();
+    vi.mocked(solarPath).mockClear();
   });
 
   it('tilt and geometry steps reuse the sun positions of the heatmap and the weather series', () => {
@@ -38,6 +57,8 @@ describe('model hook caches', () => {
       sim: useSimulation(),
       sweep: useTiltSweep(),
     }));
+    act(() => flushSweeps()); // the sweep's first result is computed in the background
+    expect(result.current.sweep?.points).toHaveLength(19);
     expect(sunGrid).toHaveBeenCalledTimes(1);
     // One track for the simulation and all 19 sweep tilts.
     expect(sunTrack).toHaveBeenCalledTimes(1);
@@ -66,5 +87,18 @@ describe('model hook caches', () => {
     expect(createFloorModel).toHaveBeenCalledTimes(1);
     act(() => patch('panels', { tiltFromVertical: 40 }));
     expect(createFloorModel).toHaveBeenCalledTimes(2);
+  });
+
+  it('a tilt step reuses the months of the weather steps and the sun positions of the day', () => {
+    const { result } = renderHook(() => ({ daily: useDailyProfile(), sim: useSimulation() }));
+    expect(stepMonths).toHaveBeenCalledTimes(1);
+    expect(solarPath).toHaveBeenCalledTimes(1);
+    const { daily, sim } = result.current;
+    act(() => patch('panels', { tiltFromVertical: 40 }));
+    act(() => patch('panels', { tiltFromVertical: 35 }));
+    expect(result.current.daily).not.toBe(daily);
+    expect(result.current.sim).not.toBe(sim);
+    expect(stepMonths).toHaveBeenCalledTimes(1);
+    expect(solarPath).toHaveBeenCalledTimes(1);
   });
 });

@@ -120,13 +120,18 @@
 }
 
 /* Legend: toggle chip + explanation per layer; spans the card like the ViewCard footer. */
+.legendBar {
+  margin: var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--border);
+}
+
 .legend {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
   gap: var(--space-2) var(--space-5);
-  margin: var(--space-4) calc(-1 * var(--space-4)) calc(-1 * var(--space-4));
-  padding: var(--space-2) var(--space-4) var(--space-3);
-  border-top: 1px solid var(--border);
+  margin: 0;
+  padding: 0;
   list-style: none;
 }
 
@@ -198,6 +203,11 @@
   display: none;
 }
 
+/* «Legende erklären»: phones only (below); .legendBar outranks the Button's display in any stylesheet order. */
+.legendBar .explainToggle {
+  display: none;
+}
+
 /*
  * Touch devices: vertical one-finger swipes scroll the page (the view is tall on phones), horizontal swipes
  * rotate, two fingers zoom. !important beats the inline touch-action: none set by OrbitControls.
@@ -234,6 +244,54 @@
 
   .short {
     display: inline;
+  }
+}
+
+/*
+ * Phones: the legend would be taller than the 3D view. Only the layer toggles show (wrapped side by side), so
+ * the view and all toggles fit on one screen; the explanations open with the toggle below. Screen only: the
+ * printed report keeps the explanations.
+ */
+@media screen and (max-width: 520px) {
+  .legend:not(.explained) {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
+  }
+
+  .legend:not(.explained) .legendText {
+    display: none;
+  }
+
+  .legendBar .explainToggle {
+    display: inline-flex;
+    margin-top: var(--space-2);
+  }
+}
+
+/*
+ * Narrow phones (below 420 px with touch, and any screen below 360 px): the reset button and the four short
+ * presets need about 290 px with the default spacing and 44 px touch targets, and would wrap onto a second
+ * row over the model at 360 px and less. Tighter spacing keeps one row (about 246 px); the touch targets stay
+ * ≥ var(--touch) (.cameraBar button outranks the Button size's padding).
+ */
+@media (max-width: 359px), (pointer: coarse) and (max-width: 419.98px) {
+  .cameraBar {
+    gap: 2px;
+    padding: 2px;
+  }
+
+  .cameraBar button {
+    padding-inline: var(--space-1);
+  }
+}
+
+/* 320 px: the tight row needs the full width of the 262 px stage; a smaller inset leaves it some slack. */
+@media (max-width: 359px) {
+  .cameraBar {
+    left: var(--space-1);
+    bottom: var(--space-1);
+    max-width: calc(100% - 2 * var(--space-1));
   }
 }
 

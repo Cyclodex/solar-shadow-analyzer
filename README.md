@@ -35,7 +35,12 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
   Stockwerk, Neigungsvergleich, Heatmap), PNG je Ansicht und Diagramm, Druckbericht (auch als PDF). Einstellungen bleiben im
   Browser gespeichert.
 - **Oberfläche:** Deutsch und Englisch, dunkles und helles Design. Ab 1100 px Breite stehen die Eingaben in einer
-  Seitenleiste; schmaler ist die Seite einspaltig, mit den Ergebnissen vor den Einstellungen (getestet bis 360 px).
+  Seitenleiste; schmaler ist die Seite einspaltig, mit den Ergebnissen vor den Einstellungen (ausgelegt ab 320 px
+  Breite, automatisch getestet bei 360 px).
+- **Handy und Touch:** Auf Handys und Tablets mit Touchscreen folgt die 3D-Ansicht direkt auf die Kennzahlen, und
+  eine Steuerleiste am unteren Bildschirmrand hält Uhrzeit, Tagesanimation und Panelneigung in Reichweite und
+  springt zu jedem Bereich der Seite. Bedienelemente sind dort mindestens 44 px gross, und wer über einen Regler,
+  den Kompass oder ein Diagramm scrollt, verstellt nichts.
 
 ![Analyse: Tagesverlauf, Jahres-Heatmap der Verschattung, Monatsertrag und Neigungsvergleich](docs/images/analysis.png)
 
@@ -50,6 +55,16 @@ Sie lässt sich auch wie eine App installieren, auf dem Handy, dem Tablet oder d
 - **iPhone und iPad (Safari):** «Teilen» antippen (bei neueren iOS-Versionen zuerst «…» neben der Adresszeile,
   dann «Teilen»), «Zu Home-Bildschirm hinzufügen» wählen, «Als Web-App öffnen» eingeschaltet lassen (falls
   angezeigt) und mit «Hinzufügen» bestätigen. Der Knopf «Installieren» zeigt diese Schritte ebenfalls.
+
+**Auf dem Handy** (und auf Tablets mit Touchscreen) liegt am unteren Bildschirmrand eine Steuerleiste: − und +
+verschieben die Uhrzeit um 15 Minuten, ein Tipp auf die Uhrzeit öffnet den Zeitregler, daneben startet und stoppt
+der Abspielknopf die Tagesanimation, θ öffnet den Neigungsregler (mit dem Optimum als Marke), und «Springe zu» führt
+zu Ergebnissen, Ansichten (3D), Zeitpunkt und Neigung, Analyse oder Einstellungen; der Teilen-Link in der
+Adresszeile bleibt dabei erhalten. Regler, Fassadenkompass und Diagramme reagieren auf einen Tipp oder auf
+seitliches Ziehen, senkrechtes Wischen scrollt nur die Seite. Im Neigungsvergleich zeigt ein Tipp die Werte einer
+Neigung; übernommen wird sie erst mit dem Knopf «Neigung … übernehmen». Auf einer langsamen Verbindung erscheinen
+Jahreswerte und optimale Neigung zuerst mit dem Hinweis «vorläufig – Geländehorizont wird geladen», bis die rund
+2 MB Höhenkacheln für den Geländehorizont da sind.
 
 Nach dem ersten Besuch startet die App auch ohne Internet, installiert oder im Browser: Alle App-Dateien liegen dann
 im Browser. Wetterdaten und Geländehorizont für einen neuen Standort oder ein anderes Jahr brauchen eine Verbindung;
@@ -102,8 +117,8 @@ npm run dev   # http://localhost:5173
 - `npm run e2e` baut die App und startet `vite preview` auf Port 4173 (anpassbar mit `E2E_PORT`). Einmalig vorher
   `npx playwright install chromium` ausführen; mit `PLAYWRIGHT_CHROMIUM_PATH` lässt sich ein anderes Chromium
   verwenden. Die Tests blockieren alle externen Dienste und prüfen u. a. die 3D-Darstellung (WebGL über SwiftShader),
-  den Teilen-Link, die Sprachumschaltung, das Layout bei 360 px, Manifest und Icons sowie den Offline-Start über den
-  Service Worker.
+  den Teilen-Link, die Sprachumschaltung, das Layout bei 360 px, die Steuerleiste auf einem iPhone 14, die
+  Kameraleiste auf einem iPhone SE, Manifest und Icons sowie den Offline-Start über den Service Worker.
 - Die App lässt sich unter einem Unterpfad bauen: `BASE_PATH=/solar-shadow-analyzer/ npm run build` wie für GitHub
   Pages (dort kommt der Pfad aus `actions/configure-pages`). Mit derselben Variable laufen auch die E2E-Tests unter diesem Pfad, z. B.
   `BASE_PATH=/solar-shadow-analyzer/ E2E_PORT=4811 npm run e2e`.
@@ -143,7 +158,8 @@ stehen dort in `LIMITS`.
   202°; Wetter 2020–2023; `npm run validate:yield`): mit Open-Meteo `era5` −0.7 % bis −1.3 % zu PVGIS-ERA5 derselben
   Jahre; mit der Standardauswahl `best_match` +1.4 % bis +2.9 % zu PVGIS-SARAH3 derselben Jahre und +4.3 % bis
   +5.3 % zum SARAH3-Mittel 2005–2023.
-- **Geländehorizont:** AWS-Terrarium-Kacheln, 1°-Raster bis ca. 50 km, mit Erdkrümmung und Refraktion. Gegenüber
+- **Geländehorizont:** AWS-Terrarium-Kacheln, 1°-Raster bis ca. 50 km, mit Erdkrümmung und Refraktion, je
+  Stockwerk ab der Oberkante der Panelreihe, im Hintergrund (Web Worker) gerechnet. Gegenüber
   PVGIS `printhorizon` RMS 0.34° (Mittelland), 1.19° (Grindelwald) und 1.22° (Zermatt).
 
 Formeln, Koordinatensysteme, Konventionen und Modulgrenzen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
@@ -195,9 +211,9 @@ den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechn
 ## Stack
 
 React 19 · TypeScript 6 · Vite 8 · zustand 5 · three.js 0.186 mit @react-three/fiber 9 und drei 10 (nur die 3D-Ansicht,
-lazy geladen) · fast-png · CSS Modules mit CSS-Variablen · SVG- und Canvas-Diagramme ohne Chart-Library ·
-vite-plugin-pwa (Workbox) für Installation und Offline-Start · Vitest 5, Testing Library, Playwright, ESLint 10,
-Prettier 3.
+lazy geladen) · fast-png in einem Web Worker für den Geländehorizont · CSS Modules mit CSS-Variablen · SVG- und
+Canvas-Diagramme ohne Chart-Library · vite-plugin-pwa (Workbox) für Installation und Offline-Start · Vitest 5,
+Testing Library, Playwright, ESLint 10, Prettier 3.
 
 ## Weiterentwicklung
 

@@ -23,7 +23,8 @@ const de = {
   subtitle: (n: number) => `Ersparnis, Amortisation und Bilanz über ${n} ${n === 1 ? 'Jahr' : 'Jahre'}`,
   savings: 'Ersparnis pro Jahr',
   savingsSub: (kwh: string) => `im 1. Jahr, aus ${kwh}`,
-  payback: 'Amortisationsdauer',
+  // Soft hyphen: the figure column of a 320 px phone is narrower than the word.
+  payback: 'Amortisations\u00addauer',
   paybackSub: (investment: string) => `Investition ${investment}`,
   paybackBeyond: (n: number) => `länger als die Betrachtungsdauer (${n} ${n === 1 ? 'Jahr' : 'Jahre'})`,
   net: (n: number) => `Bilanz nach ${n} ${n === 1 ? 'Jahr' : 'Jahren'}`,

@@ -7,8 +7,8 @@ import type {
   WeatherSeries,
 } from './types';
 import { MS_PER_DAY, MS_PER_MINUTE, dayOfYear, dayOffsetsForYear, daysInYear } from './time';
-import { solarPath, sunPosition } from './sun';
-import { panelLayout, shadeFromAbove, sunInFacade } from './geometry';
+import { solarPath, sunPosition, type SolarPathPoint } from './sun';
+import { panelLayout, shadeFractionFromAbove, sunInFacade } from './geometry';
 import { horizonAt } from './horizon';
 import { clearSkyIrradiance } from './irradiance';
 import { CLEAR_SKY_TEMPERATURE_C } from './weather';
@@ -79,6 +79,81 @@ export function sunGrid(
 }
 
 /**
+ * The part of a heatmap that does not depend on the panels: per cell of `grid` the code HEATMAP_NIGHT,
+ * HEATMAP_BEHIND or HEATMAP_HORIZON, or 0 where the sun reaches the row — then with the sun in the facade
+ * frame (su, sn, sz). Depends on the site grid, the facade azimuth and the floor's horizon only, so a tilt
+ * or panel step reuses it (heatmapFromSunCells).
+ */
+export interface HeatmapSunCells {
+  grid: SunGrid;
+  code: Float32Array;
+  su: Float64Array;
+  sn: Float64Array;
+  sz: Float64Array;
+}
+
+/** Builds the HeatmapSunCells of `grid` for a facade azimuth and a floor's horizon (null = flat). */
+export function heatmapSunCells(
+  grid: SunGrid,
+  facadeAzimuth: number,
+  horizon: HorizonProfile | null,
+): HeatmapSunCells {
+  const size = grid.days * grid.slotsPerDay;
+  const cells: HeatmapSunCells = {
+    grid,
+    code: new Float32Array(size),
+    su: new Float64Array(size),
+    sn: new Float64Array(size),
+    sz: new Float64Array(size),
+  };
+  const sun = { altitude: 0, azimuth: 0 };
+  for (let i = 0; i < size; i++) {
+    sun.altitude = grid.altitude[i];
+    sun.azimuth = grid.azimuth[i];
+    let v = 0;
+    if (sun.altitude <= 0) v = HEATMAP_NIGHT;
+    else {
+      const sf = sunInFacade(sun, facadeAzimuth);
+      if (sf.n <= 0) v = HEATMAP_BEHIND;
+      else if (horizon && sun.altitude < horizonAt(horizon, sun.azimuth)) v = HEATMAP_HORIZON;
+      else {
+        cells.su[i] = sf.u;
+        cells.sn[i] = sf.n;
+        cells.sz[i] = sf.z;
+      }
+    }
+    cells.code[i] = v;
+  }
+  return cells;
+}
+
+/**
+ * Shade of floor `floor` by the row above for every cell of `cells` (heatmapSunCells of the config's site grid,
+ * facade and that floor's horizon): only the panel geometry is evaluated here.
+ */
+export function heatmapFromSunCells(cells: HeatmapSunCells, config: Config, floor = 0): HeatmapData {
+  const { year, days, slotsPerDay, slotMinutes } = cells.grid;
+  const n = config.building.numFloors;
+  const k = Math.min(n - 1, Math.max(0, Math.round(floor)));
+  const layout = panelLayout(config);
+  const hasAbove = k < n - 1;
+  const values = new Float32Array(days * slotsPerDay);
+  const sf = { u: 0, n: 0, z: 0 };
+  for (let i = 0; i < values.length; i++) {
+    const code = cells.code[i];
+    if (code !== 0 || !hasAbove) {
+      values[i] = code;
+      continue;
+    }
+    sf.u = cells.su[i];
+    sf.n = cells.sn[i];
+    sf.z = cells.sz[i];
+    values[i] = shadeFractionFromAbove(sf, layout);
+  }
+  return { year, days, slotsPerDay, slotMinutes, values, floor: k };
+}
+
+/**
  * Shade of floor `floor` by the row above for every cell of `grid`, which must be the SunGrid of the config's
  * site (see shadeHeatmap). Only the facade, geometry and horizons are evaluated here (≈ 6 ms for 10-min slots).
  */
@@ -88,29 +163,10 @@ export function shadeHeatmapFromGrid(
   horizons: readonly (HorizonProfile | null | undefined)[],
   floor = 0,
 ): HeatmapData {
-  const { year, days, slotsPerDay, slotMinutes } = grid;
   const n = config.building.numFloors;
   const k = Math.min(n - 1, Math.max(0, Math.round(floor)));
-  const gamma = config.building.facadeAzimuth;
-  const layout = panelLayout(config);
-  const hz = horizons[k] ?? null;
-  const hasAbove = k < n - 1;
-  const values = new Float32Array(days * slotsPerDay);
-  const sun = { altitude: 0, azimuth: 0 };
-  for (let i = 0; i < values.length; i++) {
-    sun.altitude = grid.altitude[i];
-    sun.azimuth = grid.azimuth[i];
-    let v: number;
-    if (sun.altitude <= 0) v = HEATMAP_NIGHT;
-    else {
-      const sf = sunInFacade(sun, gamma);
-      if (sf.n <= 0) v = HEATMAP_BEHIND;
-      else if (hz && sun.altitude < horizonAt(hz, sun.azimuth)) v = HEATMAP_HORIZON;
-      else v = hasAbove ? shadeFromAbove(sf, layout).fraction : 0;
-    }
-    values[i] = v;
-  }
-  return { year, days, slotsPerDay, slotMinutes, values, floor: k };
+  const cells = heatmapSunCells(grid, config.building.facadeAzimuth, horizons[k] ?? null);
+  return heatmapFromSunCells(cells, config, k);
 }
 
 /**
@@ -209,7 +265,8 @@ export function tiltSweep(
  * Clear-sky AC power and shade per floor over the local day `date` (solarPath grid, 00:00–24:00 every
  * `stepMinutes`; clear sky as clearSkyIrradiance, air temperature CLEAR_SKY_TEMPERATURE_C).
  * floorsShade = shaded area fraction by the row above while the beam reaches that floor, else 0.
- * `model` = createFloorModel(config, horizons) (default options) when already built elsewhere.
+ * `model` = createFloorModel(config, horizons) (default options) and `path` = solarPath(date, site, stepMinutes)
+ * when already built elsewhere (neither the sun positions nor, for a tilt change, the path change).
  */
 export function dailyProfile(
   config: Config,
@@ -217,9 +274,14 @@ export function dailyProfile(
   horizons: readonly (HorizonProfile | null | undefined)[],
   stepMinutes = 10,
   model: FloorModel = createFloorModel(config, horizons),
+  path: readonly SolarPathPoint[] = solarPath(
+    date,
+    config.location.latitude,
+    config.location.longitude,
+    config.location.timezone,
+    stepMinutes,
+  ),
 ): DailyProfilePoint[] {
-  const { latitude, longitude, timezone } = config.location;
-  const path = solarPath(date, latitude, longitude, timezone, stepMinutes);
   const doy = dayOfYear(date);
   const out = createStepResult(model.numFloors);
   return path.map((p) => {

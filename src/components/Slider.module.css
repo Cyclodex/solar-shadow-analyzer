@@ -5,6 +5,13 @@
   width: 100%;
 }
 
+/* Touch screens: a thumb that is easy to grab (iOS does not move it to a tap on the track). */
+@media (pointer: coarse) {
+  .root {
+    --thumb: 24px;
+  }
+}
+
 .range {
   display: block;
   width: 100%;

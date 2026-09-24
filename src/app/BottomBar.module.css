@@ -1,0 +1,210 @@
+/*
+ * Control bar at the bottom of the screen (phones, touch tablets: App.tsx renders it in BOTTOM_BAR_LAYOUT).
+ * Fixed (not sticky: focusing its controls must not scroll the page); the page ends with padding of its
+ * height (--bottom-bar-h, global.css), so the footer is never hidden behind it. Above the home indicator
+ * and beside a landscape notch (safe areas). Opaque, so text scrolling behind it keeps its contrast.
+ */
+.bar {
+  position: fixed;
+  z-index: 20;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  /* Phones: the open slider above the buttons (time group | play | tilt, right-aligned | jump to). */
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  grid-template-areas:
+    'panel panel panel panel'
+    'time play tilt jump';
+  align-items: center;
+  column-gap: var(--space-1);
+  padding: var(--space-2) max(var(--space-2), var(--safe-right)) calc(var(--space-2) + var(--safe-bottom))
+    max(var(--space-2), var(--safe-left));
+  border-top: 1px solid var(--border-strong);
+  background: var(--surface);
+  box-shadow: 0 -4px 16px rgb(0 0 0 / 0.16);
+}
+
+.time {
+  grid-area: time;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.play {
+  grid-area: play;
+}
+
+.tilt {
+  grid-area: tilt;
+  justify-self: end;
+}
+
+.panel {
+  grid-area: panel;
+  min-width: 0;
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.panel[hidden] {
+  display: none;
+}
+
+/* Clock and tilt buttons: show the value, open their slider (aria-expanded). */
+.toggle {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--touch);
+  min-height: var(--touch);
+  padding: 0 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text);
+  line-height: 1.1;
+  white-space: nowrap;
+  transition:
+    background-color var(--transition),
+    border-color var(--transition);
+}
+
+.toggle:hover {
+  border-color: var(--border-strong);
+}
+
+.toggle[aria-expanded='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.clock,
+.value {
+  font-size: var(--fs-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.date {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.jump {
+  position: relative;
+  grid-area: jump;
+}
+
+/* Opens upwards, right-aligned. */
+.menu {
+  position: absolute;
+  z-index: 1;
+  right: 0;
+  bottom: calc(100% + var(--space-3));
+  width: max-content;
+  min-width: 13rem;
+  max-width: calc(100vw - 16px);
+  max-height: calc(100dvh - 120px);
+  overflow-y: auto;
+  padding: var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-3);
+  box-shadow: var(--shadow);
+}
+
+.menu[hidden] {
+  display: none;
+}
+
+.menuList {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+  list-style: none;
+}
+
+.menuItem {
+  display: flex;
+  align-items: center;
+  min-height: var(--touch);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: var(--fs-md);
+  text-decoration: none;
+}
+
+.menuItem:hover,
+.menuItem:focus-visible {
+  background: var(--accent-soft);
+}
+
+.menuItem:focus-visible {
+  outline: none;
+  box-shadow: inset 0 0 0 2px var(--accent);
+}
+
+/* Height of the bottom safe-area inset, observed by useBarHeight (BottomBar.tsx): changes of the inset alone
+   resize neither the floating dock nor anything else it observes. */
+.safeProbe {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  height: var(--safe-bottom);
+  pointer-events: none;
+}
+
+/* Narrowest phones (320 px): six 44 px targets in one row; the date is in the KPIs and the 3D view too. */
+@media (max-width: 359.98px) {
+  .bar {
+    column-gap: 2px;
+  }
+
+  .toggle {
+    padding: 0 var(--space-1);
+  }
+
+  .date {
+    display: none;
+  }
+}
+
+/* Wider screens (landscape phones, tablets): a floating dock of limited width, centred, in one row with the
+   open slider between the buttons. */
+@media (min-width: 600px) {
+  .bar {
+    grid-template-columns: auto auto minmax(0, 1fr) auto auto;
+    grid-template-areas: 'time play panel tilt jump';
+    column-gap: var(--space-2);
+    bottom: calc(var(--space-2) + var(--safe-bottom));
+    width: min(100% - 2 * var(--space-4), 48rem);
+    margin-inline: auto;
+    padding: var(--space-2);
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+  }
+
+  .panel {
+    padding: 0 var(--space-1);
+  }
+
+  .tilt {
+    justify-self: stretch;
+  }
+}
+
+@media (forced-colors: active) {
+  .bar {
+    border-color: CanvasText;
+  }
+
+  .toggle[aria-expanded='true'] {
+    border-color: Highlight;
+  }
+}

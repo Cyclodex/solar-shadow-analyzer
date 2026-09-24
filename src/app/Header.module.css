@@ -74,3 +74,22 @@
     font-size: var(--fs-xl);
   }
 }
+
+/* Landscape phones: the title in the smaller size keeps its full width beside the 44 px buttons. */
+@media (pointer: coarse) and (max-height: 500px) {
+  .title {
+    font-size: var(--fs-lg);
+  }
+}
+
+/* Narrow touch screens (iPhone SE, 320 px): the 44 px buttons stay on one row with smaller gaps. */
+@media (pointer: coarse) and (max-width: 374px) {
+  .header {
+    column-gap: var(--space-3);
+    padding-inline: max(var(--space-3), var(--safe-left)) max(var(--space-3), var(--safe-right));
+  }
+
+  .actions {
+    gap: var(--space-1);
+  }
+}

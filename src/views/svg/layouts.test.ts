@@ -6,7 +6,7 @@ import { solarPath } from '../../model/sun';
 import { localToUtc } from '../../model/time';
 import type { Config } from '../../model/types';
 import { angleDiff } from '../../model/units';
-import { PAD } from './constants';
+import { FONT, PAD } from './constants';
 import { SUN_R, buildFacade, buildSky, floorValue, hourLabels } from './frontalLayout';
 import {
   boxHitsCircle,
@@ -199,6 +199,51 @@ describe('sun path layout', () => {
       }
     }
   });
+
+  // Four days per month over the year (1st, 8th, 15th and 22nd).
+  const yearDates = Array.from({ length: 48 }, (_, i) => {
+    const m = String(Math.floor(i / 4) + 1).padStart(2, '0');
+    return `2025-${m}-${String((i % 4) * 7 + 1).padStart(2, '0')}`;
+  });
+
+  it('keeps the date labels off the hour labels (320 px phones and desktop)', () => {
+    // 24 Sept at 280 px: "21. Dez." ran into "13" and "14"; 12 Feb at 472 px: into "13".
+    for (const [width, date] of [
+      [280, '2025-09-24'],
+      [472, '2025-02-12'],
+      [472, '2025-04-09'],
+    ] as const) {
+      const d = diagram(width, 202, undefined, date);
+      const hours = d.hours.flatMap((h) => (h.label ? [smallLabelBox(h.lx, h.ly, h.label)] : []));
+      for (const r of d.refs) {
+        if (!r.label) continue;
+        const b = smallLabelBox(r.label.x, r.label.y, r.label.text);
+        for (const h of hours)
+          expect(boxesOverlap(b, h), `${width} px, ${date}: ${r.label.text}`).toBe(false);
+      }
+    }
+  });
+
+  it('keeps every hour label off the fixed labels, next to its dot or left out', () => {
+    for (const width of [280, 332, 472]) {
+      let omitted = 0;
+      for (const date of yearDates) {
+        const d = diagram(width, 202, undefined, date);
+        const marks = d.hours.filter((h) => h.label);
+        const labels = sunPathHourLabels(d.hours, d.polar, null, 0, d.fixedLabels);
+        omitted += marks.length - labels.length;
+        for (const l of labels) {
+          const at = `${width} px, ${date}: ${l.label}`;
+          const b = smallLabelBox(l.x, l.y, l.label);
+          for (const o of d.fixedLabels) expect(boxesOverlap(b, o), at).toBe(false);
+          const mark = marks.find((h) => h.label === l.label);
+          expect(Math.hypot(l.x - (mark?.lx ?? 0), l.y - (mark?.ly ?? 0)), at).toBeLessThan(8);
+        }
+      }
+      // Rarely left out: never on wide figures, a few of ~530 labels over the year at 280 px.
+      expect(omitted, `${width} px`).toBeLessThanOrEqual(width >= 332 ? 0 : 12);
+    }
+  });
 });
 
 describe('front view layout', () => {
@@ -215,6 +260,30 @@ describe('front view layout', () => {
     const labels = sky.compass.map((c) => c.label);
     expect(labels).toEqual(['O', 'SO', 'S 180°', 'SW', 'W']);
     expect(sky.compass[0].x).toBeGreaterThan(sky.compass[4].x);
+  });
+
+  it('leaves out compass labels that would run into the facade direction on 320 px phones only', () => {
+    const sept = solarPath('2025-09-24', latitude, longitude, timezone);
+    const labelsAt = (width: number, lang: 'de' | 'en') =>
+      buildSky(width, 202, sept, [], undefined, undefined, lang).compass;
+    expect(labelsAt(280, 'de').map((c) => c.label)).toEqual(['OSO', 'SSW 202°', 'WNW']);
+    expect(labelsAt(280, 'en').map((c) => c.label)).toEqual(['ESE', 'SSW 202°', 'WNW']);
+    for (const width of [302, 332, 472, 560]) {
+      expect(labelsAt(width, 'de').map((c) => c.label)).toEqual(['OSO', 'SSO', 'SSW 202°', 'WSW', 'WNW']);
+    }
+    // What is left keeps 4 px clear of the bold facade direction (estimated bold width).
+    for (const width of [260, 280, 302, 332]) {
+      for (let az = 0; az < 360; az += 15) {
+        const compass = buildSky(width, az, sept, [], undefined, undefined, 'de').compass;
+        const main = compass.find((c) => c.strong);
+        if (!main) throw new Error('no facade direction');
+        const mainBox = labelBox(main.x, 0, textWidth(main.label, FONT) * 1.12 + 8, 'middle', FONT);
+        for (const c of compass.filter((cc) => !cc.strong)) {
+          const b = labelBox(c.x, 0, textWidth(c.label, FONT), 'middle', FONT);
+          expect(boxesOverlap(b, mainBox), `${width} px, ${az}°: ${c.label}`).toBe(false);
+        }
+      }
+    }
   });
 
   it('stacks the floors bottom-up and fits every row inside the given width', () => {

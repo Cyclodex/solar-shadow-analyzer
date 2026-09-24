@@ -185,6 +185,14 @@
   color: var(--text-faint);
 }
 
+/* Action in a touch tooltip (the rest of the tooltip lets taps through to the chart). */
+.tooltipAction {
+  width: 100%;
+  margin-top: var(--space-2);
+  pointer-events: auto;
+  white-space: normal;
+}
+
 .key {
   align-self: start;
   margin-top: 3px;

@@ -68,11 +68,19 @@
   outline-offset: -2px;
 }
 
-/* Touch targets: every option ≥ 36 px on phones/tablets and touch screens. */
+/* Touch targets: every option ≥ 36 px on phones/tablets and touch screens (44 px there, --touch). */
 @media (max-width: 1099px), (pointer: coarse) {
   .option,
   .sm .option {
     min-height: var(--touch);
+  }
+}
+
+/* Touch screens: short options (DE/EN, 15/30/60) as wide as tall. Not in full-width groups: there the
+   options share the width (flex: 1 1 0), and a min-width would let long labels overflow. */
+@media (pointer: coarse) {
+  .group:not(.full) .option {
+    min-width: var(--touch);
   }
 }
 

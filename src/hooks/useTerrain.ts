@@ -1,19 +1,23 @@
 import { useEffect, useRef } from 'react';
 import type { Config, FloorPlacement, HorizonProfile } from '../model/types';
-import { fetchTerrainHorizon } from '../model/terrain';
+import { cachedTerrainHorizons, fetchTerrainHorizons, type TerrainHorizonResult } from '../model/terrain';
 import { floorPlacements } from '../model/geometry';
 import { FLOOR_HORIZON_STEP_DEG, floorHorizons, maxHorizon } from '../model/horizon';
 import { useConfig } from '../state/configStore';
 import { useDataStore, INITIAL_TERRAIN, type TerrainProfiles } from '../state/dataStore';
+import { terrainDownloadGate } from '../state/loadGate';
+import { computeTerrainInWorker } from '../workers/terrainClient';
 
 // ─────────────────────────────────────────────
 // TERRAIN HORIZON LOADER
 // Fetches the DEM terrain horizon (model/terrain.ts) when config.horizon.terrainEnabled, debounced on
 // location changes, and writes status/progress/result into dataStore.terrain. Mount once (DataLoader).
 // The horizon is computed per panel floor, at that floor's railing height: near hills and valley sides
-// the terrain horizon drops noticeably with height. All heights share one tile download (in-memory
-// tile cache); a change of the floor heights alone recomputes from those tiles and keeps the current
-// profiles meanwhile.
+// the terrain horizon drops noticeably with height. All heights come from one tile download and one pass
+// over the terrain (fetchTerrainHorizons), in a Web Worker (workers/terrainClient.ts); a change of the
+// floor heights alone recomputes from the tiles in the worker's memory and keeps the current profiles
+// meanwhile. A download waits for the weather request first (state/loadGate.ts): the annual results
+// need the weather, and are shown as provisional until the terrain arrives.
 // ─────────────────────────────────────────────
 
 /** Delay after the last location (or floor height) change before downloading tiles / recomputing. */
@@ -136,21 +140,52 @@ export function useTerrainLoader(): void {
       });
     }
 
+    const publish = (results: Record<number, TerrainHorizonResult>): void => {
+      const lowest = results[heights[0]];
+      const profiles: Record<number, HorizonProfile> = {};
+      for (const h of heights) if (results[h]) profiles[h] = results[h].profile;
+      setTerrain({
+        status: 'ready',
+        progress: 1,
+        profile: lowest.profile,
+        profiles,
+        siteElevation: lowest.siteElevation,
+        error: null,
+      });
+    };
+
     const load = async (): Promise<void> => {
-      const [lowest, ...others] = heights;
-      let first;
+      let results: Record<number, TerrainHorizonResult>;
+      /** The lowest floor's horizon came from the result cache and is published: the site is usable. */
+      let published = false;
       try {
-        first = await fetchTerrainHorizon(latitude, longitude, {
+        results = await fetchTerrainHorizons(latitude, longitude, {
           signal,
-          observerHeight: lowest,
+          observerHeights: heights,
+          compute: computeTerrainInWorker,
+          // A recomputation for new floor heights uses the tiles in memory: nothing to wait for.
+          beforeDownload: refresh ? undefined : () => terrainDownloadGate(signal),
+          // The other heights meanwhile use the nearest cached one (terrainProfileAt).
+          onCached: (cached) => {
+            if (refresh || signal.aborted || !cached[heights[0]]) return;
+            published = true;
+            publish(cached);
+          },
           onProgress: refresh
             ? undefined
             : (done, total) => {
-                if (!signal.aborted) setTerrain({ progress: total > 0 ? done / total : 0 });
+                if (!signal.aborted && !published) setTerrain({ progress: total > 0 ? done / total : 0 });
               },
         });
       } catch (e) {
         if (signal.aborted) return;
+        // Heights still in the result cache are used (the others take the nearest one, terrainProfileAt);
+        // without the lowest floor's horizon the site has no terrain.
+        const cached = cachedTerrainHorizons(latitude, longitude, heights);
+        if (cached[heights[0]]) {
+          publish(cached);
+          return;
+        }
         setTerrain({
           status: 'error',
           profile: null,
@@ -160,31 +195,7 @@ export function useTerrainLoader(): void {
         });
         return;
       }
-      if (signal.aborted) return;
-      const profiles: Record<number, HorizonProfile> = { [lowest]: first.profile };
-      const publish = (): void =>
-        setTerrain({
-          status: 'ready',
-          progress: 1,
-          profile: first.profile,
-          profiles: { ...profiles },
-          siteElevation: first.siteElevation,
-          error: null,
-        });
-      // The site is usable as soon as the lowest floor's horizon exists; the other heights reuse its tiles.
-      if (!refresh || others.length === 0) publish();
-      if (others.length === 0) return;
-      for (const h of others) {
-        try {
-          profiles[h] = (
-            await fetchTerrainHorizon(latitude, longitude, { signal, observerHeight: h })
-          ).profile;
-        } catch {
-          // A failed extra height keeps the nearest computed height (terrainProfileAt).
-        }
-        if (signal.aborted) return;
-      }
-      publish();
+      if (!signal.aborted) publish(results);
     };
 
     const timer = setTimeout(() => void load(), delay);

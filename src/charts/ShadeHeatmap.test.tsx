@@ -1,8 +1,9 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { renderToString } from 'react-dom/server';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { dayOfYear } from '../model/time';
 import { useConfigStore } from '../state/configStore';
+import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
@@ -11,6 +12,39 @@ import { ShadeHeatmap } from './ShadeHeatmap';
 // jsdom: 600 px fallback width → plot 548 × 240 px starting at (44, 8); the overlay's own coordinates are
 // relative to the plot (getBoundingClientRect() is all zeros in jsdom, so clientX/Y = plot coordinates).
 const PLOT_W = 548;
+
+/**
+ * IntersectionObserver whose reports the test sends (report(true) = near the screen); the card starts far
+ * below the fold (its section 5000 px down).
+ */
+function farBelowTheFold(): { report: (near: boolean) => void } {
+  const callbacks: IntersectionObserverCallback[] = [];
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      constructor(cb: IntersectionObserverCallback) {
+        callbacks.push(cb);
+      }
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+      takeRecords(): [] {
+        return [];
+      }
+    },
+  );
+  const rect = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockReturnValue(DOMRect.fromRect({ y: 5000, height: 500 }));
+  onTestFinished(() => rect.mockRestore());
+  return {
+    report: (near) =>
+      act(() => {
+        const cb = callbacks.at(-1);
+        cb?.([{ isIntersecting: near } as IntersectionObserverEntry], {} as IntersectionObserver);
+      }),
+  };
+}
 
 describe('ShadeHeatmap', () => {
   beforeEach(() => {
@@ -31,6 +65,19 @@ describe('ShadeHeatmap', () => {
     expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument();
   });
 
+  it('marks the hours as provisional while the terrain horizon is loading', () => {
+    act(() => {
+      useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    render(<ShadeHeatmap />);
+    expect(screen.getByText('vorläufig – Geländehorizont wird geladen')).toBeInTheDocument();
+    // Failed: the hours without the terrain are final.
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(screen.queryByText(/vorläufig/)).not.toBeInTheDocument();
+    expect(screen.getByText('davon verschattet')).toBeInTheDocument();
+  });
+
   it('keeps the year of shade out of the first render (placeholder until the deferred render)', () => {
     // The initial render (as on the server) uses the deferred value's initial value: no heatmap yet.
     const html = renderToString(<ShadeHeatmap />);
@@ -39,6 +86,39 @@ describe('ShadeHeatmap', () => {
     // The deferred render that follows computes it.
     render(<ShadeHeatmap />);
     expect(screen.getByRole('img').tagName).toBe('CANVAS');
+  });
+
+  it('computes only near the screen, keeps its last result far from it and catches up for printing', () => {
+    const io = farBelowTheFold();
+    render(<ShadeHeatmap />);
+    // Far below the fold at load: placeholder, nothing computed.
+    expect(screen.queryByRole('img')).not.toBeInTheDocument();
+    io.report(true);
+    const img = screen.getByRole('img');
+    const at45 = img.getAttribute('aria-label');
+    expect(at45).toMatch(/verschattet/);
+
+    // Scrolled away: a tilt change is not computed, the card keeps its result.
+    io.report(false);
+    act(() => useConfigStore.getState().patch('panels', { tiltFromVertical: 5 }));
+    expect(screen.getByRole('img')).toHaveAttribute('aria-label', at45);
+
+    // Printing shows the current result (synchronously, in the beforeprint handler).
+    act(() => {
+      window.dispatchEvent(new Event('beforeprint'));
+    });
+    const at5 = screen.getByRole('img').getAttribute('aria-label');
+    expect(at5).not.toBe(at45);
+    act(() => {
+      window.dispatchEvent(new Event('afterprint'));
+    });
+    expect(screen.getByRole('img')).toHaveAttribute('aria-label', at5);
+
+    // Near the screen again: up to date.
+    act(() => useConfigStore.getState().patch('panels', { tiltFromVertical: 45 }));
+    expect(screen.getByRole('img')).toHaveAttribute('aria-label', at5);
+    io.report(true);
+    expect(screen.getByRole('img')).toHaveAttribute('aria-label', at45);
   });
 
   it('clicking a cell selects its date and time', () => {
@@ -59,6 +139,30 @@ describe('ShadeHeatmap', () => {
     expect(dayOfYear(date)).toBe(101);
     expect(minutes % 10).toBe(5); // middle of the 10-minute slot
     expect(playing).toBe(false);
+  });
+
+  it('touch: a tap selects; a sideways scrub selects the cell under the finger when lifted', () => {
+    render(<ShadeHeatmap />);
+    const widget = screen.getByRole('application');
+    const touch = { pointerId: 4, pointerType: 'touch' } as const;
+    const day = (d: number): number => ((d + 0.5) / 365) * PLOT_W;
+    fireEvent.pointerDown(widget, { ...touch, clientX: day(100), clientY: 120 });
+    expect(screen.getByText('Tippen oder seitwärts ziehen übernimmt Datum und Uhrzeit')).toBeInTheDocument();
+    fireEvent.pointerUp(widget, { ...touch, clientX: day(100), clientY: 120 });
+    fireEvent.click(widget, { clientX: day(100), clientY: 120 });
+    expect(useTimeStore.getState().date).toBe('2025-04-11');
+
+    fireEvent.pointerDown(widget, { ...touch, clientX: day(100), clientY: 120 });
+    fireEvent.pointerMove(widget, { ...touch, clientX: day(150), clientY: 121 });
+    expect(screen.getByText(/^31\. Mai 2025 · /)).toBeInTheDocument();
+    fireEvent.pointerUp(widget, { ...touch, clientX: day(150), clientY: 121 });
+    expect(useTimeStore.getState().date).toBe('2025-05-31');
+
+    // A vertical swipe scrolls the page (pointercancel): nothing selected, no tooltip left open.
+    fireEvent.pointerDown(widget, { ...touch, clientX: day(200), clientY: 120 });
+    fireEvent.pointerCancel(widget, touch);
+    expect(useTimeStore.getState().date).toBe('2025-05-31');
+    expect(screen.queryByText(/ · \d\d:\d0–/)).not.toBeInTheDocument();
   });
 
   it('shows a tooltip on hover and ignores a drag', () => {
