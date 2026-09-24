@@ -17,6 +17,7 @@ import {
 } from '../hooks/useModel';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
+import { floorColor } from '../styles/tokens';
 import styles from './KpiBar.module.css';
 
 const de = {
@@ -125,7 +126,7 @@ function FloorList({ items }: { items: { floor: number; label: string; value: st
         <li key={it.floor} className={styles.floorItem}>
           <span
             className={styles.swatch}
-            style={cssVars({ '--c': `var(--floor-${it.floor % 8})` })}
+            style={cssVars({ '--c': floorColor(it.floor) })}
             aria-hidden="true"
           />
           <span className={styles.floorName}>{it.label}</span>

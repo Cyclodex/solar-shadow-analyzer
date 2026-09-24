@@ -24,6 +24,7 @@ import type { FloorPlacement, InstantState, PanelLayout } from '../model/types';
 import { angleDiff } from '../model/units';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
+import { floorColor } from '../styles/tokens';
 import { FONT, LINE, PAD } from './svg/constants';
 import {
   REL_MAX,
@@ -191,7 +192,7 @@ const FacadeDrawing = memo(function FacadeDrawing({ facade, width }: { facade: F
             cy={px(fl.yMid)}
             r={4}
             className={s.swatchFloor}
-            style={cssVars({ '--c': `var(--floor-${fl.floor % 8})` })}
+            style={cssVars({ '--c': floorColor(fl.floor) })}
           />
           <text x={px(facade.leftX)} y={px(fl.yMid + 4)} textAnchor="end" className={s.label}>
             {fl.label}

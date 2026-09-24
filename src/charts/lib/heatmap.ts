@@ -2,7 +2,7 @@ import { HEATMAP_NIGHT } from '../../model/analysis';
 import { daysInYear } from '../../model/time';
 import type { HeatmapData } from '../../model/types';
 import { CELL, CELL_CLASS_COUNT, SHADE_STEP_BOUNDS_PCT, cellClass } from './colors';
-import type { Rgba } from './canvasTheme';
+import type { Rgba } from '../../styles/tokens';
 import { flowLayout, type MeasureText } from './text';
 
 // ─────────────────────────────────────────────

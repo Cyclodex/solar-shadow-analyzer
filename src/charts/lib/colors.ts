@@ -3,24 +3,10 @@ import { HEATMAP_BEHIND, HEATMAP_HORIZON, HEATMAP_NIGHT, SHADED_THRESHOLD } from
 // ─────────────────────────────────────────────
 // CHART COLOURS
 // Only references to the theme tokens of src/styles/global.css — never literal colours.
-// Floors: categorical --floor-k, colour follows the floor index (never its rank or position).
+// Floors: categorical --floor-k by floor index, see floorColor() in src/styles/tokens.ts.
 // Shaded fraction: 5 steps of the sequential ramp (--seq-3 … --seq-7); --seq-1/2 are skipped so that the
 // lightest shade step stays clearly apart from the neutral "night" / "behind the facade" fills.
 // ─────────────────────────────────────────────
-
-/** Number of distinct floor colours (--floor-0 … --floor-7). */
-export const FLOOR_COLOR_COUNT = 8;
-
-/** CSS custom property name of floor `k`'s colour. */
-export function floorToken(floor: number): `--floor-${number}` {
-  const k = ((Math.round(floor) % FLOOR_COLOR_COUNT) + FLOOR_COLOR_COUNT) % FLOOR_COLOR_COUNT;
-  return `--floor-${k}`;
-}
-
-/** `var(--floor-k)` for SVG fills/strokes. */
-export function floorColor(floor: number): string {
-  return `var(${floorToken(floor)})`;
-}
 
 /** Upper bounds of the shaded-fraction steps; a fraction ≤ SHADED_THRESHOLD counts as unshaded. */
 export const SHADE_STEP_UPPER: readonly number[] = [0.2, 0.4, 0.6, 0.8, 1];
@@ -39,12 +25,6 @@ export function shadeStep(fraction: number): number {
   if (!(fraction > SHADED_THRESHOLD)) return -1;
   const i = SHADE_STEP_UPPER.findIndex((upper) => fraction <= upper + 1e-9);
   return i < 0 ? SHADE_STEP_UPPER.length - 1 : i;
-}
-
-/** `var(--seq-…)` of a shaded fraction's step (null when unshaded). */
-export function shadeColor(fraction: number): string | null {
-  const step = shadeStep(fraction);
-  return step < 0 ? null : `var(${SHADE_STEP_TOKENS[step]})`;
 }
 
 /** Heatmap cell classes (index into the heatmap palette). */

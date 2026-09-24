@@ -9,6 +9,7 @@ import type { InstantState, PanelLayout } from '../model/types';
 import { toRad } from '../model/units';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
+import { floorColor } from '../styles/tokens';
 import { pathD, px, stripD, textWidth, wrapText } from './svg/geometry2d';
 import { useSvgId } from './svg/ids';
 import { layoutLegend, type LegendItem } from './svg/legend';
@@ -192,7 +193,7 @@ const SectionDrawing = memo(function SectionDrawing({
               cy={px(yl - 4)}
               r={4}
               className={s.swatchFloor}
-              style={cssVars({ '--c': `var(--floor-${p.floor % 8})` })}
+              style={cssVars({ '--c': floorColor(p.floor) })}
             />
             <text x={px(scene.labelX)} y={px(yl)} textAnchor="end" className={s.label}>
               {labels[p.floor]}

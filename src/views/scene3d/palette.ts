@@ -1,5 +1,5 @@
-import { useSyncExternalStore } from 'react';
 import { Color, SRGBColorSpace } from 'three';
+import { floorToken, parseCssColor, useThemeKey } from '../../styles/tokens';
 
 // ─────────────────────────────────────────────
 // SCENE PALETTE
@@ -8,52 +8,12 @@ import { Color, SRGBColorSpace } from 'three';
 // Derived colours (night sky, glass, grid lines) are mixes of tokens.
 // ─────────────────────────────────────────────
 
-/** sRGB colour, channels 0…1 (the charts' canvas colours use 0…255 tuples instead). */
+/** sRGB colour, channels 0…1 (parseCssColor returns 0…255 tuples, as the charts' canvas uses them). */
 export interface Rgba01 {
   r: number;
   g: number;
   b: number;
   a: number;
-}
-
-const HEX_RE = /^#([0-9a-f]{3,8})$/i;
-const FUNC_RE = /^rgba?\(\s*([^)]*)\)$/i;
-
-function channel(s: string, max: number): number | null {
-  const t = s.trim();
-  if (t.endsWith('%')) {
-    const v = Number(t.slice(0, -1));
-    return Number.isFinite(v) ? Math.min(1, Math.max(0, v / 100)) : null;
-  }
-  const v = Number(t);
-  return t !== '' && Number.isFinite(v) ? Math.min(1, Math.max(0, v / max)) : null;
-}
-
-/**
- * Parses the colour syntaxes used by the design tokens: #rgb, #rgba, #rrggbb, #rrggbbaa,
- * rgb()/rgba() with commas or spaces and an optional "/ alpha" (number or %). Null for anything else.
- */
-export function parseCssColor(value: string): Rgba01 | null {
-  const s = value.trim();
-  const hex = HEX_RE.exec(s);
-  if (hex) {
-    let h = hex[1];
-    if (h.length === 3 || h.length === 4) h = [...h].map((c) => c + c).join('');
-    if (h.length !== 6 && h.length !== 8) return null;
-    const n = (i: number): number => parseInt(h.slice(i, i + 2), 16) / 255;
-    return { r: n(0), g: n(2), b: n(4), a: h.length === 8 ? n(6) : 1 };
-  }
-  const fn = FUNC_RE.exec(s);
-  if (!fn) return null;
-  const [colour, alphaPart] = fn[1].split('/');
-  const parts = colour.includes(',') ? colour.split(',') : colour.trim().split(/\s+/);
-  let alphaStr: string | undefined = alphaPart;
-  if (parts.length === 4 && alphaStr === undefined) alphaStr = parts.pop();
-  if (parts.length !== 3) return null;
-  const [r, g, b] = parts.map((p) => channel(p, 255));
-  const a = alphaStr === undefined ? 1 : channel(alphaStr, 1);
-  if (r === null || g === null || b === null || a === null) return null;
-  return { r, g, b, a };
 }
 
 /** Tokens the scene reads (see global.css). */
@@ -89,21 +49,9 @@ const TOKENS = [
 
 export type SceneToken = (typeof TOKENS)[number];
 
-const FLOOR_TOKENS = [
-  'floor-0',
-  'floor-1',
-  'floor-2',
-  'floor-3',
-  'floor-4',
-  'floor-5',
-  'floor-6',
-  'floor-7',
-] as const satisfies readonly SceneToken[];
-
-/** Colour token of floor index `k`: fixed order, wrapping after the last colour, as in the charts. */
-export function floorToken(k: number): SceneToken {
-  const n = FLOOR_TOKENS.length;
-  return FLOOR_TOKENS[((Math.round(k) % n) + n) % n];
+/** Scene token of floor `k`'s colour: floorToken() of src/styles/tokens.ts without the leading "--". */
+export function floorSceneToken(k: number): SceneToken {
+  return floorToken(k).slice(2) as SceneToken;
 }
 
 /** Neutral stand-in for a token that is not defined (CSS not loaded, e.g. in unit tests). */
@@ -138,7 +86,10 @@ function toCss({ r, g, b, a }: Rgba01, alpha = a): string {
 export function readPalette(theme: string, root: Element = document.documentElement): ScenePalette {
   const style = getComputedStyle(root);
   const rgba = {} as Record<SceneToken, Rgba01>;
-  for (const t of TOKENS) rgba[t] = parseCssColor(style.getPropertyValue(`--${t}`)) ?? MISSING;
+  for (const t of TOKENS) {
+    const c = parseCssColor(style.getPropertyValue(`--${t}`));
+    rgba[t] = c ? { r: c[0] / 255, g: c[1] / 255, b: c[2] / 255, a: c[3] / 255 } : MISSING;
+  }
   const colors = new Map<SceneToken, Color>();
   const color = (t: SceneToken): Color => {
     let c = colors.get(t);
@@ -166,16 +117,6 @@ export function readPalette(theme: string, root: Element = document.documentElem
   };
 }
 
-// ── Theme subscription ───────────────────────
-
-function subscribeTheme(onChange: () => void): () => void {
-  const observer = new MutationObserver(onChange);
-  observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
-  return () => observer.disconnect();
-}
-
-const themeSnapshot = (): string => document.documentElement.getAttribute('data-theme') ?? '';
-
 const cache = new Map<string, ScenePalette>();
 
 /**
@@ -183,7 +124,7 @@ const cache = new Map<string, ScenePalette>();
  * after the new token values apply — not when the store changes, which happens before the attribute.
  */
 export function useScenePalette(): ScenePalette {
-  const theme = useSyncExternalStore(subscribeTheme, themeSnapshot, () => '');
+  const theme = useThemeKey();
   let palette = cache.get(theme);
   if (!palette) {
     palette = readPalette(theme);

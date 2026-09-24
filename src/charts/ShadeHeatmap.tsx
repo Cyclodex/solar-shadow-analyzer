@@ -18,10 +18,11 @@ import type { HeatmapData } from '../model/types';
 import { useConfigSection } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
+import { cssVar, useThemeKey } from '../styles/tokens';
 import { ChartDataTable } from './lib/DataTable';
 import { ChartStats } from './lib/ChartStats';
 import { ChartTooltip } from './lib/ChartTooltip';
-import { cssVar, resolveColor, useThemeKey } from './lib/canvasTheme';
+import { resolveColor } from './lib/canvasTheme';
 import {
   CELL,
   CELL_TOKENS,

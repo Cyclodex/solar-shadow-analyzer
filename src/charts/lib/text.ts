@@ -1,4 +1,4 @@
-import { cssVar } from './canvasTheme';
+import { cssVar } from '../../styles/tokens';
 
 // ─────────────────────────────────────────────
 // TEXT LAYOUT HELPERS

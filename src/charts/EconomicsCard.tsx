@@ -10,6 +10,7 @@ import type { EconomicsConfig, EconomicsResult } from '../model/types';
 import { EXPORT_IGNORE } from '../export/png';
 import { useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
+import { floorColor } from '../styles/tokens';
 import { isFocusVisible } from './lib/focus';
 import { linePath } from './lib/paths';
 import { stepValue } from './lib/sliderKeys';
@@ -362,7 +363,7 @@ function FloorTable({
                 <span className={styles.floorName}>
                   <span
                     className={styles.swatch}
-                    style={cssVars({ '--c': `var(--floor-${r.floor % 8})` })}
+                    style={cssVars({ '--c': floorColor(r.floor) })}
                     aria-hidden="true"
                   />
                   {floorLabel(r.storey, lang)}
