@@ -5,18 +5,21 @@ import {
   HEATMAP_HORIZON,
   HEATMAP_NIGHT,
   dailyProfile,
+  heatmapFromSunCells,
   heatmapStats,
+  heatmapSunCells,
   shadeHeatmap,
   shadeHeatmapFromGrid,
   sunGrid,
   tiltSweep,
+  type SunGrid,
 } from './analysis';
 import { simulateYear, floorPowerW, createFloorModel, sunTrack } from './simulation';
 import { solarPath, sunPosition } from './sun';
 import { clearSkyYear, CLEAR_SKY_TEMPERATURE_C } from './weather';
 import { clearSkyIrradiance, poaIrradiance, skyViewFactor } from './irradiance';
 import { instantState, panelLayout, shadeFromAbove, sunInFacade } from './geometry';
-import { emptyHorizon, floorHorizons } from './horizon';
+import { emptyHorizon, floorHorizons, horizonAt } from './horizon';
 import { dateFromDayOfYear, localToUtc } from './time';
 import { DEFAULT_CONFIG, createObstacle } from './defaults';
 import type { Config, HeatmapData, HorizonProfile } from './types';
@@ -114,10 +117,29 @@ describe('sunGrid / shadeHeatmapFromGrid', () => {
         const b = shadeHeatmap(c, hz, 2025, floor, 20);
         expect(a).toEqual(b);
         expect(a.values.every((v, i) => Object.is(v, b.values[i]))).toBe(true);
+        // Same values as sunInFacade + shadeFromAbove per cell, with the facade-frame cells reused.
+        const direct = directHeatmapValues(grid, c, hz[floor], floor);
+        expect(a.values.every((v, i) => Object.is(v, direct[i]))).toBe(true);
+        const cells = heatmapSunCells(grid, c.building.facadeAzimuth, hz[floor]);
+        expect(heatmapFromSunCells(cells, c, floor)).toEqual(a);
       }
     }
   });
 });
+
+/** Heatmap values with a full shadeFromAbove per cell (the computation before heatmapSunCells). */
+function directHeatmapValues(grid: SunGrid, c: Config, hz: HorizonProfile, floor: number): Float32Array {
+  const layout = panelLayout(c);
+  const hasAbove = floor < c.building.numFloors - 1;
+  return Float32Array.from(grid.altitude, (altitude, i) => {
+    const sun = { altitude, azimuth: grid.azimuth[i] };
+    if (altitude <= 0) return HEATMAP_NIGHT;
+    const sf = sunInFacade(sun, c.building.facadeAzimuth);
+    if (sf.n <= 0) return HEATMAP_BEHIND;
+    if (altitude < horizonAt(hz, sun.azimuth)) return HEATMAP_HORIZON;
+    return hasAbove ? shadeFromAbove(sf, layout).fraction : 0;
+  });
+}
 
 describe('heatmapStats', () => {
   it('counts lit/shaded hours per month (hand-built heatmap)', () => {

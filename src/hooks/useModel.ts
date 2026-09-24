@@ -31,10 +31,12 @@ import {
 import {
   DEFAULT_SWEEP_TILTS,
   dailyProfile,
+  heatmapFromSunCells,
   heatmapStats,
-  shadeHeatmapFromGrid,
+  heatmapSunCells,
   sunGrid,
   type HeatmapStats,
+  type HeatmapSunCells,
   type SunGrid,
 } from '../model/analysis';
 import { economics } from '../model/economics';
@@ -86,6 +88,8 @@ const floorModelCache = createCache<FloorModel>(4);
 // Sun positions shared by every tilt/geometry step: the heatmap's day × slot grid (site + year) and the
 // weather series' sun track (site + facade + series).
 const sunGridCache = createCache<SunGrid>(2);
+// Heatmap cells in the facade frame and against the floor's horizon (grid + facade + horizon, no panels).
+const sunCellsCache = createCache<HeatmapSunCells>(2);
 const sunTrackCache = createCache<SunTrack>(2);
 // Local month of every weather step (series + time zone): shared by every simulation of a series.
 const monthsCache = createCache<Uint8Array>(2);
@@ -109,6 +113,7 @@ export function clearModelCaches(): void {
     economicsCache,
     floorModelCache,
     sunGridCache,
+    sunCellsCache,
     sunTrackCache,
     monthsCache,
   ]) {
@@ -670,7 +675,8 @@ export function useTiltSweep(enabled = true): TiltSweepResult | null {
 /**
  * Shade heatmap (day × 10-min local slot) of `floor` (default: the shaded floor, see useShadedFloor) for
  * config.weather.year. Geometry only (no weather), so it is available immediately; the sun positions are
- * cached per site and year (sunGrid), so a tilt or geometry step only re-evaluates the shade. With
+ * cached per site and year (sunGrid), and per facade and horizon in the facade frame (heatmapSunCells), so a
+ * tilt or geometry step only re-evaluates the shade. With
  * enabled = false nothing is computed and null is returned (e.g. `useDeferredValue(true, false)` to keep
  * it out of the first render).
  */
@@ -683,9 +689,13 @@ export function useHeatmap(floor?: number, enabled = true): HeatmapData | null {
   const k = clamp(Math.round(floor ?? shaded), 0, config.building.numFloors - 1);
   const { building, panels } = config;
   const grid = sunGridOf(config, config.weather.year);
-  return heatmapCache.get([grid, building, panelGeometryKey(panels), horizons, k], () =>
-    shadeHeatmapFromGrid(grid, config, horizons, k),
-  );
+  return heatmapCache.get([grid, building, panelGeometryKey(panels), horizons, k], () => {
+    const horizon = horizons[k] ?? null;
+    const cells = sunCellsCache.get([grid, building.facadeAzimuth, horizon], () =>
+      heatmapSunCells(grid, building.facadeAzimuth, horizon),
+    );
+    return heatmapFromSunCells(cells, config, k);
+  });
 }
 
 /**
