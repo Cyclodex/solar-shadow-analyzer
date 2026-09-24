@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import { Button } from '../../components/Button';
 import { cssVars } from '../../components/cssVars';
 import { ResetIcon } from '../../components/icons';
-import { compassPoint, useFormat, useLang, useMessages, type Messages } from '../../i18n';
+import { useFloorPlacements, useTerrainProfile } from '../../hooks/useModel';
+import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../../i18n';
 import { useDataStore } from '../../state/dataStore';
 import { LoadErrorDetails } from '../LoadErrorDetails';
 import { profilePeak } from './horizonData';
@@ -14,7 +15,7 @@ const de = {
   error: 'Der Geländehorizont konnte nicht geladen werden. Es wird ohne Gelände gerechnet.',
   retry: 'Erneut versuchen',
   site: 'Höhe am Standort (Geländemodell)',
-  peak: 'Höchster Geländewinkel',
+  peak: (floor: string) => `Höchster Geländewinkel (vom ${floor} aus)`,
   peakValue: (el: string, az: string, dir: string) => `${el} bei ${az} (${dir})`,
 };
 const messages: Messages<typeof de> = {
@@ -25,19 +26,24 @@ const messages: Messages<typeof de> = {
     error: 'The terrain horizon could not be loaded. Calculating without terrain.',
     retry: 'Try again',
     site: 'Site elevation (terrain model)',
-    peak: 'Highest terrain angle',
+    peak: (floor) => `Highest terrain angle (seen from ${floor})`,
     peakValue: (el, az, dir) => `${el} at ${az} (${dir})`,
   },
 };
 
-/** Load state of the terrain horizon: progress bar, error with retry, or site elevation and highest angle. */
+/**
+ * Load state of the terrain horizon: progress bar, error with retry, or site elevation and the highest
+ * terrain angle seen from the lowest panel floor (higher floors see a lower horizon).
+ */
 export function TerrainStatus() {
   const t = useMessages(messages);
   const f = useFormat();
   const lang = useLang();
   const terrain = useDataStore((s) => s.terrain);
   const retry = useDataStore((s) => s.retryTerrain);
-  const peak = useMemo(() => (terrain.profile ? profilePeak(terrain.profile) : null), [terrain.profile]);
+  const lowest = useFloorPlacements()[0];
+  const profile = useTerrainProfile(0);
+  const peak = useMemo(() => (profile ? profilePeak(profile) : null), [profile]);
 
   if (terrain.status === 'loading') {
     const pct = Math.round(terrain.progress * 100);
@@ -87,7 +93,7 @@ export function TerrainStatus() {
         )}
         {peak && (
           <div className={styles.fact}>
-            <dt>{t.peak}</dt>
+            <dt>{t.peak(floorLabel(lowest?.storey ?? 0, lang))}</dt>
             <dd>
               {t.peakValue(f.deg(peak.elevation, 1), f.deg(peak.azimuth), compassPoint(peak.azimuth, lang))}
             </dd>

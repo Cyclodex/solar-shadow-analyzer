@@ -33,11 +33,6 @@ export function terrainObserverHeights(config: Parameters<typeof floorPlacements
   return [...heights].sort((a, b) => a - b);
 }
 
-/** Terrain observer height of the lowest panel floor (see floorTerrainHeight). */
-export function terrainObserverHeight(config: Parameters<typeof floorPlacements>[0]): number {
-  return terrainObserverHeights(config)[0] ?? 1;
-}
-
 /** Terrain input of the horizons: profiles per height, or one profile used for every height. */
 export type TerrainSource = TerrainProfiles | HorizonProfile | null;
 

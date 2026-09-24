@@ -32,8 +32,7 @@ interface Series {
 
 const de = {
   title: 'Horizont vor der Fassade',
-  subtitle: (from: string, to: string, floor: string) =>
-    `Blick von ${from} bis ${to}, Hindernisse vom ${floor} aus`,
+  subtitle: (from: string, to: string, floor: string) => `Blick von ${from} bis ${to}, vom ${floor} aus`,
   terrain: 'Gelände',
   obstacles: 'Hindernisse',
   manual: 'Eigene Punkte',
@@ -48,7 +47,7 @@ const messages: Messages<typeof de> = {
   de,
   en: {
     title: 'Horizon in front of the facade',
-    subtitle: (from, to, floor) => `View from ${from} to ${to}, obstacles seen from ${floor}`,
+    subtitle: (from, to, floor) => `View from ${from} to ${to}, seen from ${floor}`,
     terrain: 'Terrain',
     obstacles: 'Obstacles',
     manual: 'Custom points',
@@ -72,8 +71,9 @@ function path(values: readonly number[], y: (el: number) => number): string {
 }
 
 /**
- * Small chart of the horizon in front of the facade (facade normal ± 90°): terrain, custom points and the
- * obstacles seen from the analysed floor as 2 px lines, their maximum (what the model uses) as a wash.
+ * Small chart of the horizon in front of the facade (facade normal ± 90°): terrain and obstacles seen from
+ * the focus floor, and the custom points, as 2 px lines, their maximum (what the model uses for that
+ * floor) as a wash.
  * Hover or focus + arrow keys show the values at one azimuth.
  */
 export function HorizonSparkline() {
@@ -83,9 +83,9 @@ export function HorizonSparkline() {
   const id = useId();
   const horizon = useConfigSection('horizon');
   const facade = useConfigSection('building').facadeAzimuth;
-  const terrain = useTerrainProfile();
   const placements = useFloorPlacements();
   const focus = useFocusFloor();
+  const terrain = useTerrainProfile(focus);
   const placement = placements[focus];
   /** Relative azimuth under the crosshair (−90…90), null = none. */
   const [cursor, setCursor] = useState<number | null>(null);

@@ -2,12 +2,13 @@ import { useMemo } from 'react';
 import { floorLabel, useLang } from '../../i18n';
 import {
   useFloorPlacements,
+  useFocusFloor,
   useInstant,
   useLayout,
   useSolarPath,
   useTerrainProfile,
 } from '../../hooks/useModel';
-import { terrainObserverHeight } from '../../hooks/useTerrain';
+import { floorTerrainHeight } from '../../hooks/useTerrain';
 import { horizonAt, horizonFromPoints, maxHorizon } from '../../model/horizon';
 import type { HorizonProfile, InstantState, Obstacle } from '../../model/types';
 import { useConfig } from '../../state/configStore';
@@ -32,8 +33,9 @@ export interface SceneData {
   sunBlocked: boolean;
   segments: readonly SunPathSegment[];
   hours: readonly HourMark[];
-  /** Terrain (if enabled and loaded) ∪ manual horizon points; null if neither exists. */
+  /** Terrain seen from the focus floor (if enabled and loaded) ∪ manual horizon points; null if neither exists. */
   farHorizon: HorizonProfile | null;
+  /** Height above ground the terrain horizon is seen from (the focus floor's, see floorTerrainHeight), m. */
   observerHeight: number;
   obstacles: readonly Obstacle[];
   /** Storey label per floor index. */
@@ -45,14 +47,14 @@ export interface SceneData {
  * time step only recomputes the instant, the sun direction and the far-horizon test.
  */
 export function useSceneData(): SceneData {
-  const config = useConfig();
-  const { building, horizon } = config;
+  const { building, horizon } = useConfig();
   const lang = useLang();
   const layout = useLayout();
   const placements = useFloorPlacements();
   const instant = useInstant();
   const path = useSolarPath();
-  const terrain = useTerrainProfile();
+  const focus = useFocusFloor();
+  const terrain = useTerrainProfile(focus);
   const date = useTimeStore((s) => s.date);
   const azimuth = building.facadeAzimuth;
 
@@ -85,7 +87,7 @@ export function useSceneData(): SceneData {
     segments,
     hours,
     farHorizon,
-    observerHeight: terrainObserverHeight(config),
+    observerHeight: floorTerrainHeight(placements[focus]),
     obstacles: horizon.obstacles,
     labels,
   };

@@ -8,7 +8,7 @@ import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
 import {
   TERRAIN_DEBOUNCE_MS,
-  terrainObserverHeight,
+  floorTerrainHeight,
   terrainObserverHeights,
   terrainProfileAt,
   useTerrainLoader,
@@ -114,7 +114,7 @@ describe('useTerrainLoader', () => {
 
   it('uses the top edge of each panel row as observer height (independent of the tilt)', () => {
     // lowestFloor 1, floorHeight 280 cm, railing 100 cm → 3.8 m → 4 m; next floor 6.6 m → 7 m
-    expect(terrainObserverHeight(DEFAULT_CONFIG)).toBe(4);
+    expect(floorTerrainHeight({ railTopZ: 3.8 })).toBe(4);
     expect(terrainObserverHeights(DEFAULT_CONFIG)).toEqual([4, 7]);
     expect(
       terrainObserverHeights({

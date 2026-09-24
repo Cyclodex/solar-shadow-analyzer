@@ -73,7 +73,9 @@ describe('HorizonSection', () => {
       });
       render(<HorizonSection />);
       expect(screen.getByText('Höhe am Standort (Geländemodell)').nextSibling).toHaveTextContent(/^549\sm$/);
-      expect(screen.getByText('8.9° bei 151° (SSO)')).toBeInTheDocument();
+      expect(screen.getByText('Höchster Geländewinkel (vom 1. OG aus)').nextSibling).toHaveTextContent(
+        '8.9° bei 151° (SSO)',
+      );
     });
 
     it('translates the cause of a failed download and marks the raw message as English', () => {
@@ -262,6 +264,32 @@ describe('HorizonSection', () => {
   });
 
   describe('horizon chart', () => {
+    it('plots the terrain horizon seen from the focus floor', () => {
+      // Rail tops of 3 floors at 4, 7 and 9 m (rounded): the lower floors see the higher horizon.
+      act(() => {
+        useConfigStore.getState().patch('building', { numFloors: 3 });
+        useDataStore.getState().setTerrain({
+          status: 'ready',
+          profile: { stepDeg: 1, elevations: hill(8.9) },
+          profiles: {
+            4: { stepDeg: 1, elevations: hill(8.9) },
+            9: { stepDeg: 1, elevations: hill(6.2) },
+          },
+        });
+      });
+      render(<HorizonSection />);
+      const plot = screen.getByRole('group', { name: 'Horizont vor der Fassade' });
+      expect(plot).toHaveAccessibleDescription(/Höchste Werte: Gelände 8\.9° bei/);
+      expect(screen.getByText(/vom 1\. OG aus$/)).toBeInTheDocument();
+      act(() => useUiStore.getState().setFocusFloor(2));
+      expect(plot).toHaveAccessibleDescription(/Höchste Werte: Gelände 6\.2° bei/);
+      expect(screen.getByText(/vom 3\. OG aus$/)).toBeInTheDocument();
+      // The terrain summary stays that of the lowest floor.
+      expect(screen.getByText('Höchster Geländewinkel (vom 1. OG aus)').nextSibling).toHaveTextContent(
+        '8.9° bei 151° (SSO)',
+      );
+    });
+
     it('is absent without any horizon', () => {
       act(() => useConfigStore.getState().patch('horizon', { terrainEnabled: false }));
       render(<HorizonSection />);
