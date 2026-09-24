@@ -23,6 +23,7 @@ export function useWeatherLoader(): void {
   const config = useConfig();
   const { source, year } = config.weather;
   const { latitude, longitude } = config.location;
+  const attempt = useDataStore((s) => s.weatherAttempt);
   /** Request of the previous run: only a *changed* request is debounced (first load is immediate). */
   const lastRequest = useRef<string | null>(null);
 
@@ -65,7 +66,7 @@ export function useWeatherLoader(): void {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [source, year, latitude, longitude]);
+  }, [source, year, latitude, longitude, attempt]);
 }
 
 /** Weather load state (status, series, error, usingFallback). */

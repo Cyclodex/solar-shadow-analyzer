@@ -38,8 +38,16 @@ export interface WeatherData {
 export interface DataState {
   terrain: TerrainData;
   weather: WeatherData;
+  /** Incremented by retryTerrain(); the terrain loader re-runs when it changes. */
+  terrainAttempt: number;
+  /** Incremented by retryWeather(); the weather loader re-runs when it changes. */
+  weatherAttempt: number;
   setTerrain: (partial: Partial<TerrainData>) => void;
   setWeather: (partial: Partial<WeatherData>) => void;
+  /** Re-runs the terrain download for the current config (e.g. after an error). */
+  retryTerrain: () => void;
+  /** Re-runs the Open-Meteo request for the current config (e.g. after an error). */
+  retryWeather: () => void;
   /** Back to the initial (idle, empty) state. */
   resetData: () => void;
 }
@@ -62,7 +70,11 @@ export const INITIAL_WEATHER: WeatherData = {
 export const useDataStore = create<DataState>()((set) => ({
   terrain: INITIAL_TERRAIN,
   weather: INITIAL_WEATHER,
+  terrainAttempt: 0,
+  weatherAttempt: 0,
   setTerrain: (partial) => set((s) => ({ terrain: { ...s.terrain, ...partial } })),
   setWeather: (partial) => set((s) => ({ weather: { ...s.weather, ...partial } })),
-  resetData: () => set({ terrain: INITIAL_TERRAIN, weather: INITIAL_WEATHER }),
+  retryTerrain: () => set((s) => ({ terrainAttempt: s.terrainAttempt + 1 })),
+  retryWeather: () => set((s) => ({ weatherAttempt: s.weatherAttempt + 1 })),
+  resetData: () => set({ terrain: INITIAL_TERRAIN, weather: INITIAL_WEATHER, terrainAttempt: 0, weatherAttempt: 0 }),
 }));

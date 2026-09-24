@@ -7,7 +7,14 @@ import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
+import { useWeatherLoader } from '../hooks/useWeather';
 import { WeatherSection } from './WeatherSection';
+
+/** Section plus the weather loader, which performs the retries. */
+function WithLoader() {
+  useWeatherLoader();
+  return <WeatherSection />;
+}
 
 const weatherConfig = () => useConfigStore.getState().config.weather;
 
@@ -124,40 +131,41 @@ describe('WeatherSection', () => {
   });
 
   it('warns about the clear-sky fallback and retries Open-Meteo', async () => {
-    useDataStore.getState().setWeather({
-      status: 'error',
-      series: clearSkyYear(47.1, 7.45, 2025),
-      error: 'network disabled in tests',
-      usingFallback: true,
-    });
-    const fetchMock = vi.fn(async () => jsonResponse(payload()));
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockImplementation(async () => jsonResponse(payload()));
     vi.stubGlobal('fetch', fetchMock);
-    render(<WeatherSection />);
+    render(<WithLoader />);
+    await waitFor(() => expect(useDataStore.getState().weather.usingFallback).toBe(true));
     expect(screen.getByText(/Open-Meteo ist nicht erreichbar/)).toBeInTheDocument();
-    expect(screen.getByText('network disabled in tests')).toBeInTheDocument();
+    expect(screen.getByText('network down')).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
-    expect(useDataStore.getState().weather.status).toBe('loading');
     await waitFor(() => expect(useDataStore.getState().weather.status).toBe('ready'));
     const w = useDataStore.getState().weather;
     expect(w.usingFallback).toBe(false);
     expect(w.series?.source).toBe('open-meteo');
-    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(await screen.findByText('Wetterdaten 2025 geladen.')).toBeInTheDocument();
   });
 
   it('drops a retried result when the year changed meanwhile', async () => {
-    useDataStore.getState().setWeather({ status: 'error', series: null, error: 'x', usingFallback: true });
-    let resolve: (r: Response) => void = () => {};
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(() => new Promise<Response>((r) => (resolve = r))),
-    );
-    render(<WeatherSection />);
+    let resolveFirstRetry: (r: Response) => void = () => {};
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new TypeError('network down'))
+      .mockImplementationOnce(() => new Promise<Response>((r) => (resolveFirstRetry = r)))
+      .mockImplementation(() => new Promise<Response>(() => {}));
+    vi.stubGlobal('fetch', fetchMock);
+    render(<WithLoader />);
+    await waitFor(() => expect(useDataStore.getState().weather.status).toBe('error'));
     fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
     act(() => useConfigStore.getState().patch('weather', { year: 2020 }));
-    await act(async () => resolve(jsonResponse(payload())));
-    expect(useDataStore.getState().weather.series).toBeNull();
+    await act(async () => resolveFirstRetry(jsonResponse(payload())));
+    // The 2025 response arrives after the switch to 2020 and must not be used.
+    expect(useDataStore.getState().weather.series?.source).not.toBe('open-meteo');
   });
 
   it('renders in English', () => {

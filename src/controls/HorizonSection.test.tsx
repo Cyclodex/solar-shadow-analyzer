@@ -2,11 +2,18 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { beforeEach, describe, expect, it } from 'vitest';
 import { createObstacle } from '../model/defaults';
 import { MAX_OBSTACLES } from '../model/share';
+import { useTerrainLoader } from '../hooks/useTerrain';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { HorizonSection } from './HorizonSection';
+
+/** Section plus the terrain loader, which performs the retries. */
+function WithLoader() {
+  useTerrainLoader();
+  return <HorizonSection />;
+}
 
 const horizon = () => useConfigStore.getState().config.horizon;
 
@@ -67,15 +74,16 @@ describe('HorizonSection', () => {
     });
 
     it('retries a failed download (here served from the result cache)', async () => {
-      useDataStore.getState().setTerrain({ status: 'error', error: 'DEM tile: HTTP 503' });
+      render(<WithLoader />);
+      // fetch is disabled in tests: the first download fails.
+      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));
+      expect(screen.getByText(/konnte nicht geladen werden/)).toBeInTheDocument();
+      expect(screen.getByText(/network disabled/)).toBeInTheDocument();
       // Default config: 47.1 / 7.45, observer height 4 m (railing top of the 1st floor, rounded).
       localStorage.setItem(
         'ssa.terrain.v1:47.10000,7.45000,4.0',
         JSON.stringify({ t: 1, stepDeg: 1, e: hill(6), siteElevation: 612.4, tiles: 20 }),
       );
-      render(<HorizonSection />);
-      expect(screen.getByText(/konnte nicht geladen werden/)).toBeInTheDocument();
-      expect(screen.getByText('DEM tile: HTTP 503')).toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
       await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('ready'));
       expect(useDataStore.getState().terrain.siteElevation).toBe(612.4);
@@ -83,8 +91,8 @@ describe('HorizonSection', () => {
     });
 
     it('keeps the error when the retry fails again', async () => {
-      useDataStore.getState().setTerrain({ status: 'error', error: 'old' });
-      render(<HorizonSection />);
+      render(<WithLoader />);
+      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));
       fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
       expect(useDataStore.getState().terrain.status).toBe('loading');
       await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Button } from '../components/Button';
 import { ResetIcon } from '../components/icons';
 import { Section } from '../components/Section';
@@ -7,9 +7,8 @@ import { SelectField } from '../components/SelectField';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { LIMITS, latestCompleteWeatherYear } from '../model/defaults';
-import { fetchOpenMeteoYear } from '../model/weather';
-import type { Config, WeatherSeries, WeatherSource } from '../model/types';
-import { useConfigSection, useConfigStore, usePatch } from '../state/configStore';
+import type { WeatherSeries, WeatherSource } from '../model/types';
+import { useConfigSection, usePatch } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import sections from './sections.module.css';
 import styles from './WeatherSection.module.css';
@@ -67,34 +66,6 @@ function annualGhiKwhPerM2(series: WeatherSeries): number {
 }
 
 /** Weather request of the loader: a retried result only applies while the config still asks for it. */
-function weatherRequest(config: Config): string | null {
-  if (config.weather.source !== 'open-meteo') return null;
-  return `${config.location.latitude},${config.location.longitude},${config.weather.year}`;
-}
-
-/**
- * Retries the Open-Meteo request after a failure (same request as useWeatherLoader). While it runs the
- * clear-sky fallback stays in place; a result is dropped when location, year or source changed meanwhile.
- */
-function useWeatherRetry(): () => void {
-  return useCallback(() => {
-    const config = useConfigStore.getState().config;
-    const request = weatherRequest(config);
-    if (request === null) return;
-    const current = (): boolean => weatherRequest(useConfigStore.getState().config) === request;
-    const { setWeather } = useDataStore.getState();
-    setWeather({ status: 'loading', error: null });
-    fetchOpenMeteoYear(config.location.latitude, config.location.longitude, config.weather.year).then(
-      (series) => {
-        if (current()) setWeather({ status: 'ready', series, error: null, usingFallback: false });
-      },
-      (e: unknown) => {
-        if (current()) setWeather({ status: 'error', error: e instanceof Error ? e.message : String(e) });
-      },
-    );
-  }, []);
-}
-
 /** Weather source (Open-Meteo year or clear sky), year, load state with annual irradiation, attribution. */
 export function WeatherSection() {
   const t = useMessages(messages);
@@ -103,7 +74,7 @@ export function WeatherSection() {
   const weatherConfig = useConfigSection('weather');
   const patch = usePatch();
   const weather = useDataStore((s) => s.weather);
-  const retry = useWeatherRetry();
+  const retry = useDataStore((s) => s.retryWeather);
   const { source, year } = weatherConfig;
   const summary = source === 'open-meteo' ? `${c.openMeteo} ${year}` : c.clearSky;
 

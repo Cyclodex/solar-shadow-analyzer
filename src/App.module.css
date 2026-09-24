@@ -88,6 +88,8 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--space-4);
+  /* Cards keep their natural height instead of stretching to the tallest card in the row. */
+  align-items: start;
 }
 
 .grid:empty {

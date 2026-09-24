@@ -108,6 +108,8 @@ export const useUiStore = create<UiState>()(
       name: UI_STORAGE_KEY,
       version: 1,
       storage: safeJsonStorage<PersistedUi>(),
+      // Older/unknown versions: keep what is there; mergeUi validates every field.
+      migrate: (persisted) => persisted as PersistedUi,
       partialize: (s): PersistedUi => ({
         lang: s.lang,
         theme: s.theme,

@@ -10,8 +10,12 @@ import { initUrlSync } from './state/urlSync';
 import { resetStores } from './test/utils';
 
 /** The KPI card (<div> around <dt>) with the given label. */
+const KPI_HEADING = 'Ergebnisse';
+
+/** KPI card by label, scoped to the KPI bar so equally named labels elsewhere don't collide. */
 function kpi(label: string): HTMLElement {
-  const dt = screen.getByText(label, { selector: 'dt' });
+  const bar = screen.getByRole('region', { name: KPI_HEADING });
+  const dt = within(bar).getByText(label, { selector: 'dt' });
   return dt.parentElement as HTMLElement;
 }
 

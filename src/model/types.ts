@@ -19,7 +19,7 @@ export interface LocationConfig {
   longitude: number;
   /** IANA time zone, e.g. "Europe/Zurich". */
   timezone: string;
-  /** Ground elevation in m above sea level (used for the terrain horizon). */
+  /** Ground elevation in m above sea level (informational; the terrain horizon uses the DEM height at the site). */
   elevation: number;
 }
 

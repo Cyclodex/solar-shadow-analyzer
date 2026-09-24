@@ -6,6 +6,7 @@ import {
   REFRACTION_K,
   TERRARIUM_URL,
   TILE_CONCURRENCY,
+  TILE_RETRIES,
   clearTerrainTileCache,
   computeHorizon,
   createTileSampler,
@@ -521,6 +522,48 @@ describe('fetchTerrainHorizon', () => {
     const r = await fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: good.impl });
     expect(r.siteElevation).toBe(500);
     expect(good.calls).toContain(badUrl);
+  });
+
+  it('retries transient tile failures (network error, HTTP 503) and succeeds', async () => {
+    const plan = planTerrainTiles(SITE.latitude, SITE.longitude);
+    const flakyUrl = tileUrl(plan[0]);
+    const good = mockFetch(png);
+    let flakyCalls = 0;
+    const impl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === flakyUrl) {
+        flakyCalls++;
+        if (flakyCalls === 1) throw new TypeError('Failed to fetch');
+        if (flakyCalls === 2) return { ok: false, status: 503, arrayBuffer: async () => new ArrayBuffer(0) };
+      }
+      return good.impl(input, init);
+    }) as typeof fetch;
+    const r = await fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: impl, cache: false });
+    expect(r.siteElevation).toBe(500);
+    expect(flakyCalls).toBe(1 + TILE_RETRIES);
+  });
+
+  it('does not retry permanent failures (HTTP 404) and gives up after TILE_RETRIES transient ones', async () => {
+    const plan = planTerrainTiles(SITE.latitude, SITE.longitude);
+    const badUrl = tileUrl(plan[0]);
+    const notFound = mockFetch(png, { fail: (u) => u === badUrl });
+    await expect(
+      fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: notFound.impl, cache: false }),
+    ).rejects.toThrow(/HTTP 404/);
+    expect(notFound.calls.filter((u) => u === badUrl)).toHaveLength(1);
+
+    const good = mockFetch(png);
+    let badCalls = 0;
+    const impl = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === badUrl) {
+        badCalls++;
+        return { ok: false, status: 503, arrayBuffer: async () => new ArrayBuffer(0) };
+      }
+      return good.impl(input, init);
+    }) as typeof fetch;
+    await expect(
+      fetchTerrainHorizon(SITE.latitude, SITE.longitude, { fetchImpl: impl, cache: false }),
+    ).rejects.toThrow(/HTTP 503/);
+    expect(badCalls).toBe(1 + TILE_RETRIES);
   });
 
   it('does not serve the cached result of a nearby location (regression: key was rounded to 0.001°)', async () => {

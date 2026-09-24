@@ -410,6 +410,11 @@ export interface TerrainHorizonResult extends TerrainHorizon {
 /** Parallel tile downloads. */
 export const TILE_CONCURRENCY = 6;
 
+/** Extra attempts per tile after a transient failure (network error, HTTP 429 or 5xx). */
+export const TILE_RETRIES = 2;
+/** Backoff before retry n (1-based): n · TILE_RETRY_DELAY_MS. */
+export const TILE_RETRY_DELAY_MS = 400;
+
 /** In-memory tile cache (LRU by insertion order), keyed by URL. A decoded tile is 256 KiB. */
 const TILE_CACHE_MAX = 96;
 const tileCache = new Map<string, Promise<Float32Array>>();
@@ -440,6 +445,41 @@ function raceAbort<T>(p: Promise<T>, signal: AbortSignal): Promise<T> {
   });
 }
 
+/** HTTP error of a tile request; `status` decides whether a retry makes sense. */
+class TileHttpError extends Error {
+  constructor(
+    url: string,
+    readonly status: number,
+  ) {
+    super(`DEM tile ${url}: HTTP ${status}`);
+  }
+}
+
+/** Network errors (fetch rejects with TypeError), rate limits and server errors are worth retrying. */
+function isTransient(e: unknown): boolean {
+  if (e instanceof TileHttpError) return e.status === 429 || e.status >= 500;
+  return e instanceof TypeError;
+}
+
+/** Resolves after `ms`, rejects early when `signal` aborts. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return raceAbort(new Promise<void>((resolve) => setTimeout(resolve, ms)), signal);
+}
+
+/** Downloads and decodes one tile, retrying transient failures with a linear backoff. */
+async function downloadTile(url: string, fetchImpl: typeof fetch, signal: AbortSignal): Promise<Float32Array> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      const res = await fetchImpl(url, { signal });
+      if (!res.ok) throw new TileHttpError(url, res.status);
+      return decodeTerrariumPng(new Uint8Array(await res.arrayBuffer()));
+    } catch (e) {
+      if (signal.aborted || attempt >= TILE_RETRIES || !isTransient(e)) throw e;
+      await sleep((attempt + 1) * TILE_RETRY_DELAY_MS, signal);
+    }
+  }
+}
+
 async function loadTile(url: string, fetchImpl: typeof fetch, signal: AbortSignal): Promise<Float32Array> {
   const hit = tileCache.get(url);
   if (hit) {
@@ -453,11 +493,7 @@ async function loadTile(url: string, fetchImpl: typeof fetch, signal: AbortSigna
       if (signal.aborted) throw e;
     }
   }
-  const p = (async () => {
-    const res = await fetchImpl(url, { signal });
-    if (!res.ok) throw new Error(`DEM tile ${url}: HTTP ${res.status}`);
-    return decodeTerrariumPng(new Uint8Array(await res.arrayBuffer()));
-  })();
+  const p = downloadTile(url, fetchImpl, signal);
   tileCache.set(url, p);
   p.catch(() => {
     if (tileCache.get(url) === p) tileCache.delete(url);

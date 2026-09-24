@@ -34,6 +34,8 @@ export interface NumberFieldProps {
   disabled?: boolean;
   id?: string;
   className?: string;
+  /** CSS width of the number input (default from the stylesheet, ~6.5ch), e.g. '9ch' for coordinates. */
+  inputWidth?: string;
 }
 
 const de = {
@@ -77,6 +79,7 @@ export function NumberField({
   disabled,
   id,
   className,
+  inputWidth,
 }: NumberFieldProps) {
   const t = useMessages(messages);
   const f = useFormat();
@@ -144,6 +147,7 @@ export function NumberField({
             onKeyDown={onKeyDown}
             disabled={disabled}
             aria-invalid={invalid || undefined}
+            style={inputWidth ? { width: inputWidth } : undefined}
             aria-describedby={describedBy}
             title={rangeText}
           />

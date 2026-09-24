@@ -18,8 +18,3 @@
   color: var(--text-muted);
   font-variant-numeric: tabular-nums;
 }
-
-/* Coordinates need 4 decimals and a sign ("−122.4194"): wider than the default number input. */
-.coordinate :global(input) {
-  width: 9ch;
-}

@@ -48,7 +48,8 @@ const layoutCache = createCache<PanelLayout>(4);
 const placementsCache = createCache<FloorPlacement[]>(4);
 const horizonsCache = createCache<HorizonProfile[]>(4);
 const sunTimesCache = createCache<SunTimes>(8);
-const solarPathCache = createCache<SolarPathPoint[]>(4);
+// Frontal + sun-path views alone use 4 dates (selected, solstices, equinox); leave room for other callers.
+const solarPathCache = createCache<SolarPathPoint[]>(8);
 const simulationCache = createCache<SimulationResult>(3);
 const sweepCache = createCache<TiltSweepResult>(2);
 const heatmapCache = createCache<HeatmapData>(4);

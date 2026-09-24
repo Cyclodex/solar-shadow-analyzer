@@ -33,6 +33,7 @@ export function useTerrainLoader(): void {
   const enabled = config.horizon.terrainEnabled;
   const { latitude, longitude } = config.location;
   const observerHeight = terrainObserverHeight(config);
+  const attempt = useDataStore((s) => s.terrainAttempt);
   /** Site of the previous run: only a *changed* site is debounced (first load and re-enabling are immediate). */
   const lastSite = useRef<string | null>(null);
 
@@ -76,7 +77,7 @@ export function useTerrainLoader(): void {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [enabled, latitude, longitude, observerHeight]);
+  }, [enabled, latitude, longitude, observerHeight, attempt]);
 }
 
 /** Terrain load state (status, progress, profile, error). */

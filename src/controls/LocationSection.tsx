@@ -111,7 +111,8 @@ export function LocationSection() {
           digits={4}
           slider={false}
           hint={t.latitudeHint}
-          className={styles.coordinate}
+          // Coordinates need 4 decimals and a sign ("−122.4194").
+          inputWidth="9ch"
         />
         <NumberField
           label={t.longitude}
@@ -122,7 +123,8 @@ export function LocationSection() {
           digits={4}
           slider={false}
           hint={t.longitudeHint}
-          className={styles.coordinate}
+          // Coordinates need 4 decimals and a sign ("−122.4194").
+          inputWidth="9ch"
         />
         <div className={styles.elevation}>
           <NumberField

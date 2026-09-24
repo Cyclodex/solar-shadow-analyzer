@@ -5,7 +5,6 @@ import { ResetIcon } from '../../components/icons';
 import { compassPoint, useFormat, useLang, useMessages, type Messages } from '../../i18n';
 import { useDataStore } from '../../state/dataStore';
 import { profilePeak } from './horizonData';
-import { useTerrainRetry } from './useTerrainRetry';
 import styles from './TerrainStatus.module.css';
 
 const de = {
@@ -36,7 +35,7 @@ export function TerrainStatus() {
   const f = useFormat();
   const lang = useLang();
   const terrain = useDataStore((s) => s.terrain);
-  const retry = useTerrainRetry();
+  const retry = useDataStore((s) => s.retryTerrain);
   const peak = useMemo(() => (terrain.profile ? profilePeak(terrain.profile) : null), [terrain.profile]);
 
   if (terrain.status === 'loading') {

@@ -1,6 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
-const PORT = 4173;
+// Override with E2E_PORT to run several e2e sessions side by side.
+const PORT = Number(process.env.E2E_PORT ?? 4173);
 const BASE_URL = `http://127.0.0.1:${PORT}`;
 
 // The sandbox ships a pinned Chromium build; never run `playwright install` here.
@@ -23,6 +24,8 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
         launchOptions: {
           executablePath: chromiumPath,
+          // Software WebGL so the 3D view renders in headless Chromium.
+          args: ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
         },
       },
     },
