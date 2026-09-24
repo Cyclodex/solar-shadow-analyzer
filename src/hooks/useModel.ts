@@ -675,10 +675,9 @@ export function useTiltSweep(enabled = true): TiltSweepResult | null {
 /**
  * Shade heatmap (day × 10-min local slot) of `floor` (default: the shaded floor, see useShadedFloor) for
  * config.weather.year. Geometry only (no weather), so it is available immediately; the sun positions are
- * cached per site and year (sunGrid), and per facade and horizon in the facade frame (heatmapSunCells), so a
- * tilt or geometry step only re-evaluates the shade. With
- * enabled = false nothing is computed and null is returned (e.g. `useDeferredValue(true, false)` to keep
- * it out of the first render).
+ * cached per site and year (sunGrid) and in the facade frame per facade and horizon (heatmapSunCells), so a
+ * tilt or geometry step only re-evaluates the shade. With enabled = false nothing is computed and null is
+ * returned (e.g. `useDeferredValue(true, false)` to keep it out of the first render).
  */
 export function useHeatmap(floor?: number): HeatmapData;
 export function useHeatmap(floor: number | undefined, enabled: boolean): HeatmapData | null;
