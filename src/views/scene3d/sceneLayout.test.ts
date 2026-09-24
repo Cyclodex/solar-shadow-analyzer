@@ -186,6 +186,11 @@ describe('sun path', () => {
     }
   });
 
+  it('marks midnight once on a polar day (no 24:00 on top of 00:00)', () => {
+    const polar = hourMarks(solarPath('2025-06-21', 69.65, 18.96, 'Europe/Oslo'), 180);
+    expect(polar.map((m) => m.minutes)).toEqual(Array.from({ length: 24 }, (_, h) => h * 60));
+  });
+
   it('points the sun direction to the sun (east = +X, north = −Z)', () => {
     const [x, y, z] = sunDirection(sun(0, 90));
     expect(x).toBeCloseTo(1, 12);

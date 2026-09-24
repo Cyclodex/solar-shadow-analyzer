@@ -353,10 +353,10 @@ export interface HourMark {
   front: boolean;
 }
 
-/** Full-hour points of the sun path above the horizon. */
+/** Full-hour points of the sun path above the horizon; 24:00 is left out (it would sit on 00:00 on polar days). */
 export function hourMarks(path: readonly SolarPathPoint[], facadeAzimuth: number): HourMark[] {
   return path
-    .filter((p) => p.minutes % 60 === 0 && p.sun.altitude > 0)
+    .filter((p) => p.minutes % 60 === 0 && p.minutes < 1440 && p.sun.altitude > 0)
     .map((p) => ({
       minutes: p.minutes,
       dir: sunDirection(p.sun),
