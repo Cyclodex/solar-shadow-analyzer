@@ -33,11 +33,6 @@
   color: var(--text);
 }
 
-.detail {
-  color: var(--text-muted);
-  overflow-wrap: anywhere;
-}
-
 .ready {
   display: flex;
   flex-direction: column;

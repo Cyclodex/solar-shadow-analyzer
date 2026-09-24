@@ -1,6 +1,6 @@
 import type { SVGProps } from 'react';
 
-// Decorative 24×24 stroke icons of the location controls (same style as components/icons.tsx).
+// Decorative 24×24 stroke icons of the sidebar controls (same style as components/icons.tsx).
 
 type IconProps = SVGProps<SVGSVGElement>;
 
@@ -39,6 +39,30 @@ export function LocateIcon(props: IconProps) {
       <circle cx="12" cy="12" r="7" />
       <circle cx="12" cy="12" r="2.5" fill="currentColor" />
       <path d="M12 2v3M12 19v3M2 12h3M19 12h3" />
+    </Icon>
+  );
+}
+
+export function TrashIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3" />
+    </Icon>
+  );
+}
+
+export function UploadIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 16V4M7 9l5-5 5 5M4 20h16" />
+    </Icon>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v14M5 12h14" />
     </Icon>
   );
 }

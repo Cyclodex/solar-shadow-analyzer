@@ -125,9 +125,14 @@ export function PanelSection() {
   };
 
   return (
-    <Section id="panels" title={t.title} summary={`${panels.count} × ${f.unit(panels.powerWp, 'Wp')}`}>
+    <Section
+      level={3}
+      id="panels"
+      title={t.title}
+      summary={`${panels.count} × ${f.unit(panels.powerWp, 'Wp')}`}
+    >
       <div className={sections.group}>
-        <h3 className={sections.subheading}>{t.module}</h3>
+        <h4 className={sections.subheading}>{t.module}</h4>
         <SelectField
           label={t.preset}
           value={preset?.id ?? ''}
@@ -204,7 +209,7 @@ export function PanelSection() {
       </div>
 
       <div className={sections.group}>
-        <h3 className={sections.subheading}>{t.row}</h3>
+        <h4 className={sections.subheading}>{t.row}</h4>
         <NumberField
           label={t.count}
           value={panels.count}
@@ -260,7 +265,7 @@ function DerivedValues({ numFloors }: { numFloors: number }) {
 
   return (
     <div className={sections.group}>
-      <h3 className={sections.subheading}>{t.derived(f.deg(layout.tiltFromVertical))}</h3>
+      <h4 className={sections.subheading}>{t.derived(f.deg(layout.tiltFromVertical))}</h4>
       <dl className={styles.derived}>
         {rows.map((r) => (
           <div key={r.key} className={styles.derivedRow} data-tone={r.tone}>

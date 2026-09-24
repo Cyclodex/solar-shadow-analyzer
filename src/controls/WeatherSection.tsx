@@ -10,6 +10,7 @@ import { LIMITS, latestCompleteWeatherYear } from '../model/defaults';
 import type { WeatherSeries, WeatherSource } from '../model/types';
 import { useConfigSection, usePatch } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
+import { LoadErrorDetails } from './LoadErrorDetails';
 import sections from './sections.module.css';
 import styles from './WeatherSection.module.css';
 
@@ -32,7 +33,7 @@ const de = {
   fallback:
     'Open-Meteo ist nicht erreichbar. Es wird mit klarem Himmel gerechnet – ein theoretisches Maximum.',
   retry: 'Erneut versuchen',
-  attribution: 'Weather data by',
+  attribution: 'Wetterdaten von',
   license: 'Lizenz CC BY 4.0',
   reanalysis: 'Reanalyse u. a. ERA5 (Copernicus/ECMWF).',
 };
@@ -65,7 +66,6 @@ function annualGhiKwhPerM2(series: WeatherSeries): number {
   return (wh * series.stepMinutes) / 60 / 1000;
 }
 
-/** Weather request of the loader: a retried result only applies while the config still asks for it. */
 /** Weather source (Open-Meteo year or clear sky), year, load state with annual irradiation, attribution. */
 export function WeatherSection() {
   const t = useMessages(messages);
@@ -92,7 +92,7 @@ export function WeatherSection() {
   const ghi = useMemo(() => (current ? annualGhiKwhPerM2(current) : null), [current]);
 
   return (
-    <Section id="weather" title={t.title} summary={summary}>
+    <Section level={3} id="weather" title={t.title} summary={summary}>
       <div className={sections.group}>
         <Segmented<WeatherSource>
           label={t.source}
@@ -115,7 +115,8 @@ export function WeatherSection() {
         hint={source === 'clear-sky' ? t.yearHintClearSky : undefined}
       />
 
-      <div className={styles.status} aria-live="polite">
+      {/* No live region here: WarningsBar announces loading and errors once for the whole page. */}
+      <div className={styles.status}>
         {weather.status === 'loading' && (
           <p className={styles.loading}>
             <span className={styles.spinner} aria-hidden="true" />
@@ -125,7 +126,7 @@ export function WeatherSection() {
         {weather.status === 'error' && source === 'open-meteo' && (
           <div className={styles.fallback}>
             <p>{t.fallback}</p>
-            {weather.error && <p className={styles.detail}>{weather.error}</p>}
+            <LoadErrorDetails error={weather.error} />
             <div>
               <Button size="sm" icon={<ResetIcon />} onClick={retry}>
                 {t.retry}

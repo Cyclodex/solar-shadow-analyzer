@@ -65,7 +65,7 @@ describe('WeatherSection', () => {
     const openMeteo = screen.getByRole('radio', { name: 'Open-Meteo' });
     const clearSky = screen.getByRole('radio', { name: 'Klarer Himmel' });
     expect(openMeteo).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByText(/Weather data by/)).toBeInTheDocument();
+    expect(screen.getByText(/Wetterdaten von/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Lizenz CC BY 4.0' })).toHaveAttribute(
       'href',
       'https://creativecommons.org/licenses/by/4.0/',
@@ -76,7 +76,7 @@ describe('WeatherSection', () => {
     expect(clearSky).toHaveAttribute('aria-checked', 'true');
     expect(screen.getByText(/Synthetisches Jahr ohne Wolken/)).toBeInTheDocument();
     expect(screen.getByText('Beim klaren Himmel legt das Jahr nur den Kalender fest.')).toBeInTheDocument();
-    expect(screen.queryByText(/Weather data by/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Wetterdaten von/)).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Wetterdaten/ })).toHaveTextContent('Klarer Himmel');
 
     fireEvent.keyDown(clearSky, { key: 'ArrowLeft' });
@@ -139,7 +139,8 @@ describe('WeatherSection', () => {
     render(<WithLoader />);
     await waitFor(() => expect(useDataStore.getState().weather.usingFallback).toBe(true));
     expect(screen.getByText(/Open-Meteo ist nicht erreichbar/)).toBeInTheDocument();
-    expect(screen.getByText('network down')).toBeInTheDocument();
+    expect(screen.getByText('Keine Verbindung zum Server (offline oder blockiert).')).toBeInTheDocument();
+    expect(screen.getByText('network down')).toHaveAttribute('lang', 'en');
 
     fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
     await waitFor(() => expect(useDataStore.getState().weather.status).toBe('ready'));
@@ -148,6 +149,33 @@ describe('WeatherSection', () => {
     expect(w.series?.source).toBe('open-meteo');
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(await screen.findByText('Wetterdaten 2025 geladen.')).toBeInTheDocument();
+  });
+
+  it('translates the load error and keeps the raw message only as marked-up English details', () => {
+    useDataStore.getState().setWeather({
+      status: 'error',
+      series: clearSkyYear(47.1, 7.45, 2025),
+      error: 'Failed to fetch',
+      usingFallback: true,
+    });
+    const { container } = render(<WeatherSection />);
+    expect(screen.getByText('Keine Verbindung zum Server (offline oder blockiert).')).toBeInTheDocument();
+    const raw = screen.getByText('Failed to fetch');
+    expect(raw.closest('[lang]')).toHaveAttribute('lang', 'en');
+    expect(raw).toHaveAttribute('translate', 'no');
+    expect(raw.closest('details')).not.toHaveAttribute('open');
+    expect(container.querySelector('[aria-live]')).toBeNull();
+  });
+
+  it('names the HTTP status of a failed request', () => {
+    useDataStore.getState().setWeather({
+      status: 'error',
+      series: clearSkyYear(47.1, 7.45, 2025),
+      error: 'Open-Meteo: HTTP 500 – test',
+      usingFallback: true,
+    });
+    render(<WeatherSection />);
+    expect(screen.getByText('Der Server hat mit Fehler 500 geantwortet.')).toBeInTheDocument();
   });
 
   it('drops a retried result when the year changed meanwhile', async () => {
@@ -174,5 +202,6 @@ describe('WeatherSection', () => {
     expect(screen.getByRole('radiogroup', { name: 'Data source' })).toBeInTheDocument();
     expect(screen.getByRole('radio', { name: 'Clear sky' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Year' })).toBeInTheDocument();
+    expect(screen.getByText(/Weather data by/)).toBeInTheDocument();
   });
 });

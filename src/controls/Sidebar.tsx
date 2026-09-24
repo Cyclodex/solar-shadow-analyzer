@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { Button } from '../components/Button';
 import { ResetIcon } from '../components/icons';
 import { useMessages, type Messages } from '../i18n';
@@ -45,33 +45,67 @@ const messages: Messages<typeof de> = {
   },
 };
 
-/** Reset of the whole config with an inline confirmation step. */
+/**
+ * Reset of the whole config with an inline confirmation step. The safe choice (cancel) gets the focus;
+ * Escape cancels; closing the step returns the focus to the reset button.
+ */
 function ResetButton() {
   const t = useMessages(messages);
   const reset = useConfigStore((s) => s.reset);
   const [confirming, setConfirming] = useState(false);
+  const resetRef = useRef<HTMLButtonElement>(null);
+  /** Set when the confirmation closes, so that the focus only moves back then (not on mount). */
+  const restoreFocus = useRef(false);
+  const textId = useId();
+
+  useEffect(() => {
+    if (!confirming && restoreFocus.current) {
+      restoreFocus.current = false;
+      resetRef.current?.focus();
+    }
+  }, [confirming]);
+
+  const close = (): void => {
+    restoreFocus.current = true;
+    setConfirming(false);
+  };
+
   if (!confirming) {
     return (
-      <Button variant="ghost" icon={<ResetIcon />} onClick={() => setConfirming(true)}>
+      <Button ref={resetRef} variant="ghost" icon={<ResetIcon />} onClick={() => setConfirming(true)}>
         {t.reset}
       </Button>
     );
   }
   return (
-    <div className={styles.confirm} role="group" aria-label={t.reset}>
-      <p className={styles.confirmText}>{t.confirm}</p>
+    <div
+      className={styles.confirm}
+      role="group"
+      aria-label={t.reset}
+      aria-describedby={textId}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          close();
+        }
+      }}
+    >
+      <p id={textId} className={styles.confirmText}>
+        {t.confirm}
+      </p>
       <div className={styles.confirmActions}>
+        <Button autoFocus aria-describedby={textId} onClick={close}>
+          {t.cancel}
+        </Button>
         <Button
           variant="danger"
-          autoFocus
           onClick={() => {
             reset();
-            setConfirming(false);
+            close();
           }}
         >
           {t.yes}
         </Button>
-        <Button onClick={() => setConfirming(false)}>{t.cancel}</Button>
       </div>
     </div>
   );

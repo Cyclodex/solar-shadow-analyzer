@@ -1,42 +1,20 @@
+/* Same look as the generic TextField (its focus and invalid states come with the composed input class). */
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  min-width: 0;
+  composes: field from '../../components/TextField.module.css';
 }
 
 .label {
-  font-size: var(--fs-sm);
-  color: var(--text-muted);
+  composes: label from '../../components/TextField.module.css';
 }
 
 .input {
-  width: 100%;
-  min-width: 0;
-  min-height: var(--touch);
-  padding: 0 var(--space-3);
-  border: 1px solid var(--border-strong);
-  border-radius: var(--radius-sm);
-  background: var(--surface-2);
-  color: var(--text);
-  font-size: var(--fs-sm);
-}
-
-.input:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 1px;
-}
-
-.input[aria-invalid='true'] {
-  border-color: var(--bad);
+  composes: input from '../../components/TextField.module.css';
 }
 
 .hint {
-  font-size: var(--fs-xs);
-  color: var(--text-faint);
+  composes: hint from '../../components/TextField.module.css';
 }
 
 .error {
-  font-size: var(--fs-xs);
-  color: var(--bad);
+  composes: error from '../../components/TextField.module.css';
 }

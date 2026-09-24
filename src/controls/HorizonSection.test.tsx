@@ -76,12 +76,23 @@ describe('HorizonSection', () => {
       expect(screen.getByText('8.9° bei 151° (SSO)')).toBeInTheDocument();
     });
 
+    it('translates the cause of a failed download and marks the raw message as English', () => {
+      useDataStore.getState().setTerrain({ status: 'error', error: 'No elevation data at the site' });
+      render(<HorizonSection />);
+      expect(screen.getByText(/Der Geländehorizont konnte nicht geladen werden/)).toBeInTheDocument();
+      expect(screen.getByText('Für diesen Standort gibt es keine Höhendaten.')).toBeInTheDocument();
+      const raw = screen.getByText('No elevation data at the site');
+      expect(raw).toHaveAttribute('lang', 'en');
+      expect(raw.closest('details')).not.toHaveAttribute('open');
+    });
+
     it('retries a failed download (here served from the result cache)', async () => {
       render(<WithLoader />);
       // fetch is disabled in tests: the first download fails (after the tile retries).
       await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'), RETRY_WAIT);
       expect(screen.getByText(/konnte nicht geladen werden/)).toBeInTheDocument();
-      expect(screen.getByText(/network disabled/)).toBeInTheDocument();
+      expect(screen.getByText(/network disabled/)).toHaveAttribute('lang', 'en');
+      expect(screen.getByText('Keine Verbindung zum Server (offline oder blockiert).')).toBeInTheDocument();
       // Default config: 47.1 / 7.45, observer height 4 m (railing top of the 1st floor, rounded).
       localStorage.setItem(
         'ssa.terrain.v1:47.10000,7.45000,4.0',
