@@ -254,9 +254,11 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
     löschen). `PwaToast` registriert den Worker über `useRegisterSW` (`virtual:pwa-register/react`), meldet
     «Neue Version verfügbar» (Live-Region) mit «Neu laden» (`updateServiceWorker` → `SKIP_WAITING`, dann Reload;
     nach `RELOAD_FALLBACK_MS` lädt die Seite sicherheitshalber selbst neu, falls der alte Worker sie nicht
-    kontrollierte) und «Später» (das Update übernimmt, wenn alle Fenster der App geschlossen sind). Nach dem ersten
-    Besuch kurz «Offline verfügbar». Update-Prüfung stündlich und beim Zurückkehren in den Vordergrund nach
-    mindestens einer Stunde (`scheduleUpdateChecks`).
+    kontrollierte) und «Später» (das Update übernimmt, wenn alle Fenster der App geschlossen sind oder ein anderes
+    Fenster «Neu laden» wählt: vite-plugin-pwa lädt dann jedes Fenster neu, das den Hinweis gezeigt hat, damit
+    keines ohne die Lazy-Chunks seiner Version weiterläuft). Nach dem ersten Besuch kurz «Offline verfügbar».
+    Update-Prüfung stündlich und beim Zurückkehren in den Vordergrund nach mindestens einer Stunde
+    (`scheduleUpdateChecks`).
 - **Veraltete Chunks:** Ohne kontrollierenden Service Worker (gesperrt, privates Fenster, Daten vom Browser
   gelöscht) fordert eine vor einem Deployment geladene Seite beim Einblenden der 3D-Ansicht Chunks an, die es nicht
   mehr gibt. Vite meldet das als `vite:preloadError`; `initStaleChunkReload()` (`pwa/staleChunks.ts`, vor dem

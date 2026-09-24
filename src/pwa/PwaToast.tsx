@@ -29,8 +29,9 @@ export const OFFLINE_NOTICE_MS = 8000;
  * Registers the service worker (vite-plugin-pwa, registerType 'prompt'; production builds only) and
  * shows its notices bottom right, in a live region:
  * - "Neue Version verfügbar" once an update is installed: "Neu laden" activates it and reloads the page,
- *   "Später" keeps the running version (the update takes over when all app windows are closed; until
- *   then every start asks again).
+ *   "Später" keeps the running version until all app windows are closed (until then every start asks
+ *   again), or until another window chooses "Neu laden": vite-plugin-pwa then reloads every window that
+ *   showed the notice, so none keeps running without the lazy chunks of its version.
  * - "Offline verfügbar" once the first visit has cached the app; hides itself after OFFLINE_NOTICE_MS.
  * Looks for updates hourly and when the app returns to the foreground (scheduleUpdateChecks).
  */

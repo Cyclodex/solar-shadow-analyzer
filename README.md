@@ -53,9 +53,13 @@ Sie lässt sich auch wie eine App installieren, auf dem Handy, dem Tablet oder d
 
 Nach dem ersten Besuch startet die App auch ohne Internet, installiert oder im Browser: Alle App-Dateien liegen dann
 im Browser. Wetterdaten und Geländehorizont für einen neuen Standort oder ein anderes Jahr brauchen eine Verbindung;
-einmal geladene bleiben gespeichert, ohne Verbindung rechnet die App sonst mit klarem Himmel und ohne Gelände. Ist
-eine neue Version veröffentlicht, meldet die App «Neue Version verfügbar»: «Neu laden» wechselt sofort, «Später»
-behält die laufende Version, bis alle Fenster der App geschlossen sind.
+einmal geladene bleiben gespeichert, ohne Verbindung rechnet die App sonst mit klarem Himmel und ohne Gelände. Im
+Safari-Browser auf iPhone und iPad löscht iOS diese Daten samt den gespeicherten Einstellungen, wenn Safari sieben
+Tage lang benutzt, die Seite dabei aber nicht besucht wurde; als Home-Bildschirm-App bleiben sie erhalten
+([WebKit](https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/)). Ist eine neue Version
+veröffentlicht, meldet die App «Neue Version verfügbar»: «Neu laden» wechselt sofort, «Später» behält die laufende
+Version, bis alle Fenster der App geschlossen sind oder in einem anderen Fenster «Neu laden» gewählt wird (dann laden
+alle Fenster neu).
 
 Veröffentlicht wird automatisch: Jeder Push auf `main` baut die App und stellt sie auf GitHub Pages
 (`.github/workflows/pages.yml`). Einmalig vor dem ersten Deployment im Repository unter **Settings → Pages** als
