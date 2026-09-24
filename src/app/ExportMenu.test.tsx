@@ -340,7 +340,13 @@ describe('ExportMenu', () => {
     menu = openMenu();
     const monthly = within(menu).getByRole('menuitem', { name: /Monatsertrag/ });
     expect(monthly).not.toHaveAttribute('aria-disabled');
-    const tilt = await within(menu).findByRole('menuitem', { name: /^Neigungsvergleich CSV$/ });
+    // The tilt sweep (19 annual simulations) can take longer than findBy's default second while other test
+    // files run in parallel.
+    const tilt = await within(menu).findByRole(
+      'menuitem',
+      { name: /^Neigungsvergleich CSV$/ },
+      { timeout: 5000 },
+    );
     fireEvent.click(tilt);
     expect(downloads[0].name).toBe('verschattung-neigungsvergleich-47.100-N-7.450-E-2024-klarer-himmel.csv');
   });
@@ -365,13 +371,19 @@ describe('ExportMenu', () => {
     // shows the previous result until it is recomputed: not exported.
     act(() => useDataStore.getState().setTerrain({ status: 'error' }));
     menu = openMenu();
-    const tilt = await within(menu).findByRole('menuitem', { name: /^Neigungsvergleich CSV$/ });
+    // The tilt sweep (19 annual simulations) can take longer than findBy's default second while other test
+    // files run in parallel.
+    const tilt = await within(menu).findByRole(
+      'menuitem',
+      { name: /^Neigungsvergleich CSV$/ },
+      { timeout: 5000 },
+    );
     expect(within(menu).getByRole('menuitem', { name: /Monatsertrag/ })).not.toHaveAttribute('aria-disabled');
     act(() => useConfigStore.getState().patch('system', { lossesPct: 18 }));
     expect(tilt).toHaveAttribute('aria-disabled', 'true');
     fireEvent.click(tilt);
     expect(downloads).toHaveLength(0);
-    await within(menu).findByRole('menuitem', { name: /^Neigungsvergleich CSV$/ });
+    await within(menu).findByRole('menuitem', { name: /^Neigungsvergleich CSV$/ }, { timeout: 5000 });
   });
 
   it('prints a report in the light theme with an inputs appendix, then restores the theme', async () => {

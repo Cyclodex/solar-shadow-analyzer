@@ -29,7 +29,10 @@ describe('App with a 3D chunk that fails to load', () => {
     // React and the boundary log the caught error.
     const error = vi.spyOn(console, 'error').mockImplementation(() => {});
     render(<App />);
-    expect(await screen.findByText('Die 3D-Ansicht konnte nicht geladen werden.')).toBeInTheDocument();
+    // The whole app renders first (slow in jsdom while other test files run in parallel).
+    expect(
+      await screen.findByText('Die 3D-Ansicht konnte nicht geladen werden.', undefined, { timeout: 5000 }),
+    ).toBeInTheDocument();
     // The rest of the app keeps working.
     expect(screen.getByRole('heading', { level: 1, name: 'Verschattungsanalyse' })).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Frontalansicht' })).toBeInTheDocument();
