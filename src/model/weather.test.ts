@@ -161,6 +161,47 @@ describe('fetchOpenMeteoYear', () => {
     expect(keys).toHaveLength(WEATHER_CACHE_MAX);
   });
 
+  it('evicts the least recently used year, not the first downloaded one', async () => {
+    const f = fakeFetch(payload(24));
+    const get = (y: number) => fetchOpenMeteoYear(47.1, 7.45, y, { fetchImpl: f.fn });
+    for (let y = 2015; y < 2015 + WEATHER_CACHE_MAX; y++) await get(y);
+    expect(f.calls).toHaveLength(WEATHER_CACHE_MAX);
+    await get(2015); // cache hit, marks 2015 as used
+    expect(f.calls).toHaveLength(WEATHER_CACHE_MAX);
+    await get(2030); // evicts 2016, the least recently used year
+    expect(f.calls).toHaveLength(WEATHER_CACHE_MAX + 1);
+    await get(2015);
+    expect(f.calls).toHaveLength(WEATHER_CACHE_MAX + 1);
+    await get(2016);
+    expect(f.calls).toHaveLength(WEATHER_CACHE_MAX + 2);
+  });
+
+  it('still caches a new year when other data fills the storage', async () => {
+    const m = new Map<string, string>([['other.app', 'x'.repeat(20_000)]]);
+    const size = (): number => [...m].reduce((a, [k, v]) => a + k.length + v.length, 0);
+    const QUOTA = 21_100; // room for the foreign value and two of these small years (≈ 440 chars each)
+    vi.stubGlobal('localStorage', {
+      get length() {
+        return m.size;
+      },
+      key: (i: number) => [...m.keys()][i] ?? null,
+      getItem: (k: string) => m.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        if (size() - (m.get(k)?.length ?? 0) + (m.has(k) ? 0 : k.length) + v.length > QUOTA) {
+          throw new DOMException('full', 'QuotaExceededError');
+        }
+        m.set(k, v);
+      },
+      removeItem: (k: string) => void m.delete(k),
+    } as unknown as Storage);
+    const f = fakeFetch(payload(24));
+    for (let y = 2015; y < 2020; y++) await fetchOpenMeteoYear(47.1, 7.45, y, { fetchImpl: f.fn });
+    expect(f.calls).toHaveLength(5);
+    await fetchOpenMeteoYear(47.1, 7.45, 2019, { fetchImpl: f.fn });
+    expect(f.calls).toHaveLength(5); // the newest year was cached despite the full storage
+    expect(m.get('other.app')).toHaveLength(20_000);
+  });
+
   it('ignores corrupt cache entries and works without localStorage', async () => {
     const f = fakeFetch(payload(24));
     await fetchOpenMeteoYear(47.1, 7.45, 2023, { fetchImpl: f.fn });

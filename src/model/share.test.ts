@@ -9,6 +9,8 @@ import {
   MAX_OBSTACLES,
   MAX_TEXT_LENGTH,
   ROUNDING_OVERRIDES,
+  SHARE_BASES,
+  SHARE_VERSION,
   buildShareUrl,
   canonicalTimeZone,
   configFromJson,
@@ -429,7 +431,9 @@ describe('sanitizeConfig', () => {
     try {
       for (const [k, v] of Object.entries(polluted)) proto[k] = v;
       expect(sanitizeConfig({})).toEqual(DEFAULT_CONFIG);
-      expect(configFromJson('{"version":2}')).toEqual(DEFAULT_CONFIG);
+      expect(configFromJson('{"version":2,"panels":{}}')).toEqual(DEFAULT_CONFIG);
+      // An inherited `location` section must not make a content-free file look like a config.
+      expect(configFromJson('{"version":2}')).toBeNull();
       expect(decodeConfig(encodeConfig(DEFAULT_CONFIG))).toEqual(DEFAULT_CONFIG);
     } finally {
       for (const k of Object.keys(polluted)) delete proto[k];
@@ -474,7 +478,7 @@ describe('encodeConfig / decodeConfig', () => {
     // '{}' = 0x7B 0x7D → 011110 110111 1101(00) → indices 30, 55, 52 → "e30"
     expect(encodeConfig(DEFAULT_CONFIG)).toBe('e30');
     expect(refEncodeJson('{}')).toBe('e30');
-    expect(decodeConfig('e30')).toEqual(DEFAULT_CONFIG);
+    expect(decodeConfig('e30')).toEqual(SHARE_BASES[1]);
   });
 
   it('encodes only the changed fields with short keys (format is part of the link contract)', () => {
@@ -576,6 +580,87 @@ describe('encodeConfig / decodeConfig', () => {
   });
 });
 
+describe('share format versions', () => {
+  // Share links (also printed in reports) store only the diff to a base config. The base must never follow
+  // DEFAULT_CONFIG, or changing a default would silently change the meaning of every existing link.
+
+  it('pins share base 1 (the defaults of all links created before versioning)', () => {
+    expect(SHARE_BASES[1]).toEqual({
+      version: 2,
+      location: { name: '47.100° N, 7.450° E', latitude: 47.1, longitude: 7.45, timezone: 'Europe/Zurich', elevation: 486 },
+      building: { facadeAzimuth: 202, floorHeight: 280, railingHeight: 100, balconyDepth: 150, numFloors: 2, lowestFloor: 1 },
+      panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 45, powerWp: 430 },
+      system: { inverterLimitW: 800, lossesPct: 14, tempCoeffPct: -0.35, noct: 45, albedo: 0.2, shadingModel: 'substring' },
+      horizon: { terrainEnabled: true, obstacles: [], manual: [] },
+      weather: { source: 'open-meteo', year: 2025 },
+      economics: {
+        currency: 'CHF',
+        electricityPrice: 0.3,
+        feedInTariff: 0.08,
+        selfConsumptionPct: 70,
+        investmentPerFloor: 900,
+        degradationPct: 0.5,
+        lifetimeYears: 25,
+      },
+    });
+    expect(Object.isFrozen(SHARE_BASES[1].horizon.obstacles)).toBe(true);
+  });
+
+  it('DEFAULT_CONFIG equals the current share base', () => {
+    // Changed a default? Add SHARE_BASES[SHARE_VERSION + 1] as a literal copy of the new DEFAULT_CONFIG and bump
+    // SHARE_VERSION (compactDiff then writes `v`). Never edit an existing base.
+    expect(DEFAULT_CONFIG).toEqual(SHARE_BASES[SHARE_VERSION]);
+  });
+
+  it('decodes a golden link to the full config it was created with', () => {
+    // '{"p":{"t":30}}' — tilt 30°, everything else from base 1.
+    expect(refEncodeJson('{"p":{"t":30}}')).toBe('eyJwIjp7InQiOjMwfX0');
+    const golden: Config = {
+      ...SHARE_BASES[1],
+      panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 30, powerWp: 430 },
+    };
+    expect(decodeConfig('eyJwIjp7InQiOjMwfX0')).toEqual(golden);
+  });
+
+  it('keeps the meaning of existing links when a default changes (regression)', () => {
+    const D = DEFAULT_CONFIG;
+    const saved = { year: D.weather.year, price: D.economics.electricityPrice, wp: D.panels.powerWp };
+    try {
+      // Simulates a later release with new defaults.
+      D.weather.year = 2026;
+      D.economics.electricityPrice = 0.32;
+      D.panels.powerWp = 450;
+      const c = decodeConfig('eyJwIjp7InQiOjMwfX0');
+      expect(c?.panels.tiltFromVertical).toBe(30);
+      expect(c?.weather.year).toBe(2025);
+      expect(c?.economics.electricityPrice).toBe(0.3);
+      expect(c?.panels.powerWp).toBe(430);
+      expect(decodeConfig('e30')).toEqual(SHARE_BASES[1]);
+      // A config that uses the new defaults still round-trips.
+      const next = sanitizeConfig({ ...D, panels: { ...D.panels, count: 3 } });
+      expect(decodeConfig(encodeConfig(next))).toEqual(next);
+    } finally {
+      D.weather.year = saved.year;
+      D.economics.electricityPrice = saved.price;
+      D.panels.powerWp = saved.wp;
+    }
+  });
+
+  it('reads the version key: unknown versions use base 1, newer ones the newest base', () => {
+    const tilt30 = decodeConfig('eyJwIjp7InQiOjMwfX0');
+    for (const v of ['1', '0', '-3', '1.5', '"1"', 'null', '"__proto__"', '"constructor"']) {
+      expect(decodeConfig(refEncodeJson(`{"v":${v},"p":{"t":30}}`))).toEqual(tilt30);
+    }
+    const future = decodeConfig(refEncodeJson(`{"v":${SHARE_VERSION + 1},"p":{"t":30}}`));
+    expect(future).toEqual({
+      ...SHARE_BASES[SHARE_VERSION],
+      panels: { ...SHARE_BASES[SHARE_VERSION].panels, tiltFromVertical: 30 },
+    });
+    // Version 1 writes no `v`: the default config stays '{}'.
+    expect(JSON.parse(atob(encodeConfig(DEFAULT_CONFIG)))).toEqual({});
+  });
+});
+
 describe('readConfigFromHash / buildShareUrl', () => {
   const c: Config = {
     ...DEFAULT_CONFIG,
@@ -613,11 +698,31 @@ describe('configToJson / configFromJson', () => {
 
   it('accepts BOM and v1 files, rejects non-configs', () => {
     expect(configFromJson('﻿' + configToJson(DEFAULT_CONFIG))).toEqual(DEFAULT_CONFIG);
-    expect(configFromJson('{"version":2}')).toEqual(DEFAULT_CONFIG);
+    expect(configFromJson('{"version":2,"panels":{}}')).toEqual(DEFAULT_CONFIG);
     expect(configFromJson('{"panelTilt":20}')?.panels.tiltFromVertical).toBe(20);
     for (const t of ['', 'nope', '42', '[]', 'null', '{"foo":1}', '{"location":"x"}']) {
       expect(configFromJson(t)).toBeNull();
     }
+  });
+
+  it('rejects JSON with only a version number instead of loading the defaults (regression)', () => {
+    for (const t of ['{"version":2}', '{"version":2,"foo":1}', '{"version":"2"}', '{"version":1}']) {
+      expect(configFromJson(t)).toBeNull();
+    }
+  });
+
+  it('reads the config out of a persisted store value', () => {
+    const custom = sanitizeConfig({
+      location: { name: 'Zürich', latitude: 47.3769, longitude: 8.5417 },
+      panels: { tiltFromVertical: 25 },
+    });
+    const inner: unknown = JSON.parse(configToJson(custom));
+    expect(configFromJson(JSON.stringify({ state: { config: inner }, version: 2 }))).toEqual(custom);
+    expect(configFromJson(JSON.stringify({ config: inner }))).toEqual(custom);
+    // Persisted v1 value: a flat config inside the wrapper.
+    expect(configFromJson('{"state":{"config":{"panelTilt":20}},"version":1}')?.panels.tiltFromVertical).toBe(20);
+    // A wrapper without a config is not a config.
+    expect(configFromJson('{"state":{"lang":"de"},"version":2}')).toBeNull();
   });
 });
 

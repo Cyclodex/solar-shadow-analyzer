@@ -1,6 +1,7 @@
 import { decode } from 'fast-png';
 import type { HorizonProfile } from './types';
 import { DEG, clamp, toDeg } from './units';
+import { getStorage, touchCacheEntry, writeCacheEntry } from './storageCache';
 
 // ─────────────────────────────────────────────
 // TERRAIN HORIZON FROM DEM TILES
@@ -420,7 +421,8 @@ const TILE_CACHE_MAX = 96;
 const tileCache = new Map<string, Promise<Float32Array>>();
 
 const RESULT_CACHE_PREFIX = 'ssa.terrain.v1:';
-const RESULT_CACHE_MAX = 12;
+/** Horizon results kept in localStorage (≈ 2 kB each; the least recently used one is evicted). */
+export const TERRAIN_RESULT_CACHE_MAX = 12;
 
 /** Empties the in-memory tile cache (tests, memory pressure). */
 export function clearTerrainTileCache(): void {
@@ -502,14 +504,6 @@ async function loadTile(url: string, fetchImpl: typeof fetch, signal: AbortSigna
   return p;
 }
 
-function getStorage(): Storage | null {
-  try {
-    return globalThis.localStorage ?? null;
-  } catch {
-    return null;
-  }
-}
-
 /**
  * Result cache key: lat/lon to 5 decimals (≈ 1 m). Coarser keys return another location's horizon: in Alpine
  * valleys ~100 m change it by degrees (Lauterbrunnen, 0.0009° apart: 3.3° RMS, 8.2° max).
@@ -519,6 +513,7 @@ function resultCacheKey(lat: number, lon: number, observerHeight: number): strin
 }
 
 interface StoredResult {
+  /** Last use (see storageCache). */
   t: number;
   stepDeg: number;
   e: number[];
@@ -526,10 +521,12 @@ interface StoredResult {
   tiles: number;
 }
 
+/** Cached result (refreshing its last-use stamp), or null if absent or invalid. */
 function readCachedResult(key: string): TerrainHorizonResult | null {
   try {
-    const raw = getStorage()?.getItem(key);
-    if (!raw) return null;
+    const storage = getStorage();
+    const raw = storage?.getItem(key);
+    if (!storage || !raw) return null;
     const s = JSON.parse(raw) as Partial<StoredResult>;
     const e = s.e;
     if (
@@ -543,6 +540,7 @@ function readCachedResult(key: string): TerrainHorizonResult | null {
     ) {
       return null;
     }
+    touchCacheEntry(storage, key, s);
     return { profile: { stepDeg: s.stepDeg, elevations: e }, siteElevation: s.siteElevation, tiles: s.tiles };
   } catch {
     return null;
@@ -550,42 +548,23 @@ function readCachedResult(key: string): TerrainHorizonResult | null {
 }
 
 function writeCachedResult(key: string, r: TerrainHorizonResult): void {
-  try {
-    const storage = getStorage();
-    if (!storage) return;
-    const value: StoredResult = {
-      t: Date.now(),
-      stepDeg: r.profile.stepDeg,
-      e: r.profile.elevations.map((x) => Math.round(x * 100) / 100),
-      siteElevation: Math.round(r.siteElevation * 10) / 10,
-      tiles: r.tiles,
-    };
-    storage.setItem(key, JSON.stringify(value));
-    // Evict the oldest entries beyond RESULT_CACHE_MAX.
-    const entries: { k: string; t: number }[] = [];
-    for (let i = 0; i < storage.length; i++) {
-      const k = storage.key(i);
-      if (!k?.startsWith(RESULT_CACHE_PREFIX)) continue;
-      let t = 0;
-      try {
-        t = Number((JSON.parse(storage.getItem(k) ?? '{}') as { t?: unknown }).t) || 0;
-      } catch {
-        // corrupt entry → evicted first
-      }
-      entries.push({ k, t });
-    }
-    entries.sort((a, b) => a.t - b.t);
-    for (const { k } of entries.slice(0, Math.max(0, entries.length - RESULT_CACHE_MAX))) storage.removeItem(k);
-  } catch {
-    // quota exceeded / storage disabled: caching is optional
-  }
+  const storage = getStorage();
+  if (!storage) return;
+  const value: Omit<StoredResult, 't'> = {
+    stepDeg: r.profile.stepDeg,
+    e: r.profile.elevations.map((x) => Math.round(x * 100) / 100),
+    siteElevation: Math.round(r.siteElevation * 10) / 10,
+    tiles: r.tiles,
+  };
+  writeCacheEntry(storage, RESULT_CACHE_PREFIX, TERRAIN_RESULT_CACHE_MAX, key, value);
 }
 
 /**
  * Terrain horizon for a site from AWS Terrarium DEM tiles (multi-resolution, see TERRAIN_ZOOM_BANDS).
  * Downloads at most TILE_CONCURRENCY tiles at once, keeps decoded tiles in memory and the result in
- * localStorage (key: lat/lon rounded to 5 decimals ≈ 1 m, observer height). The site elevation is taken
- * from the DEM. Rejects with the signal's reason (AbortError) when aborted, or on a failed tile.
+ * localStorage (the TERRAIN_RESULT_CACHE_MAX most recently used sites; key: lat/lon rounded to 5 decimals
+ * ≈ 1 m, observer height). The site elevation is taken from the DEM. Rejects with the signal's reason
+ * (AbortError) when aborted, or on a failed tile.
  */
 export async function fetchTerrainHorizon(
   latitude: number,

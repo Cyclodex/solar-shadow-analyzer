@@ -335,20 +335,30 @@ const sum = (a: ArrayLike<number>): number => {
   return s;
 };
 
+/** Inputs of simulateYear that callers may have built already (e.g. cached across tilt changes). */
+export interface PrebuiltInputs {
+  /** createFloorModel(config, horizons, opts) — must match the config, horizons AND options of the call. */
+  model?: FloorModel;
+  /** sunTrack(config, weather) — depends only on the site, the facade azimuth and the weather series. */
+  track?: SunTrack;
+}
+
 /**
  * Yearly energy per floor for `weather` (sun position at each interval midpoint, config's site).
  * `horizons[k]` = horizon of floor k (missing = flat). Monthly values in local time of the site.
  * The unshaded reference of a floor removes the row above (beam shading and sky blocking); for the top floor
- * it equals the actual yield. ≈ 15–40 ms for 8760 steps × 8 floors × 8 modules.
+ * it equals the actual yield. ≈ 15–40 ms for 8760 steps × 8 floors × 8 modules, of which the floor model and
+ * the sun track take ≈ 6–8 ms (reusable via `prebuilt`).
  */
 export function simulateYear(
   config: Config,
   weather: WeatherSeries,
   horizons: readonly (HorizonProfile | null | undefined)[],
   opts: SimulationOptions = {},
+  prebuilt: PrebuiltInputs = {},
 ): SimulationResult {
-  const model = createFloorModel(config, horizons, opts);
-  const track = sunTrack(config, weather);
+  const model = prebuilt.model ?? createFloorModel(config, horizons, opts);
+  const track = prebuilt.track ?? sunTrack(config, weather);
   const months = stepMonths(weather.timesUtc, weather.year, config.location.timezone);
   const t = runYear(model, weather, track, months, true);
   const ratedKw = model.power.ratedW / 1000;

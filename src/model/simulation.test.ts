@@ -6,6 +6,7 @@ import {
   floorPowerW,
   simulateYear,
   stepMonths,
+  sunTrack,
 } from './simulation';
 import { clearSkyYear } from './weather';
 import { poaIrradiance, skyViewFactor } from './irradiance';
@@ -110,6 +111,20 @@ describe('simulateYear', () => {
       // The obstacle horizon differs per floor (non-trivial check).
       expect(new Set(hz.map((h) => Math.max(...h.elevations))).size).toBe(3);
     }
+  });
+
+  it('gives the same result with a prebuilt floor model and sun track', () => {
+    const w = cloudyYear(3);
+    const c = cfg({ building: { numFloors: 3 } });
+    c.horizon.obstacles = [{ ...createObstacle('a', 'A'), offsetAlong: 10, distance: 20, height: 12 }];
+    const hz = floorHorizons(c, null);
+    const opts = { facade: false, skyGridDeg: 2 };
+    const expected = simulateYear(c, w, hz, opts);
+    expect(simulateYear(c, w, hz, opts, { model: createFloorModel(c, hz, opts), track: sunTrack(c, w) })).toEqual(
+      expected,
+    );
+    expect(simulateYear(c, w, hz, opts, { track: sunTrack(c, w) })).toEqual(expected);
+    expect(simulateYear(c, w, hz, {}, { model: createFloorModel(c, hz) })).toEqual(simulateYear(c, w, hz));
   });
 
   it('top floor equals its unshaded variant; lower floors are not better than the top', () => {
