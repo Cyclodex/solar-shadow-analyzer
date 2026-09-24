@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, onTestFinished } from 'vitest';
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { clearSkyYear } from '../model/weather';
 import { downloadText } from '../export/download';
@@ -67,7 +67,10 @@ describe('MonthlyTable', () => {
     expect(screen.getAllByRole('region', { name: 'Monatstabelle' })).toHaveLength(1);
   });
 
-  it('exports the table as CSV (German: semicolons, as the export menu)', () => {
+  it('exports the table as CSV (Swiss German spreadsheet: semicolons, as the export menu)', () => {
+    // The CSV dialect follows the browser's regional preference (see userCsvFormat).
+    const languages = vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['de-CH']);
+    onTestFinished(() => languages.mockRestore());
     useDataStore.getState().setWeather({ status: 'ready', series });
     render(<MonthlyTable />);
     fireEvent.click(screen.getByRole('button', { name: 'Monatstabelle als CSV herunterladen' }));

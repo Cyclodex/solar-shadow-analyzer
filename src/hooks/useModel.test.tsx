@@ -96,15 +96,23 @@ describe('model hooks', () => {
 
     // A drag of another input: the previous result, marked as updating, until the input settled.
     act(() => patch('system', { lossesPct: 18 }));
-    act(() => vi.advanceTimersByTime(SWEEP_SETTLE_MS - 50));
+    act(() => {
+      vi.advanceTimersByTime(SWEEP_SETTLE_MS - 50);
+    });
     act(() => patch('system', { lossesPct: 20 }));
-    act(() => vi.advanceTimersByTime(SWEEP_SETTLE_MS - 50));
+    act(() => {
+      vi.advanceTimersByTime(SWEEP_SETTLE_MS - 50);
+    });
     expect(result.current.sweep?.updating).toBe(true);
     expect(result.current.sweep?.points).toBe(sweep!.points);
     // Settled: computed in the background, still the previous result until it is done.
-    act(() => vi.advanceTimersByTime(50));
+    act(() => {
+      vi.advanceTimersByTime(50);
+    });
     expect(result.current.sweep?.updating).toBe(true);
-    act(() => vi.advanceTimersByTime(1));
+    act(() => {
+      vi.advanceTimersByTime(1);
+    });
     const next = result.current.sweep!;
     expect(next.updating).toBeFalsy();
     expect(next.points).not.toBe(sweep!.points);

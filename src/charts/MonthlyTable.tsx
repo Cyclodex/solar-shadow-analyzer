@@ -7,7 +7,7 @@ import { monthNames, useFormat, useLang, useMessages, type Messages } from '../i
 import { useCommon } from '../i18n/common';
 import { useHeatmapStats, useSimulation } from '../hooks/useModel';
 import { exportFilename } from '../export/filenames';
-import { csvSeparator, downloadCsv } from '../export/resultsCsv';
+import { downloadCsv, userCsvFormat } from '../export/resultsCsv';
 import { useConfigSection } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
@@ -163,7 +163,7 @@ export function MonthlyTable() {
         monthNames: months,
         year: t.year,
       },
-      { separator: csvSeparator(lang) },
+      userCsvFormat(lang),
     );
     // Same naming scheme as the export menu's CSV files.
     const clearSky = simulation.source === 'clear-sky' ? [t.clearSkyTag] : [];

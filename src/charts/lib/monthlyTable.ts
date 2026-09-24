@@ -83,12 +83,12 @@ export interface MonthlyCsvLabels {
 
 /**
  * CSV text (RFC 4180, dot decimals; kWh and % to 2 decimals, hours to 1) of the monthly table incl. the
- * year row. Pass the separator of the UI language (csvSeparator: ';' for German spreadsheets).
+ * year row. Pass the user's spreadsheet dialect (userCsvFormat from export/resultsCsv), as the export menu does.
  */
 export function monthlyCsv(
   rows: { months: MonthlyRow[]; year: MonthlyRow },
   labels: MonthlyCsvLabels,
-  { separator = ',' }: Pick<CsvOptions, 'separator'> = {},
+  format: Pick<CsvOptions, 'separator' | 'decimal'> = {},
 ): string {
   const withTotal = labels.floors.length > 1;
   const header: CsvCell[] = [
@@ -105,5 +105,5 @@ export function monthlyCsv(
     ...(labels.lossKwh && labels.lossPct ? [kwh(r.lossKwh), round(r.lossPct, 2)] : []),
     ...(labels.shadedHours ? [round(r.shadedHours ?? 0, 1)] : []),
   ];
-  return toCsv([header, ...rows.months.map(line), line(rows.year)], { separator });
+  return toCsv([header, ...rows.months.map(line), line(rows.year)], format);
 }
