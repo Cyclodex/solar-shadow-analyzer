@@ -39,6 +39,28 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
 
 ![Analyse: Tagesverlauf, Jahres-Heatmap der Verschattung, Monatsertrag und Neigungsvergleich](docs/images/analysis.png)
 
+## Online nutzen & aufs Handy installieren
+
+Die App läuft ohne Installation im Browser: **<https://cyclodex.github.io/solar-shadow-analyzer/>**
+
+Sie lässt sich auch wie eine App installieren, auf dem Handy, dem Tablet oder dem Computer:
+
+- **Android (Chrome, Edge, Samsung Internet) und Chrome oder Edge am Computer:** Knopf «Installieren» oben rechts
+  (auf schmalen Bildschirmen nur das Symbol mit dem Pfeil) oder im Browsermenü «App installieren».
+- **iPhone und iPad (Safari):** «Teilen» antippen (bei neueren iOS-Versionen im Menü «…» neben der Adresszeile),
+  «Zum Home-Bildschirm» wählen und mit «Hinzufügen» bestätigen. Der Knopf «Installieren» zeigt diese Schritte
+  ebenfalls.
+
+Nach dem ersten Besuch startet die App auch ohne Internet, installiert oder im Browser: Alle App-Dateien liegen dann
+im Browser. Wetterdaten und Geländehorizont für einen neuen Standort oder ein anderes Jahr brauchen eine Verbindung;
+einmal geladene bleiben gespeichert, ohne Verbindung rechnet die App sonst mit klarem Himmel und ohne Gelände. Ist
+eine neue Version veröffentlicht, meldet die App «Neue Version verfügbar»: «Neu laden» wechselt sofort, «Später»
+behält die laufende Version, bis alle Fenster der App geschlossen sind.
+
+Veröffentlicht wird automatisch: Jeder Push auf `main` baut die App und stellt sie auf GitHub Pages
+(`.github/workflows/pages.yml`). Einmalig vor dem ersten Deployment im Repository unter **Settings → Pages** als
+**Source** «GitHub Actions» wählen.
+
 ## Schnellstart
 
 Voraussetzung: Node.js 22.22.2 oder neuer (22.x), 24.15 oder neuer (24.x) oder ≥ 26, wie `engines` in
@@ -66,6 +88,7 @@ npm run dev   # http://localhost:5173
 | `npm run format`           | Prettier: alle Dateien formatieren                                     |
 | `npm run format:check`     | Prettier: Formatierung prüfen                                          |
 | `npm run e2e`              | End-to-End-Tests mit Playwright (Chromium) gegen den Produktions-Build |
+| `npm run icons`            | App-Icons (PNG) aus `public/favicon.svg` erzeugen                      |
 | `npm run validate:terrain` | Geländehorizont gegen PVGIS `printhorizon` prüfen (braucht Netzwerk)   |
 | `npm run validate:yield`   | Jahresertrag gegen PVGIS prüfen (braucht Netzwerk)                     |
 
@@ -74,12 +97,16 @@ npm run dev   # http://localhost:5173
 - `npm run e2e` baut die App und startet `vite preview` auf Port 4173 (anpassbar mit `E2E_PORT`). Einmalig vorher
   `npx playwright install chromium` ausführen; mit `PLAYWRIGHT_CHROMIUM_PATH` lässt sich ein anderes Chromium
   verwenden. Die Tests blockieren alle externen Dienste und prüfen u. a. die 3D-Darstellung (WebGL über SwiftShader),
-  den Teilen-Link, die Sprachumschaltung und das Layout bei 360 px.
+  den Teilen-Link, die Sprachumschaltung, das Layout bei 360 px, Manifest und Icons sowie den Offline-Start über den
+  Service Worker.
+- Die App lässt sich unter einem Unterpfad bauen: `BASE_PATH=/solar-shadow-analyzer/ npm run build` wie für GitHub
+  Pages. Mit derselben Variable laufen auch die E2E-Tests unter diesem Pfad, z. B.
+  `BASE_PATH=/solar-shadow-analyzer/ E2E_PORT=4811 npm run e2e`.
 - `npm run validate:terrain` lädt Höhenkacheln und PVGIS-Horizonte, `npm run validate:yield` Open-Meteo-Wetter und
   PVGIS-Ertragsreihen. Hinter einem HTTP-Proxy braucht Node `NODE_USE_ENV_PROXY=1`; die Optionen stehen im Kopf von
   `scripts/validate-terrain.ts` und `scripts/validate-yield.ts`.
 - Die CI (GitHub Actions, Node aus `.nvmrc`) führt Lint, `format:check`, Typecheck, Tests und Build aus und danach die
-  E2E-Tests.
+  E2E-Tests. Auf `main` veröffentlicht `.github/workflows/pages.yml` die App auf GitHub Pages.
 
 ## Standardwerte
 
@@ -117,7 +144,10 @@ Formeln, Koordinatensysteme, Konventionen und Modulgrenzen: [docs/ARCHITECTURE.m
 
 ## Datenquellen und Datenschutz
 
-Die App hat kein eigenes Backend. Sie ruft direkt aus dem Browser folgende Dienste auf:
+Die App hat kein eigenes Backend. Die Seite selbst liefert GitHub Pages aus; dabei wird laut GitHub die IP-Adresse
+der Besucherinnen und Besucher aus Sicherheitsgründen protokolliert
+([GitHub Docs](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)). Die App
+ruft direkt aus dem Browser folgende Dienste auf:
 
 - **Open-Meteo Historical Weather API** (`archive-api.open-meteo.com`): erhält die auf 0.01° gerundeten Koordinaten
   und das Jahr, automatisch bei der Wetterquelle Open-Meteo (Standard). Daten unter
@@ -132,11 +162,11 @@ Die App hat kein eigenes Backend. Sie ruft direkt aus dem Browser folgende Diens
   Standort, die heruntergeladene Datei kann importiert werden.
 
 Der Gerätestandort wird nur auf Klick über die Geolocation-API des Browsers abgefragt. Konfiguration (inkl.
-Koordinaten), UI-Einstellungen und zwischengespeicherte Wetter- und Geländedaten liegen im `localStorage`. Wird die
-Seite verlassen, bevor der URL-Hash nachgeführt ist, übergibt der `sessionStorage` (`ssa.pendingHash`) ihn dem
-nächsten Aufruf im selben Tab. Der
-Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet, wer den Link erhält, sieht
-aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
+Koordinaten), UI-Einstellungen und zwischengespeicherte Wetter- und Geländedaten liegen im `localStorage`, die
+App-Dateien für den Offline-Start im Cache des Service Workers (nur Dateien der App selbst). Wird die Seite verlassen,
+bevor der URL-Hash nachgeführt ist, übergibt der `sessionStorage` (`ssa.pendingHash`) ihn dem nächsten Aufruf im
+selben Tab. Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet, wer den Link
+erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
 
 ## Einschränkungen
 
@@ -159,7 +189,8 @@ aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
 
 React 19 · TypeScript 6 · Vite 8 · zustand 5 · three.js 0.186 mit @react-three/fiber 9 und drei 10 (nur die 3D-Ansicht,
 lazy geladen) · fast-png · CSS Modules mit CSS-Variablen · SVG- und Canvas-Diagramme ohne Chart-Library ·
-Vitest 5, Testing Library, Playwright, ESLint 10, Prettier 3.
+vite-plugin-pwa (Workbox) für Installation und Offline-Start · Vitest 5, Testing Library, Playwright, ESLint 10,
+Prettier 3.
 
 ## Weiterentwicklung
 

@@ -31,12 +31,17 @@ Die Phasen des alten Plans und ihre Umsetzung:
 - **5.1 Heatmap:** Jahres-Heatmap der Verschattung je Stockwerk.
 - **5.2 Animation:** Tagesanimation mit einstellbarer Geschwindigkeit, alle Ansichten synchron.
 - **6 3D-Visualisierung:** three.js-Ansicht mit Shadow Maps, exaktem Modellschatten als Overlay und Kamera-Presets.
+- **Deployment:** GitHub Pages unter <https://cyclodex.github.io/solar-shadow-analyzer/>, bei jedem Push auf `main`
+  (`.github/workflows/pages.yml`); Build unter einem Unterpfad über `BASE_PATH`.
+- **PWA / offline:** installierbar auf Android, iOS/iPadOS und am Computer (Knopf «Installieren», auf iOS mit
+  Anleitung); ein Service Worker speichert alle App-Dateien, nach dem ersten Besuch startet die App offline, zuletzt
+  geladene Wetter- und Geländedaten bleiben im `localStorage`. Neue Versionen erst nach «Neu laden».
 
 ## Offen
 
 - Übersetzungen Französisch und Italienisch (aus dem alten Punkt 4.4).
 - SVG-Export der Ansichten und Diagramme (aus dem alten Punkt 4.3).
-- Deployment, z. B. auf GitHub Pages. Open-Graph-Tags mit `og:url` und `og:image` erst mit einer festen Adresse.
+- Open-Graph-Tags `og:url` und `og:image` (eigenes Vorschaubild) für die feste Adresse auf GitHub Pages.
 
 ## Ideen
 
@@ -50,7 +55,6 @@ Die Phasen des alten Plans und ihre Umsetzung:
 - **Gelände-Zoom in hohen Breiten:** Die Zoom-Bänder der Höhenkacheln (z12 / z10 / z9) sind auf 47° N abgestimmt.
   Weil Web-Mercator-Pixel polwärts kleiner werden, braucht derselbe Horizont mehr Kacheln (geplant: 16 bei 47.1° N,
   34 bei 65° N, 50 bei 70° N). Die Bänder sollten mit der Breite wandern.
-- **PWA / offline:** Service Worker für die App-Dateien, zuletzt geladene Wetter- und Geländedaten auch ohne Netz.
 - Mehrjahresmittel der Wetterdaten statt eines einzelnen Jahres.
 - Teilschatten einzelner Module durch Hindernisse (Ray-Casting statt Horizont von der Panelmitte).
 - Seitenwände und Nachbarbalkone als zusätzliche Schattenwerfer.

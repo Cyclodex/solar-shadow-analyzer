@@ -11,6 +11,7 @@ Es ist die verbindliche Referenz für alle Beiträge.
 - Zustand für den App-State (mit `persist` für localStorage)
 - Three.js über `@react-three/fiber` 9 + `@react-three/drei` 10 (nur in der lazy geladenen 3D-Ansicht)
 - fast-png: Dekodierung der DEM-Kacheln (Terrarium-PNG) in `model/terrain.ts`
+- vite-plugin-pwa (Workbox): Web-App-Manifest und Service Worker, siehe [PWA und Deployment](#pwa-und-deployment)
 - Styling: CSS-Variablen (`src/styles/global.css`) + CSS Modules pro Komponente (`*.module.css`), keine Inline-Style-Monolithen
 - Alle 2D-Visualisierungen als SVG (Heatmap als `<canvas>`), keine Chart-Library
 
@@ -18,8 +19,8 @@ Es ist die verbindliche Referenz für alle Beiträge.
 
 ```
 src/
-  main.tsx                 Einstieg: initUrlSync() vor dem ersten Render, dann <App/>
-  App.tsx                  Layout: Header, Sidebar, KPI-Leiste, Ansichten, Analyse, Footer
+  main.tsx                 Einstieg: initUrlSync() und initInstallPrompt() vor dem ersten Render, dann <App/>
+  App.tsx                  Layout: Header, Sidebar, KPI-Leiste, Ansichten, Analyse, Footer, PwaToast
   setupTests.ts            jsdom-Setup der UI-Tests (fetch gesperrt; Stubs für matchMedia, ResizeObserver,
                            IntersectionObserver, Canvas-Kontext = null, URL.createObjectURL)
   model/                   Reine, UI-freie Berechnungen (keine React-/State-/UI-Imports, per ESLint erzwungen)
@@ -84,15 +85,25 @@ src/
                            useAnimation, useMediaQuery (Layout-Umbruch bei 1100 px)
   state/                   configStore, timeStore, uiStore, dataStore, shareLinkStore (Hinweise zum Teilen-Link),
                            urlSync (#c=-Hash), storage (Persistenz der Stores, fängt localStorage-Fehler ab)
+  pwa/                     install.ts (beforeinstallprompt/appinstalled → useInstallStore, promptInstall, isIos,
+                           Standalone-Erkennung), InstallButton (Header), PwaToast (Service-Worker-Registrierung,
+                           Hinweise «Neue Version verfügbar» / «Offline verfügbar»), updates.ts (stündliche
+                           Update-Prüfung, reloadPage)
   i18n/                    index.ts (useLang, useMessages, useFormat, floorLabel, compassPoint …), common.ts
   styles/                  global.css: Design-Tokens (CSS-Variablen) für Dark/Light, globale Styles; tokens.ts:
                            Token-Zugriff aus TypeScript (Stockwerksfarben, useThemeKey, cssVar, parseCssColor)
-  test/                    utils.ts: resetStores(), TEST_DATE; svg.ts: Helfer für die Tests der SVG-Ansichten
+  test/                    utils.ts: resetStores(), TEST_DATE; svg.ts: Helfer für die Tests der SVG-Ansichten;
+                           pwaRegister.ts: Ersatz für virtual:pwa-register/react in den UI-Tests
 
-e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts)
+public/                    favicon.svg und die daraus erzeugten App-Icons (pwa-192x192, pwa-512x512,
+                           pwa-maskable-512x512, apple-touch-icon)
+e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts, pwa.spec.ts)
 scripts/validate-terrain.ts  Gelände-Horizont gegen PVGIS printhorizon prüfen (braucht Netzwerk)
 scripts/validate-yield.ts    Jahresertrag gegen PVGIS seriescalc/PVcalc prüfen (braucht Netzwerk)
-.github/workflows/ci.yml   CI: Lint, Format, Typecheck, Tests, Build; danach E2E
+scripts/generate-icons.ts    App-Icons aus public/favicon.svg rendern (Playwright-Chromium, `npm run icons`)
+scripts/basePath.ts          BASE_PATH → Vite-`base` (für vite.config.ts und playwright.config.ts)
+.github/workflows/ci.yml     CI: Lint, Format, Typecheck, Tests, Build; danach E2E
+.github/workflows/pages.yml  Deployment auf GitHub Pages (Push auf main, manuell)
 ```
 
 ## Einheiten und Konventionen
@@ -213,6 +224,47 @@ const t = useMessages(messages);
 
 Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useFormat()` (Intl, Locale `de-CH`/`en-GB`) formatiert.
 
+## PWA und Deployment
+
+- **Basis-Pfad:** `vite.config.ts` setzt `base` aus der Umgebungsvariable `BASE_PATH` (Standard `/`, normalisiert in
+  `scripts/basePath.ts`). GitHub Pages dient die App als Projektseite unter `/solar-shadow-analyzer/` aus
+  (`.github/workflows/pages.yml` baut mit `BASE_PATH=/solar-shadow-analyzer/`). Laufzeit-URLs hängen nicht vom Pfad ab:
+  `index.html` verweist auf `/favicon.svg` usw., Vite setzt beim Build den Basis-Pfad davor; das Manifest nutzt
+  relative URLs (`start_url`, `scope`, `id` = `./`, Icons ohne Pfad), der Service Worker liegt unter
+  `<base>sw.js` mit Scope `<base>`; Teilen-Link (`buildShareUrl` aus `location.href`), URL-Hash (`pathname` +
+  `search`) und Druck (im Dokument) bleiben unter dem Pfad. Die App lädt keine eigenen Dateien per `fetch`.
+- **Manifest** (vite-plugin-pwa, in `vite.config.ts`): Name, `short_name` «Verschattung», Deutsch,
+  `display: standalone`, Theme- und Hintergrundfarbe = `--bg` des dunklen Themes (`#0b1120`). Icons 192 und 512 px
+  (`any`) und 512 px `maskable` (deckend, Logo auf 60 % innerhalb der Safe Zone) sowie `apple-touch-icon` 180 px
+  über `<link>`, alle erzeugt von `scripts/generate-icons.ts`.
+- **iOS:** `apple-mobile-web-app-capable`, `-title`, `-status-bar-style: black-translucent`; mit `viewport-fit=cover`
+  läuft die Seite bis an den Bildschirmrand. `global.css` definiert `--safe-top/-right/-bottom/-left` aus
+  `env(safe-area-inset-*)`; Header, Seitenraster, Sticky-Sidebar, Skip-Link und die Hinweise halten diese Abstände
+  ein. Unter der transparenten Statusleiste (immer weisse Symbole) liegt ein fixer Streifen in `--statusbar`, auch im
+  hellen Theme.
+- **Service Worker** (Workbox `generateSW`, nur im Produktions-Build; in Entwicklung und Tests aus):
+  - Precache des ganzen Builds (`js, css, html, svg, png` + Manifest), auch des lazy geladenen 3D-Chunks (~960 kB).
+    Ein Asset über `maximumFileSizeToCacheInBytes` (Standard 2 MiB) bricht den Build ab, statt offline zu fehlen.
+  - Navigationen fallen auf `index.html` zurück (`navigateFallback`), alte Precaches werden aufgeräumt
+    (`cleanupOutdatedCaches`). Kein Runtime-Caching: Wetter- und Geländedaten cacht die App selbst im `localStorage`.
+  - `registerType: 'prompt'`: Ein Update aktiviert sich nie selbst (es würde die Lazy-Chunks einer offenen Seite
+    löschen). `PwaToast` registriert den Worker über `useRegisterSW` (`virtual:pwa-register/react`), meldet
+    «Neue Version verfügbar» (Live-Region) mit «Neu laden» (`updateServiceWorker` → `SKIP_WAITING`, dann Reload;
+    nach `RELOAD_FALLBACK_MS` lädt die Seite sicherheitshalber selbst neu, falls der alte Worker sie nicht
+    kontrollierte) und «Später» (das Update übernimmt, wenn alle Fenster der App geschlossen sind). Nach dem ersten
+    Besuch kurz «Offline verfügbar». Update-Prüfung stündlich und beim Zurückkehren in den Vordergrund nach
+    mindestens einer Stunde (`scheduleUpdateChecks`).
+- **Installieren:** `initInstallPrompt()` (vor dem ersten Render) hält `beforeinstallprompt` fest (ohne Chromes
+  Mini-Infoleiste) und merkt sich `appinstalled`. `InstallButton` im Header: mit Event öffnet es den Installdialog
+  (`prompt()`, das Event ist danach verbraucht), auf iOS/iPadOS (User-Agent, iPadOS über Touchpunkte) ein Popover
+  mit den Schritten «Teilen → Zum Home-Bildschirm → Hinzufügen» (`usePopover`-Helfer, Escape und Klick ausserhalb
+  schliessen). Ausgeblendet als installierte App (`display-mode: standalone`, `navigator.standalone`) und in
+  Browsern ohne Installationsweg (z. B. Firefox, Safari auf dem Mac).
+- **Deployment:** `.github/workflows/pages.yml` (Push auf `main` und manuell): Build-Job (Node aus `.nvmrc`,
+  `npm ci`, Build mit `BASE_PATH`, `configure-pages`, `upload-pages-artifact` mit `dist`) und Deploy-Job
+  (`deploy-pages`, Environment `github-pages`); Concurrency-Gruppe `pages` ohne Abbruch laufender Deployments.
+  Voraussetzung: Settings → Pages → Source «GitHub Actions».
+
 ## Tests
 
 - **Modell** (Vitest-Projekt `model`, Node), Referenzwerte:
@@ -225,6 +277,8 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   - Wörtliche Auszüge der PVGIS-printhorizon-Antwort.
 - **UI** (Projekt `ui`, jsdom, `src/setupTests.ts`): Rendern und Interaktion mit Testing Library.
   - Netzwerk gesperrt (`fetch` wird abgelehnt, ausser ein Test stubbt es).
+  - `virtual:pwa-register/react` zeigt per Alias auf `src/test/pwaRegister.ts` (kein Service Worker, keine
+    Hinweise); `PwaToast.test.tsx` mockt das Modul mit eigenem Zustand.
   - `resetStores()` aus `src/test/utils.ts` setzt den App-State zurück.
   - `getContext` liefert `null`, deshalb zeigt die 3D-Ansicht ihren Hinweis ohne WebGL und die Heatmap zeichnet nicht.
     `SceneStage.test.tsx` mockt `./webgl`, um die DOM-Teile der 3D-Ansicht zu testen.
@@ -232,6 +286,11 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   blockiert, Port über `E2E_PORT`): App lädt mit Jahresertrag; kein horizontales Scrollen bei 360 px; 3D-Canvas zeichnet
   Inhalt (mehr als 20 Farben, kein Screenshot-Vergleich); Kamera-Preset «Aus Sonnenrichtung» bleibt nach einem Klick
   erhalten, folgt der Uhrzeit und weicht nachts der Übersicht; Teilen-Link stellt die Konfiguration wieder her;
-  Sprachumschaltung DE → EN.
+  Sprachumschaltung DE → EN. `pwa.spec.ts`: Manifest gültig und unter dem Basis-Pfad, Icons ladbar (Grösse,
+  `maskable`/`apple-touch-icon` deckend); Service Worker registriert sich, kontrolliert die Seite nach einem Reload
+  und hat den 3D-Chunk im Precache; offline (`context.setOffline`) lädt die App mit Clear-Sky-Ergebnissen und
+  3D-Ansicht, ohne Konsolenfehler. Nur dort laufen Service Worker; die übrigen Specs blockieren sie
+  (`serviceWorkers: 'block'`), damit `page.route()` jede Anfrage sieht. Mit `BASE_PATH` laufen Build, `vite preview`
+  und `baseURL` unter dem Pfad (die Specs navigieren relativ mit `page.goto('./')`).
 - **CI** (`.github/workflows/ci.yml`, Node aus `.nvmrc`): Lint, `format:check`, Typecheck, Tests und Build; danach
   E2E mit dem von Playwright installierten Chromium.
