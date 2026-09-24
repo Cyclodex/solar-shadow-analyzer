@@ -14,7 +14,7 @@ import { ColumnHeader, DataTable, type DataTableColumn, type DataTableRow } from
 import { useFloorLabels } from './lib/floors';
 import { monthlyRows, type MonthlyRow } from './lib/monthlyTable';
 import { useSourceLabel } from './lib/sourceLabel';
-import { useNearViewport } from './lib/useNearViewport';
+import { useNearViewport } from '../hooks/useNearViewport';
 import chart from './lib/chart.module.css';
 
 const de = {

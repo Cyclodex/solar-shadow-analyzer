@@ -60,7 +60,7 @@ import { measureTextWidth } from '../components/svg/text';
 import { useElementWidth } from '../components/svg/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { usePlotPointer } from './lib/usePlotPointer';
-import { useNearViewport } from './lib/useNearViewport';
+import { useNearViewport } from '../hooks/useNearViewport';
 import { useSvgId } from '../components/svg/useSvgId';
 import chart from './lib/chart.module.css';
 import styles from './ShadeHeatmap.module.css';

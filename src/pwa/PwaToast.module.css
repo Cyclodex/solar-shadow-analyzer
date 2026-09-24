@@ -3,7 +3,8 @@
   position: fixed;
   z-index: 60;
   right: calc(var(--space-4) + var(--safe-right));
-  bottom: calc(var(--space-4) + var(--safe-bottom));
+  /* Above the phone control bar (BottomBar publishes the height it covers; 0 elsewhere). */
+  bottom: calc(var(--space-4) + max(var(--safe-bottom), var(--bottom-bar-h, 0px)));
   left: calc(var(--space-4) + var(--safe-left));
   display: flex;
   justify-content: flex-end;

@@ -168,6 +168,12 @@
   color: var(--text);
 }
 
+@media (pointer: coarse) {
+  .summary {
+    min-height: var(--touch);
+  }
+}
+
 .details[open] > .summary {
   margin-bottom: var(--space-2);
 }

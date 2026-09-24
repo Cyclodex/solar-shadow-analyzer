@@ -32,8 +32,8 @@ const report = (isIntersecting: boolean): void =>
   });
 
 let renders = 0;
-function Probe({ margin }: { margin?: string }) {
-  const [ref, near] = useNearViewport<HTMLDivElement>(margin);
+function Probe({ screens }: { screens?: number }) {
+  const [ref, near] = useNearViewport<HTMLDivElement>(screens);
   renders++;
   return <div ref={ref}>{near ? 'near' : 'far'}</div>;
 }
@@ -58,8 +58,8 @@ describe('useNearViewport', () => {
   });
 
   it('is near while printing (set synchronously in beforeprint)', () => {
-    render(<Probe margin="0px" />);
-    expect(observers[0].options?.rootMargin).toBe('0px');
+    render(<Probe screens={2} />);
+    expect(observers[0].options?.rootMargin).toBe('200% 0px');
     report(false);
     const before = renders;
     window.dispatchEvent(new Event('beforeprint'));
