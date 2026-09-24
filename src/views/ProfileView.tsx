@@ -5,7 +5,7 @@ import { HatchPattern } from '../components/svg/HatchPattern';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Lang, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
 import { useFloorPlacements, useFocusFloor, useInstant, useLayout, useSelectedUtc } from '../hooks/useModel';
-import { panelsOverlap } from '../model/geometry';
+import { criticalAngleKind, panelsOverlap } from '../model/geometry';
 import type { InstantState, PanelLayout } from '../model/types';
 import { toRad } from '../model/units';
 import { useConfig } from '../state/configStore';
@@ -119,7 +119,7 @@ function statusLines(
   if (sun.altitude <= 0) out.push(c.sunStates.night);
   else if (profileAngle === null) out.push(c.sunStates.behind);
   else {
-    const showCritical = scene.upper && layout.reach > 1e-6 && layout.verticalGap >= 0;
+    const showCritical = criticalAngleKind(layout, scene.upper !== null) === 'angle';
     const crit = showCritical ? ` (${t.critical(f.deg(layout.criticalProfileAngle, 1))})` : '';
     out.push(`${t.profile(f.deg(profileAngle, 1))}${crit}`);
   }

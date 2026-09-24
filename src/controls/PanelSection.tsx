@@ -7,7 +7,7 @@ import { useLayout } from '../hooks/useModel';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { LIMITS } from '../model/defaults';
-import { panelsOverlap } from '../model/geometry';
+import { criticalAngleKind, type CriticalAngleKind } from '../model/geometry';
 import { MODULE_PRESETS, findModulePreset, type ModulePreset } from '../model/presets';
 import type { PanelConfig } from '../model/types';
 import { useConfigSection, usePatch } from '../state/configStore';
@@ -238,14 +238,15 @@ function DerivedValues({ numFloors }: { numFloors: number }) {
   const layout = useLayout();
   const panels = useConfigSection('panels');
   const perFloorWp = panels.count * panels.powerWp;
-  const overlap = numFloors > 1 && panelsOverlap(layout);
+  const kind = criticalAngleKind(layout, numFloors > 1);
+  const overlap = kind === 'overlap';
   const cm = (m: number): string => f.unit(m * 100, 'cm');
-
-  let critical: string;
-  if (numFloors < 2) critical = t.criticalNone;
-  else if (overlap) critical = '–';
-  else if (layout.criticalProfileAngle >= 90) critical = c.never;
-  else critical = f.deg(layout.criticalProfileAngle, 1);
+  const critical: Record<CriticalAngleKind, string> = {
+    none: t.criticalNone,
+    overlap: '–',
+    never: c.never,
+    angle: f.deg(layout.criticalProfileAngle, 1),
+  };
 
   const rows: { key: string; term: string; value: string; info?: string; tone?: 'bad' }[] = [
     { key: 'row', term: t.rowWidth, value: f.unit(layout.rowWidth, 'm', 2) },
@@ -261,7 +262,7 @@ function DerivedValues({ numFloors }: { numFloors: number }) {
         : { key: 'gap', term: t.clearance, value: cm(layout.verticalGap), info: t.clearanceInfo },
     );
   }
-  rows.push({ key: 'critical', term: t.critical, value: critical, info: t.criticalInfo });
+  rows.push({ key: 'critical', term: t.critical, value: critical[kind], info: t.criticalInfo });
 
   return (
     <div className={sections.group}>

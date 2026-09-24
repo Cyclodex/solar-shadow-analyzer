@@ -3,7 +3,7 @@ import { Skeleton } from '../components/Skeleton';
 import { cssVars } from '../components/cssVars';
 import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
-import { panelsOverlap, substringBeamLoss } from '../model/geometry';
+import { criticalAngleKind, substringBeamLoss, type CriticalAngleKind } from '../model/geometry';
 import {
   useAnnualInputsPending,
   useEconomics,
@@ -197,16 +197,14 @@ export function KpiBar() {
     }
   }
   const profile = instant.profileAngle;
-  const critical = layout.criticalProfileAngle;
   // The critical angle only exists for a row above that does not overlap this one.
-  const profileSub =
-    numFloors < 2
-      ? t.profileNone
-      : panelsOverlap(layout)
-        ? t.profileOverlap
-        : critical >= 90
-          ? t.profileNever
-          : t.profileSub(f.deg(critical, 1));
+  const profileSubs: Record<CriticalAngleKind, string> = {
+    none: t.profileNone,
+    overlap: t.profileOverlap,
+    never: t.profileNever,
+    angle: t.profileSub(f.deg(layout.criticalProfileAngle, 1)),
+  };
+  const profileSub = profileSubs[criticalAngleKind(layout, numFloors > 1)];
 
   const headingId = useId();
   const skeleton = <Skeleton width="7ch" height="1.1em" />;
