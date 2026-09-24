@@ -21,7 +21,8 @@ async function renderLoaded(): Promise<HTMLElement> {
   return screen.findByRole('toolbar', { name: 'Kamera' }, { timeout: 10_000 });
 }
 
-describe('Scene3D stage (DOM parts)', () => {
+// The first test pays for loading three.js/R3F (several seconds in jsdom on a slow CI runner).
+describe('Scene3D stage (DOM parts)', { timeout: 20_000 }, () => {
   beforeEach(() => {
     resetStores();
   });

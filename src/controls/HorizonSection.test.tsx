@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createObstacle } from '../model/defaults';
 import { MAX_OBSTACLES } from '../model/share';
 import { useTerrainLoader } from '../hooks/useTerrain';
@@ -107,12 +107,17 @@ describe('HorizonSection', () => {
     });
 
     it('keeps the error when the retry fails again', async () => {
+      // HTTP 404 is permanent: no tile retries, so no backoff delays in this test.
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async () => new Response(null, { status: 404 })),
+      );
       render(<WithLoader />);
-      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'), RETRY_WAIT);
+      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));
       fireEvent.click(screen.getByRole('button', { name: 'Erneut versuchen' }));
       expect(useDataStore.getState().terrain.status).toBe('loading');
-      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'), RETRY_WAIT);
-      expect(useDataStore.getState().terrain.error).toMatch(/network disabled/);
+      await waitFor(() => expect(useDataStore.getState().terrain.status).toBe('error'));
+      expect(useDataStore.getState().terrain.error).toMatch(/HTTP 404/);
     });
 
     it('toggles the terrain horizon', () => {
