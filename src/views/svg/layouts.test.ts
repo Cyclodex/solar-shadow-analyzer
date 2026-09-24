@@ -18,7 +18,6 @@ import {
   type Box,
   type Pt,
 } from './geometry2d';
-import { panelDepthBelowGround } from './geometryChecks';
 import { buildRow, clippedBox, hitSubstrings, moduleGrid, railLabel } from './panelShadowLayout';
 import { SUN_GLYPH_EXTENT } from './primitives';
 import {
@@ -262,16 +261,6 @@ describe('front view layout', () => {
     // Without a sun nothing moves.
     const twelve = sky.hours.find((h) => h.label === '12');
     expect(hourLabels(sky, null, ext).find((l) => l.label === '12')?.y).toBe((twelve?.y ?? 0) - 7);
-  });
-
-  it('measures how far ground-floor panels would reach into the ground', () => {
-    const depth = (c: Config): number => panelDepthBelowGround(panelLayout(c), floorPlacements(c));
-    expect(depth(DEFAULT_CONFIG)).toBe(0);
-    // 113.4 cm module at θ 20°: drop 106.6 cm against a 100 cm railing.
-    expect(depth(config({ lowestFloor: 0 }, { tiltFromVertical: 20 }))).toBeCloseTo(0.0656, 4);
-    // Portrait 176.2 cm at θ 45°: drop 124.6 cm.
-    expect(depth(config({ lowestFloor: 0 }, { width: 113.4, length: 176.2 }))).toBeCloseTo(0.2459, 4);
-    expect(depth(config({ lowestFloor: 0 }))).toBe(0);
   });
 
   it('shows the shaded share only where the sun reaches the row', () => {

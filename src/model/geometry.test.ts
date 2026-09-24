@@ -6,6 +6,7 @@ import {
   floorPlacements,
   instantState,
   instantStateFromSun,
+  panelDepthBelowGround,
   panelLayout,
   panelsOverlap,
   profileAngle,
@@ -14,7 +15,7 @@ import {
   sunInFacade,
   toFacade,
 } from './geometry';
-import { DEFAULT_CONFIG } from './defaults';
+import { DEFAULT_CONFIG, LIMITS } from './defaults';
 import { emptyHorizon } from './horizon';
 import { sunPosition, sunVectorEnu } from './sun';
 import type {
@@ -319,6 +320,39 @@ describe('floorPlacements', () => {
       expect(f.center.n).toBeCloseTo(1.5 + half * Math.SQRT1_2, 12);
       expect(f.center.z).toBeCloseTo((1 + k) * 2.8 + 1 - half * Math.SQRT1_2, 12);
     });
+  });
+});
+
+describe('panelDepthBelowGround', () => {
+  const depth = (c: Config): number => panelDepthBelowGround(panelLayout(c), floorPlacements(c));
+
+  it('is 0 while the lowest row stays above ground (default: 1st floor; ground floor at θ 45°)', () => {
+    expect(depth(DEFAULT_CONFIG)).toBe(0);
+    expect(depth(cfg({ building: { lowestFloor: 0 } }))).toBe(0);
+    expect(panelDepthBelowGround(panelLayout(DEFAULT_CONFIG), [])).toBe(0);
+  });
+
+  it('measures how far ground-floor panels reach below the terrain', () => {
+    // 113.4 cm module at θ 20°: drop 106.6 cm against a 100 cm railing.
+    expect(depth(cfg({ building: { lowestFloor: 0 }, panels: { tiltFromVertical: 20 } }))).toBeCloseTo(
+      0.0656,
+      4,
+    );
+    // Portrait 176.2 cm at θ 45°: drop 124.6 cm.
+    expect(depth(cfg({ building: { lowestFloor: 0 }, panels: { width: 113.4, length: 176.2 } }))).toBeCloseTo(
+      0.2459,
+      4,
+    );
+  });
+
+  it('only the lowest row counts: from the 1st floor up the railing top is above the maximum drop', () => {
+    const longest = { tiltFromVertical: 0, length: LIMITS.panels.length.max };
+    const lowest = {
+      floorHeight: LIMITS.building.floorHeight.min,
+      railingHeight: LIMITS.building.railingHeight.min,
+    };
+    expect(depth(cfg({ building: { ...lowest, lowestFloor: 1 }, panels: longest }))).toBe(0);
+    expect(depth(cfg({ building: { ...lowest, lowestFloor: 0 }, panels: longest }))).toBeCloseTo(2, 12);
   });
 });
 

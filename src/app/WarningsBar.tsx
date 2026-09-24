@@ -2,9 +2,9 @@ import { useEffect, useRef, type ReactNode } from 'react';
 import { Button } from '../components/Button';
 import { AlertIcon, InfoIcon } from '../components/icons';
 import { useCommon } from '../i18n/common';
-import { useFormat, useMessages, type Messages } from '../i18n';
-import { panelsOverlap } from '../model/geometry';
-import { useLayout } from '../hooks/useModel';
+import { floorLabel, useFormat, useLang, useMessages, type Messages } from '../i18n';
+import { panelDepthBelowGround, panelsOverlap } from '../model/geometry';
+import { useFloorPlacements, useLayout } from '../hooks/useModel';
 import { useConfig } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useShareLinkStore } from '../state/shareLinkStore';
@@ -13,7 +13,9 @@ import styles from './WarningsBar.module.css';
 const de = {
   region: 'Hinweise',
   overlap: (drop: string, height: string) =>
-    `Die Panelreihen überlappen sich physisch: Ein Panel reicht ${drop} nach unten, der Stockwerkabstand beträgt nur ${height}. Neigung erhöhen oder kürzere Module wählen.`,
+    `Die Panelreihen überlappen sich physisch: Ein Panel reicht ${drop} nach unten, die Stockwerkhöhe beträgt nur ${height}. Neigung erhöhen oder kürzere Module wählen.`,
+  belowGround: (depth: string, floor: string, firstFloor: string) =>
+    `Die Panels der untersten Reihe (${floor}) reichen ${depth} unter das Terrain – physisch nicht möglich. Neigung erhöhen, kürzere Module oder Querformat wählen, das Geländer erhöhen oder das unterste Panel-Stockwerk auf ${firstFloor} setzen.`,
   terrainError: 'Der Geländehorizont konnte nicht geladen werden. Es wird ohne Gelände gerechnet.',
   terrainLoading: 'Geländehorizont wird geladen …',
   weatherError: (year: number) =>
@@ -38,6 +40,8 @@ const messages: Messages<typeof de> = {
     region: 'Notices',
     overlap: (drop, height) =>
       `The panel rows physically overlap: a panel reaches ${drop} down, but the floor-to-floor height is only ${height}. Increase the tilt or choose shorter modules.`,
+    belowGround: (depth, floor, firstFloor) =>
+      `The panels of the lowest row (${floor}) reach ${depth} below ground level – physically impossible. Increase the tilt, choose shorter modules or landscape mounting, raise the railing, or set the lowest panel floor to ${firstFloor}.`,
     terrainError: 'The terrain horizon could not be loaded. Calculating without terrain.',
     terrainLoading: 'Loading terrain horizon …',
     weatherError: (year) =>
@@ -74,8 +78,10 @@ export function WarningsBar() {
   const t = useMessages(messages);
   const c = useCommon();
   const f = useFormat();
+  const lang = useLang();
   const config = useConfig();
   const layout = useLayout();
+  const placements = useFloorPlacements();
   const terrain = useDataStore((s) => s.terrain);
   const weather = useDataStore((s) => s.weather);
   const link = useShareLinkStore();
@@ -145,6 +151,19 @@ export function WarningsBar() {
       text: t.overlap(f.unit(layout.drop * 100, 'cm'), f.unit(layout.floorHeight * 100, 'cm')),
     });
   }
+  // Also with a single floor. From 5 mm on, as in the views' notice (shown as at least "1 cm").
+  const depth = panelDepthBelowGround(layout, placements);
+  if (depth >= 0.005) {
+    notices.push({
+      id: 'below-ground',
+      tone: 'bad',
+      text: t.belowGround(
+        f.unit(depth * 100, 'cm'),
+        floorLabel(placements[0].storey, lang),
+        floorLabel(1, lang),
+      ),
+    });
+  }
   if (weather.status === 'error' && weather.usingFallback) {
     notices.push({
       id: 'weather-error',
@@ -167,7 +186,7 @@ export function WarningsBar() {
   return (
     // Always rendered so that the live region exists before notices appear; collapses when empty.
     <section className={styles.bar} aria-label={t.region}>
-      <div role="status">
+      <div role="status" aria-atomic="false">
         <ul className={styles.list}>
           {notices.map((n) => (
             <NoticeItem
@@ -209,7 +228,9 @@ function NoticeItem({
         {detail && (
           <details className={styles.details}>
             <summary>{detailLabel}</summary>
-            <code>{detail}</code>
+            <code lang="en" translate="no">
+              {detail}
+            </code>
           </details>
         )}
         {actions && <span className={styles.actions}>{actions}</span>}

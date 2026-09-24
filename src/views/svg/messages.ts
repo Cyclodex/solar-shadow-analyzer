@@ -10,7 +10,7 @@ const de = {
   relSide: (deg: string, side: 'left' | 'right') =>
     `${deg} ${side === 'left' ? 'links' : 'rechts'} der Fassadennormalen`,
   relCenter: 'genau vor der Fassade',
-  shaded: (pct: string) => `${pct} verschattet`,
+  shaded: (pct: string) => `${pct} der Fläche verschattet`,
   unshaded: 'unverschattet',
   noFloorAbove: 'keine Panels darüber',
   behindFacade: 'hinter der Fassade',
@@ -32,7 +32,7 @@ export const viewMessages: Messages<ViewText> = {
     sunHigh: (alt) => `Sun ${alt} high`,
     relSide: (deg, side) => `${deg} ${side} of the facade normal`,
     relCenter: 'straight in front of the facade',
-    shaded: (pct) => `${pct} shaded`,
+    shaded: (pct) => `${pct} of the area shaded`,
     unshaded: 'unshaded',
     noFloorAbove: 'no panels above',
     behindFacade: 'behind the facade',

@@ -1,5 +1,13 @@
 import type { ReactNode } from 'react';
-import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../i18n';
+import {
+  compassPoint,
+  displayLocationName,
+  floorLabel,
+  useFormat,
+  useLang,
+  useMessages,
+  type Messages,
+} from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useSelectedUtc } from '../hooks/useModel';
 import type { ShadingModel } from '../model/types';
@@ -76,7 +84,7 @@ const messages: Messages<typeof de> = {
     facade: 'Facade orientation',
     floors: 'Floors with panels',
     floorsValue: (n, lowest) => `${n}, lowest: ${lowest}`,
-    floorHeight: 'Floor height',
+    floorHeight: 'Floor-to-floor height',
     railingHeight: 'Railing height',
     balconyDepth: 'Balcony depth',
     panels: 'Panels',
@@ -147,9 +155,6 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
   const created = new Intl.DateTimeFormat(f.locale, { dateStyle: 'long', timeStyle: 'short' }).format(
     printedAt,
   );
-  const lat = `${f.num(Math.abs(loc.latitude), 4)}° ${loc.latitude < 0 ? 'S' : 'N'}`;
-  const lonDir = loc.longitude < 0 ? 'W' : lang === 'de' ? 'O' : 'E';
-  const lon = `${f.num(Math.abs(loc.longitude), 4)}° ${lonDir}`;
   // Tariffs keep up to 4 decimals (e.g. 0.3214), otherwise 2.
   const perKwh = (v: number): string => {
     const digits = Math.abs(v * 100 - Math.round(v * 100)) > 1e-9 ? 4 : 2;
@@ -167,8 +172,8 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
         <Group
           title={t.location}
           items={[
-            [t.name, loc.name],
-            [t.coordinates, `${lat}, ${lon}`],
+            [t.name, displayLocationName(loc, f)],
+            [t.coordinates, f.coords(loc.latitude, loc.longitude, 4)],
             [t.elevation, f.unit(loc.elevation, 'm')],
             [t.timezone, loc.timezone],
           ]}

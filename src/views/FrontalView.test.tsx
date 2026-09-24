@@ -75,7 +75,7 @@ describe('FrontalView', () => {
     const texts = svgTexts(svg);
     // Lower floor partially shaded, top floor never shaded by panels.
     expect(texts.some((t) => /^[1-9]\d*\s%$/.test(t))).toBe(true);
-    expect(svg).toHaveAccessibleDescription(/1\. OG \d+\s% verschattet/);
+    expect(svg).toHaveAccessibleDescription(/1\. OG \d+\s% der Fläche verschattet/);
     expect(svg).toHaveAccessibleDescription(/2\. OG unverschattet \(keine Panels darüber\)/);
   });
 

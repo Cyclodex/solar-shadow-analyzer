@@ -1,7 +1,7 @@
 import { Button } from '../components/Button';
 import { LogoIcon, MoonIcon, SunIcon } from '../components/icons';
 import { Segmented } from '../components/Segmented';
-import { compassPoint, useFormat, useLang, useMessages, type Messages } from '../i18n';
+import { compassPoint, displayLocationName, useFormat, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useConfig } from '../state/configStore';
 import { useUiStore } from '../state/uiStore';
@@ -37,7 +37,7 @@ export function Header() {
   const { location, building, panels } = useConfig();
 
   const summary = [
-    location.name,
+    displayLocationName(location, f),
     t.facade(f.deg(building.facadeAzimuth), compassPoint(building.facadeAzimuth, lang)),
     c.floorsCount(building.numFloors),
     `${panels.count} × ${f.unit(panels.powerWp, 'Wp')}`,

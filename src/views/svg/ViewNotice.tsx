@@ -2,8 +2,7 @@ import type { ReactNode } from 'react';
 import { AlertIcon, InfoIcon } from '../../components/icons';
 import { useFloorPlacements, useLayout } from '../../hooks/useModel';
 import { floorLabel, useFormat, useLang } from '../../i18n';
-import { panelsOverlap } from '../../model/geometry';
-import { panelDepthBelowGround } from './geometryChecks';
+import { panelDepthBelowGround, panelsOverlap } from '../../model/geometry';
 import { useViewText } from './messages';
 import s from './svg.module.css';
 
