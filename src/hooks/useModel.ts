@@ -29,8 +29,10 @@ import {
   DEFAULT_SWEEP_TILTS,
   dailyProfile,
   heatmapStats,
-  shadeHeatmap,
+  shadeHeatmapFromGrid,
+  sunGrid,
   type HeatmapStats,
+  type SunGrid,
 } from '../model/analysis';
 import { economics } from '../model/economics';
 import { clearSkyIrradiance } from '../model/irradiance';
@@ -76,7 +78,15 @@ const heatmapCache = createCache<HeatmapData>(4);
 const heatmapStatsCache = createCache<HeatmapStats>(4);
 const dailyCache = createCache<DailyProfilePoint[]>(4);
 const economicsCache = createCache<EconomicsResult>(3);
-const floorModelCache = createCache<FloorModel>(3);
+// Live (instant power, daily profile) and deferred (simulation) configs both hit it while a slider moves.
+const floorModelCache = createCache<FloorModel>(4);
+// Sun positions shared by every tilt/geometry step: the heatmap's day × slot grid (site + year) and the
+// weather series' sun track (site + facade + series).
+const sunGridCache = createCache<SunGrid>(2);
+const sunTrackCache = createCache<SunTrack>(2);
+
+/** Heatmap resolution: local clock slots of 10 minutes. */
+const HEATMAP_SLOT_MINUTES = 10;
 
 /** Drops all shared model caches (tests). */
 export function clearModelCaches(): void {
@@ -93,6 +103,8 @@ export function clearModelCaches(): void {
     dailyCache,
     economicsCache,
     floorModelCache,
+    sunGridCache,
+    sunTrackCache,
   ]) {
     c.clear();
   }
@@ -118,6 +130,28 @@ function horizonsOf(config: Config, terrain: TerrainSource): HorizonProfile[] {
     horizon.terrainEnabled ? terrain : null,
   ];
   return horizonsCache.get(deps, () => floorHorizonsWithTerrain(config, terrain));
+}
+
+/** Floor model (layout, horizons, sky view factors) shared by the instant power, daily profile and simulation. */
+function floorModelOf(config: Config, horizons: HorizonProfile[]): FloorModel {
+  const { panels, building, system } = config;
+  return floorModelCache.get([panels, building, system, horizons], () => createFloorModel(config, horizons));
+}
+
+/** Sun track of a weather series (site + facade only, so every tilt and geometry step reuses it). */
+function trackOf(config: Config, weather: WeatherSeries): SunTrack {
+  const { latitude, longitude } = config.location;
+  return sunTrackCache.get([latitude, longitude, config.building.facadeAzimuth, weather], () =>
+    sunTrack(config, weather),
+  );
+}
+
+/** Sun positions of the heatmap grid (10-min slots of every day of `year`; site only). */
+function sunGridOf(config: Config, year: number): SunGrid {
+  const { latitude, longitude, timezone } = config.location;
+  return sunGridCache.get([latitude, longitude, timezone, year], () =>
+    sunGrid(latitude, longitude, timezone, year, HEATMAP_SLOT_MINUTES),
+  );
 }
 
 /** Terrain input of the horizons: profiles per floor height, or the single site profile. */
@@ -203,10 +237,7 @@ export function useInstantPower(): number[] {
   const horizons = useHorizons();
   const instant = useInstant();
   const date = useTimeStore((s) => s.date);
-  const { panels, building, system } = config;
-  const model = floorModelCache.get([panels, building, system, horizons], () =>
-    createFloorModel(config, horizons),
-  );
+  const model = floorModelOf(config, horizons);
   return useMemo(() => {
     const { altitude, azimuth } = instant.sun;
     const sample = clearSkyIrradiance(altitude, dayOfYear(date));
@@ -301,7 +332,14 @@ export function useSimulation(): SimulationResult | null {
   const { latitude, longitude, timezone } = config.location;
   return simulationCache.get(
     [latitude, longitude, timezone, building, panels, system, horizons, weather],
-    () => simulateYear(config, weather, horizons),
+    () =>
+      simulateYear(
+        config,
+        weather,
+        horizons,
+        {},
+        { model: floorModelOf(config, horizons), track: trackOf(config, weather) },
+      ),
   );
 }
 
@@ -380,7 +418,7 @@ function createSweep(req: SweepRequest): { points: TiltSweepPoint[]; done: () =>
     points,
     done: () => points.length === DEFAULT_SWEEP_TILTS.length,
     step: () => {
-      track ??= sunTrack(config, weather);
+      track ??= trackOf(config, weather);
       const tiltFromVertical = DEFAULT_SWEEP_TILTS[points.length];
       const c: Config = { ...config, panels: { ...config.panels, tiltFromVertical } };
       const floorsKwh = annualFloorKwh(
@@ -518,27 +556,30 @@ export function useTiltSweep(enabled = true): TiltSweepResult | null {
 }
 
 /**
- * Shade heatmap (day × 10-min local slot) of `floor` (default: focus floor) for config.weather.year.
- * Geometry only (no weather), so it is available immediately. With enabled = false nothing is computed
- * and null is returned (e.g. `useDeferredValue(true, false)` to keep it out of the first render).
+ * Shade heatmap (day × 10-min local slot) of `floor` (default: the shaded floor, see useShadedFloor) for
+ * config.weather.year. Geometry only (no weather), so it is available immediately; the sun positions are
+ * cached per site and year (sunGrid), so a tilt or geometry step only re-evaluates the shade. With
+ * enabled = false nothing is computed and null is returned (e.g. `useDeferredValue(true, false)` to keep
+ * it out of the first render).
  */
 export function useHeatmap(floor?: number): HeatmapData;
 export function useHeatmap(floor: number | undefined, enabled: boolean): HeatmapData | null;
 export function useHeatmap(floor?: number, enabled = true): HeatmapData | null {
   const { config, horizons } = useDeferredInputs();
-  const focus = useFocusFloor();
+  const shaded = useShadedFloor();
   if (!enabled) return null;
-  const k = clamp(Math.round(floor ?? focus), 0, config.building.numFloors - 1);
+  const k = clamp(Math.round(floor ?? shaded), 0, config.building.numFloors - 1);
   const { building, panels } = config;
-  const { latitude, longitude, timezone } = config.location;
-  const year = config.weather.year;
-  return heatmapCache.get(
-    [latitude, longitude, timezone, building, panelGeometryKey(panels), horizons, year, k],
-    () => shadeHeatmap(config, horizons, year, k, 10),
+  const grid = sunGridOf(config, config.weather.year);
+  return heatmapCache.get([grid, building, panelGeometryKey(panels), horizons, k], () =>
+    shadeHeatmapFromGrid(grid, config, horizons, k),
   );
 }
 
-/** Lit/shaded hours (total and per month) of useHeatmap(floor); null (not computed) when disabled. */
+/**
+ * Lit/shaded hours (total and per month) of useHeatmap(floor) (default: the shaded floor); null (not
+ * computed) when disabled.
+ */
 export function useHeatmapStats(floor?: number): HeatmapStats;
 export function useHeatmapStats(floor: number | undefined, enabled: boolean): HeatmapStats | null;
 export function useHeatmapStats(floor?: number, enabled = true): HeatmapStats | null {
@@ -547,7 +588,10 @@ export function useHeatmapStats(floor?: number, enabled = true): HeatmapStats | 
   return heatmapStatsCache.get([heatmap], () => heatmapStats(heatmap));
 }
 
-/** Clear-sky power and shade per floor over the day `date` (default: selected date), 10-min steps. */
+/**
+ * Clear-sky power and shade per floor over the day `date` (default: selected date), 10-min steps. Shares
+ * the floor model with useInstantPower.
+ */
 export function useDailyProfile(date?: string): DailyProfilePoint[] {
   const config = useConfig();
   const horizons = useHorizons();
@@ -556,7 +600,7 @@ export function useDailyProfile(date?: string): DailyProfilePoint[] {
   const { building, panels, system } = config;
   const { latitude, longitude, timezone } = config.location;
   return dailyCache.get([d, latitude, longitude, timezone, building, panels, system, horizons], () =>
-    dailyProfile(config, d, horizons),
+    dailyProfile(config, d, horizons, 10, floorModelOf(config, horizons)),
   );
 }
 
