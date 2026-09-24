@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { encode } from 'fast-png';
+import { LIMITS } from './defaults';
 import {
   EARTH_RADIUS_M,
   REFRACTION_K,
@@ -591,29 +592,37 @@ describe('fetchTerrainHorizon', () => {
 
   it('keeps the most recently used results in localStorage, not the first downloaded ones', async () => {
     const f = mockFetch(png);
+    // A small cache keeps this test fast; the eviction logic is the same for the default size.
+    const max = 3;
     // Sites 1e-4° apart share the tiles in memory; each has its own result cache entry.
-    const site = (i: number) =>
-      fetchTerrainHorizon(SITE.latitude + i * 1e-4, SITE.longitude, { fetchImpl: f.impl });
+    const site = (i: number, onProgress?: (done: number) => void) =>
+      fetchTerrainHorizon(SITE.latitude + i * 1e-4, SITE.longitude, {
+        fetchImpl: f.impl,
+        cacheMax: max,
+        onProgress,
+      });
     const cached = (): number =>
       Array.from({ length: localStorage.length }, (_, i) => localStorage.key(i)).filter((k) =>
         k?.startsWith('ssa.terrain'),
       ).length;
-    for (let i = 0; i < TERRAIN_RESULT_CACHE_MAX; i++) await site(i);
-    expect(cached()).toBe(TERRAIN_RESULT_CACHE_MAX);
+    for (let i = 0; i < max; i++) await site(i);
+    expect(cached()).toBe(max);
     await site(0); // cache hit: marks site 0 as used
-    await site(TERRAIN_RESULT_CACHE_MAX); // evicts site 1, the least recently used one
-    expect(cached()).toBe(TERRAIN_RESULT_CACHE_MAX);
+    await site(max); // evicts site 1, the least recently used one
+    expect(cached()).toBe(max);
     // Served from localStorage: a hit reports only the final progress.
     clearTerrainTileCache();
-    const progress = (i: number) => {
+    const progress = async (i: number) => {
       const p: number[] = [];
-      return fetchTerrainHorizon(SITE.latitude + i * 1e-4, SITE.longitude, {
-        fetchImpl: f.impl,
-        onProgress: (done) => p.push(done),
-      }).then(() => p);
+      await site(i, (done) => p.push(done));
+      return p;
     };
     expect(await progress(0)).toEqual([total]);
     expect((await progress(1))[0]).toBe(0); // recomputed
+  });
+
+  it('keeps by default one result per panel floor for several sites', () => {
+    expect(TERRAIN_RESULT_CACHE_MAX).toBeGreaterThanOrEqual(2 * LIMITS.building.numFloors.max);
   });
 
   it('does not serve the cached result of a nearby location (regression: key was rounded to 0.001°)', async () => {

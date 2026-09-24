@@ -402,6 +402,8 @@ export interface FetchTerrainOptions {
   onProgress?: (done: number, total: number) => void;
   /** Read/write the localStorage result cache. Default true. */
   cache?: boolean;
+  /** Results kept in the localStorage cache (least recently used evicted). Default TERRAIN_RESULT_CACHE_MAX. */
+  cacheMax?: number;
 }
 
 /** Result of fetchTerrainHorizon. */
@@ -558,7 +560,7 @@ function readCachedResult(key: string): TerrainHorizonResult | null {
   }
 }
 
-function writeCachedResult(key: string, r: TerrainHorizonResult): void {
+function writeCachedResult(key: string, r: TerrainHorizonResult, max: number): void {
   const storage = getStorage();
   if (!storage) return;
   const value: Omit<StoredResult, 't'> = {
@@ -567,7 +569,7 @@ function writeCachedResult(key: string, r: TerrainHorizonResult): void {
     siteElevation: Math.round(r.siteElevation * 10) / 10,
     tiles: r.tiles,
   };
-  writeCacheEntry(storage, RESULT_CACHE_PREFIX, TERRAIN_RESULT_CACHE_MAX, key, value);
+  writeCacheEntry(storage, RESULT_CACHE_PREFIX, max, key, value);
 }
 
 /**
@@ -638,6 +640,6 @@ export async function fetchTerrainHorizon(
 
   const horizon = computeHorizon(createTileSampler(tiles), { latitude, longitude, observerHeight });
   const result: TerrainHorizonResult = { ...horizon, tiles: total };
-  if (useCache) writeCachedResult(key, result);
+  if (useCache) writeCachedResult(key, result, opts.cacheMax ?? TERRAIN_RESULT_CACHE_MAX);
   return result;
 }
