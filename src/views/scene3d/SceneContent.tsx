@@ -1,4 +1,4 @@
-import { useEffect, useMemo, type RefObject } from 'react';
+import { memo, useEffect, useMemo, type RefObject } from 'react';
 import type { Format, Lang } from '../../i18n';
 import type { HorizonProfile, InstantState, Obstacle } from '../../model/types';
 import { Building } from './Building';
@@ -50,7 +50,8 @@ export interface SceneContentProps {
   apiRef: RefObject<CameraApi | null>;
 }
 
-export function SceneContent({
+/** Memoised: SceneStage passes unchanged props while the stage is off screen (frozen scene). */
+export const SceneContent = memo(function SceneContent({
   palette,
   dims,
   instant,
@@ -173,4 +174,4 @@ export function SceneContent({
       <CameraRig dims={dims} sun={instant.sun} preset={preset} onUserMove={onUserMove} apiRef={apiRef} />
     </>
   );
-}
+});

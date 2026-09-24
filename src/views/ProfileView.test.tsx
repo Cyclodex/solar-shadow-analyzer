@@ -152,6 +152,25 @@ describe('ProfileView', () => {
     expect(onSlabTop).toHaveLength(1);
   });
 
+  it('draws the critical-angle label above the sun ray, with a halo', () => {
+    // 24 Sept, 12:00 (default facade): the ray at 51° crosses the "kritisch 68.1°" label.
+    useTimeStore.setState({ date: '2026-09-24', minutes: 12 * 60 });
+    const { container } = render(<ProfileView />);
+    const svg = figureOf(container);
+    const ray = Array.from(svg.querySelectorAll('path')).find((p) =>
+      /(^|\s)_ray_/.test(p.getAttribute('class') ?? ''),
+    );
+    const label = Array.from(svg.querySelectorAll('text')).find((el) =>
+      /^kritisch \d/.test(el.textContent ?? ''),
+    );
+    expect(ray).toBeDefined();
+    expect(label).toBeDefined();
+    expect(label?.getAttribute('class')).toMatch(/(^|\s)_halo_/);
+    // Later in the document = painted on top.
+    expect(ray!.compareDocumentPosition(label!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(svgTexts(svg).filter((tx) => /^kritisch/.test(tx))).toHaveLength(1);
+  });
+
   it('shows at least the analysed pair of floors and names it when not all fit', () => {
     setConfig({ building: { numFloors: 8, floorHeight: 500 } });
     useUiStore.getState().setFocusFloor(3);

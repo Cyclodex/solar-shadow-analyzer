@@ -6,6 +6,7 @@ import type { FloorPlacement, HorizonProfile, InstantState, PanelLayout } from '
 import { angleDiff, normalizeDeg } from '../../model/units';
 import {
   boxHitsCircle,
+  boxesOverlap,
   clipPolyline,
   fitUniform,
   labelBox,
@@ -136,7 +137,7 @@ export function buildSky(
   const altTicks: number[] = [];
   for (let a = step; a < altTop; a += step) altTicks.push(a);
 
-  const compass = [-90, -45, 0, 45, 90].map((rel) => {
+  const allCompass = [-90, -45, 0, 45, 90].map((rel) => {
     const az = normalizeDeg(facadeAz + rel);
     return {
       x: x(rel),
@@ -144,6 +145,13 @@ export function buildSky(
       strong: rel === 0,
     };
   });
+  // Narrow figures (320 px phones): leave out a direction that would run into the bold facade direction
+  // (estimated bold width, 4 px clear on each side).
+  const main = allCompass[2];
+  const mainBox = labelBox(main.x, 0, textWidth(main.label, FONT) * 1.12 + 8, 'middle', FONT);
+  const compass = allCompass.filter(
+    (c) => c.strong || !boxesOverlap(labelBox(c.x, 0, textWidth(c.label, FONT), 'middle', FONT), mainBox),
+  );
 
   return {
     box,

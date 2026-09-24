@@ -15,6 +15,7 @@ import {
   OVERLAY_VERTICES_PER_RECT,
   SUN_VIEW_DISTANCE,
   SUN_VIEW_MIN_ALTITUDE,
+  TOUCH_LABEL_MIN_PX,
   boxCorners,
   cameraPose,
   equivalentDistance,
@@ -27,6 +28,7 @@ import {
   obstacleBox,
   sceneDims,
   segmentHitsBox,
+  spriteHeightForPx,
   skyState,
   sunDirection,
   sunPathSegments,
@@ -438,5 +440,34 @@ describe('model shade overlay', () => {
       expect(most).toBeGreaterThan(0);
       expect(most).toBeLessThanOrEqual(MAX_OVERLAY_RECTS);
     }
+  });
+});
+
+describe('label size on screen', () => {
+  /** On-screen height in px of a vertical segment of height h centred at view depth d. */
+  const projectedPx = (h: number, d: number, fov: number, viewHeight: number): number => {
+    const camera = new PerspectiveCamera(fov, 0.8, 0.1, 1000);
+    camera.updateMatrixWorld();
+    const top = new Vector3(0.3, h / 2, -d).project(camera);
+    const bottom = new Vector3(0.3, -h / 2, -d).project(camera);
+    return ((top.y - bottom.y) / 2) * viewHeight;
+  };
+
+  it('gives the world height that appears the requested pixels tall at a view depth', () => {
+    for (const [fov, viewHeight, depth] of [
+      [DEFAULT_FOV, 341, 18],
+      [DEFAULT_FOV, 300, 42],
+      [10, 614, 150],
+    ]) {
+      const h = spriteHeightForPx(TOUCH_LABEL_MIN_PX, fov, viewHeight, depth);
+      expect(projectedPx(h, depth, fov, viewHeight)).toBeCloseTo(TOUCH_LABEL_MIN_PX, 6);
+    }
+  });
+
+  it('gives the size at distance 1 for screen-size sprites', () => {
+    // A 24 px pill (12 px text) in the 341 px tall iPhone SE canvas; half the size in a canvas twice as tall.
+    const h = spriteHeightForPx(24, DEFAULT_FOV, 341);
+    expect(projectedPx(h, 1, DEFAULT_FOV, 341)).toBeCloseTo(24, 6);
+    expect(spriteHeightForPx(24, DEFAULT_FOV, 682)).toBeCloseTo(h / 2, 12);
   });
 });
