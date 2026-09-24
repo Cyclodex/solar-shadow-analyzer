@@ -1,14 +1,14 @@
 import type { HeatmapData, Lang, SimulationResult, TiltSweepPoint } from '../model/types';
 import { dateFromDayOfYear, formatMinutes } from '../model/time';
-import { floorLabel, monthNames, type Messages } from '../i18n';
-import { CSV_MIME, toCsv, type CsvCell } from './csv';
+import { floorLabel, LOCALES, monthNames, type Messages } from '../i18n';
+import { CSV_MIME, csvFormatForLocale, spreadsheetLocale, toCsv, type CsvCell, type CsvFormat } from './csv';
 import { downloadText } from './download';
 
 // ─────────────────────────────────────────────
 // RESULT TABLES AS CSV
 // Pure builders (model results → CSV text) plus a download helper. Headers follow the UI language;
-// numbers stay machine-readable (dot decimal, no grouping, rounded). Separator: ';' for German
-// (list separator of Swiss/German spreadsheet software), ',' for English.
+// numbers are rounded, without grouping. Separator and decimal mark (CsvFormat) follow the user's
+// regional settings, which is what spreadsheet software uses to open the file: userCsvFormat().
 // ─────────────────────────────────────────────
 
 const de = {
@@ -42,9 +42,14 @@ const messages: Messages<typeof de> = {
   },
 };
 
-/** CSV field separator for the UI language. */
-export function csvSeparator(lang: Lang): ',' | ';' {
-  return lang === 'de' ? ';' : ',';
+/**
+ * CSV dialect for the user's spreadsheet software, from the browser's preferred languages (the best
+ * available hint at the regional settings); the app's locale for `lang` when the browser gives none.
+ */
+export function userCsvFormat(lang: Lang): CsvFormat {
+  const nav = typeof navigator === 'undefined' ? undefined : navigator;
+  const languages = nav?.languages?.length ? nav.languages : nav?.language ? [nav.language] : [];
+  return csvFormatForLocale(spreadsheetLocale(languages, LOCALES[lang]));
 }
 
 /** Rounds for export (avoids float noise such as 12.300000000000001; −0 → 0). */
@@ -60,7 +65,7 @@ const kwh = (v: number): number => round(v, 2);
  * Monthly AC yield per floor (bottom floor first) and in total: yield, yield without shading by the
  * floor above, shading loss; last row = year (model totals).
  */
-export function monthlyResultsCsv(sim: SimulationResult, lang: Lang): string {
+export function monthlyResultsCsv(sim: SimulationResult, lang: Lang, format: CsvFormat): string {
   const t = messages[lang];
   const months = monthNames(lang, 'long');
   const header: CsvCell[] = [t.month];
@@ -103,7 +108,7 @@ export function monthlyResultsCsv(sim: SimulationResult, lang: Lang): string {
     round(unshadedYear > 0 ? (sim.totalShadingLossKwh / unshadedYear) * 100 : 0, 2),
   );
   rows.push(annual);
-  return toCsv(rows, { separator: csvSeparator(lang) });
+  return toCsv(rows, format);
 }
 
 /**
@@ -114,6 +119,7 @@ export function tiltSweepCsv(
   points: readonly TiltSweepPoint[],
   storeys: readonly number[],
   lang: Lang,
+  format: CsvFormat,
 ): string {
   const t = messages[lang];
   const header: CsvCell[] = [
@@ -131,7 +137,7 @@ export function tiltSweepCsv(
       kwh(p.totalKwh),
     ]);
   }
-  return toCsv(rows, { separator: csvSeparator(lang) });
+  return toCsv(rows, format);
 }
 
 /**
@@ -140,7 +146,7 @@ export function tiltSweepCsv(
  * empty otherwise (night, sun behind the facade or below the horizon). Slots without direct sun on any
  * day of the year are left out.
  */
-export function heatmapCsv(h: HeatmapData, lang: Lang): string {
+export function heatmapCsv(h: HeatmapData, lang: Lang, format: CsvFormat): string {
   const t = messages[lang];
   const slots: number[] = [];
   for (let s = 0; s < h.slotsPerDay; s++) {
@@ -160,7 +166,7 @@ export function heatmapCsv(h: HeatmapData, lang: Lang): string {
     }
     rows.push(row);
   }
-  return toCsv(rows, { separator: csvSeparator(lang) });
+  return toCsv(rows, format);
 }
 
 /** Downloads CSV text with a UTF-8 BOM (spreadsheet software then detects the encoding). */

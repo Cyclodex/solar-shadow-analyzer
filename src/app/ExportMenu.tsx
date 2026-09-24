@@ -11,11 +11,11 @@ import {
   type KeyboardEvent,
   type RefObject,
 } from 'react';
-import { createPortal } from 'react-dom';
 import { Button } from '../components/Button';
 import { DownloadIcon } from '../components/icons';
 import { floorLabel, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
+import { useShadedFloor } from '../charts/lib/floors';
 import { useFloorPlacements, useHeatmap, useSimulation, useTiltSweep } from '../hooks/useModel';
 import type { Config } from '../model/types';
 import {
@@ -25,10 +25,16 @@ import {
   type ConfigImportError,
 } from '../export/configFile';
 import { exportFilename } from '../export/filenames';
-import { downloadCsv, heatmapCsv, monthlyResultsCsv, tiltSweepCsv } from '../export/resultsCsv';
-import { PrintReport } from '../export/PrintReport';
-import { printReport, usePrintMode } from '../export/print';
-import { useConfig, useConfigStore } from '../state/configStore';
+import {
+  downloadCsv,
+  heatmapCsv,
+  monthlyResultsCsv,
+  tiltSweepCsv,
+  userCsvFormat,
+} from '../export/resultsCsv';
+import { PrintRoot } from '../export/PrintRoot';
+import { printReport } from '../export/print';
+import { useConfig, useConfigSection, useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import styles from './ExportMenu.module.css';
 
@@ -112,6 +118,8 @@ type Notice =
 const EDGE = 8;
 /** Success notices disappear after this time (unless focus is inside). */
 const NOTICE_MS = 8000;
+/** Weather series coordinates are rounded to 0.01° (model/weather.ts). */
+const SERIES_COORD_TOLERANCE = 0.01;
 
 /** Shifts an absolutely positioned popover horizontally so it stays inside the viewport. */
 function useKeepInViewport(ref: RefObject<HTMLElement | null>, active: boolean): void {
@@ -128,17 +136,40 @@ function useKeepInViewport(ref: RefObject<HTMLElement | null>, active: boolean):
   }, [ref, active]);
 }
 
+/**
+ * True while the weather series does not belong to the configured year and location: a new series is
+ * loading (the previous one is kept meanwhile, see useWeatherLoader) or the config has just changed.
+ * Yield results then still come from the old series and must not be exported under the new labels.
+ */
+function useWeatherStale(): boolean {
+  const { year } = useConfigSection('weather');
+  const { latitude, longitude } = useConfigSection('location');
+  return useDataStore(({ weather: { status, series } }) => {
+    if (status === 'loading') return true;
+    if (!series) return false;
+    return (
+      series.year !== year ||
+      Math.abs(series.latitude - latitude) > SERIES_COORD_TOLERANCE ||
+      Math.abs(series.longitude - longitude) > SERIES_COORD_TOLERANCE
+    );
+  });
+}
+
 /** Menu entries; data-dependent entries are disabled until their results exist. */
 function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
   const c = useCommon();
   const lang = useLang();
   const config = useConfig();
+  // Yield results of a stale weather series are not offered (see useWeatherStale).
+  const stale = useWeatherStale();
   const simulation = useSimulation();
-  const clearSky = useDataStore((s) => s.weather.series?.source === 'clear-sky');
   // The tilt sweep may not be cached yet: compute it after the menu has painted.
   const ready = useDeferredValue(true, false);
   const sweep = useTiltSweep(ready);
-  const heatmap = useHeatmap();
+  // The series the sweep was computed on (useTiltSweep defers it the same way): names the file.
+  const sweepSeries = useDeferredValue(useDataStore((s) => s.weather.series));
+  // Same floor as the heatmap card: never the top floor (no panels above it, so never shaded).
+  const heatmap = useHeatmap(useShadedFloor());
   const placements = useFloorPlacements();
   const name = config.location.name;
   const heatmapFloor = floorLabel(placements[heatmap.floor]?.storey ?? heatmap.floor, lang);
@@ -165,35 +196,38 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
           id: 'csv-monthly',
           label: t.monthly,
           format: c.exportCsv,
-          disabled: !simulation,
-          detail: simulation ? undefined : t.computing,
+          disabled: stale || !simulation,
+          detail: stale || !simulation ? t.computing : undefined,
           onSelect: () => {
-            if (!simulation) return;
+            if (stale || !simulation) return;
             const parts = [
               name,
               simulation.year,
               ...(simulation.source === 'clear-sky' ? [t.clearSkyTag] : []),
             ];
-            downloadCsv(monthlyResultsCsv(simulation, lang), exportFilename('monthly', lang, parts, 'csv'));
+            downloadCsv(
+              monthlyResultsCsv(simulation, lang, userCsvFormat(lang)),
+              exportFilename('monthly', lang, parts, 'csv'),
+            );
           },
         },
         {
           id: 'csv-tilt',
           label: t.tiltSweep,
           format: c.exportCsv,
-          disabled: !sweep,
-          detail: sweep ? undefined : t.computing,
+          disabled: stale || !sweep || !sweepSeries,
+          detail: stale || !sweep || !sweepSeries ? t.computing : undefined,
           onSelect: () => {
-            if (!sweep) return;
+            if (stale || !sweep || !sweepSeries) return;
             const storeys = placements.map((p) => p.storey);
+            const parts = [
+              name,
+              sweepSeries.year,
+              ...(sweepSeries.source === 'clear-sky' ? [t.clearSkyTag] : []),
+            ];
             downloadCsv(
-              tiltSweepCsv(sweep.points, storeys, lang),
-              exportFilename(
-                'tiltSweep',
-                lang,
-                [name, config.weather.year, ...(clearSky ? [t.clearSkyTag] : [])],
-                'csv',
-              ),
+              tiltSweepCsv(sweep.points, storeys, lang, userCsvFormat(lang)),
+              exportFilename('tiltSweep', lang, parts, 'csv'),
             );
           },
         },
@@ -203,7 +237,7 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
           format: c.exportCsv,
           onSelect: () =>
             downloadCsv(
-              heatmapCsv(heatmap, lang),
+              heatmapCsv(heatmap, lang, userCsvFormat(lang)),
               exportFilename('heatmap', lang, [name, heatmapFloor, heatmap.year], 'csv'),
             ),
         },
@@ -211,9 +245,7 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
     },
     {
       id: 'report',
-      items: [
-        { id: 'print', label: t.print, detail: t.printHint, onSelect: () => setTimeout(printReport, 0) },
-      ],
+      items: [{ id: 'print', label: t.print, detail: t.printHint, onSelect: () => void printReport() }],
     },
   ];
 }
@@ -389,7 +421,9 @@ function ImportNotice({
  * Export menu (menu button pattern): config JSON export/import, result tables as CSV, print report.
  * The button has aria-haspopup/aria-expanded; the menu takes focus, Arrow keys/Home/End/type-ahead
  * move, Escape closes and returns focus, Tab and outside clicks close. Unavailable entries stay
- * focusable with aria-disabled. Also mounts the print mode (light theme + inputs appendix).
+ * focusable with aria-disabled.
+ * Also mounts <PrintRoot/> (print mode for the menu item and the browser's print command) until the
+ * app shell renders it itself.
  */
 export function ExportMenu() {
   const t = useMessages(messages);
@@ -399,7 +433,6 @@ export function ExportMenu() {
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
-  const printedAt = usePrintMode();
 
   useEffect(() => {
     if (!open && !notice) return;
@@ -477,7 +510,7 @@ export function ExportMenu() {
       )}
       {notice && <ImportNotice notice={notice} t={t} onClose={closeNotice} onUndo={undo} />}
       <input ref={fileRef} type="file" accept={CONFIG_FILE_ACCEPT} hidden onChange={onFile} />
-      {printedAt !== null && createPortal(<PrintReport printedAt={printedAt} />, document.body)}
+      <PrintRoot />
     </div>
   );
 }
