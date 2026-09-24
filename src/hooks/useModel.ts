@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { flushSync } from 'react-dom';
 import type {
   Config,
   DailyProfilePoint,
@@ -522,9 +523,9 @@ function asUpdating(result: TiltSweepResult): TiltSweepResult {
 }
 
 // ── Background sweep ──
-// A sweep takes 50–150 ms (19 annual runs); on a slow phone several times that. When a previous result
-// can be shown meanwhile, the new one is computed in slices of ≈ SWEEP_SLICE_MS between frames instead of
-// blocking the main thread; the hooks re-render when it is done.
+// A sweep takes 50–150 ms (19 annual runs); on a slow phone several times that (≈ 0.4–0.5 s at 4× CPU
+// throttling). It is always computed in slices of ≈ SWEEP_SLICE_MS between frames instead of blocking the
+// main thread; the hooks re-render when it is done.
 
 /** Time budget of one background slice (one tilt at least). */
 const SWEEP_SLICE_MS = 8;
@@ -543,9 +544,14 @@ function subscribeSweeps(listener: () => void): () => void {
 
 const getSweepVersion = (): number => sweepVersion;
 
+/** Remembers the sweep shown for `req`: the "previous" result for the next change of the inputs. */
+function rememberSweep(req: SweepRequest, result: TiltSweepResult): void {
+  lastSweep = { req, result };
+}
+
 function finishSweep(req: SweepRequest, points: TiltSweepPoint[]): TiltSweepResult {
   const result = sweepCache.get(req.deps, () => sweepResult(points, req.weather));
-  lastSweep = { req, result };
+  rememberSweep(req, result);
   return result;
 }
 
@@ -560,11 +566,32 @@ function runSweepSlice(): void {
     sweepTimer = setTimeout(runSweepSlice, 0);
     return;
   }
+  completeSweep(job);
+}
+
+function completeSweep(job: NonNullable<typeof sweepJob>): void {
   sweepJob = null;
   finishSweep(job.req, job.sweep.points);
   sweepVersion++;
   sweepListeners.forEach((l) => l());
 }
+
+/**
+ * Finishes the pending background sweep at once and re-renders its hooks. For the print snapshot (taken
+ * right after the beforeprint handlers) and for tests (`act(() => flushSweeps())`).
+ */
+export function flushSweeps(): void {
+  const job = sweepJob;
+  if (!job) return;
+  clearTimeout(sweepTimer);
+  sweepTimer = undefined;
+  while (!job.sweep.done()) job.sweep.step();
+  completeSweep(job);
+}
+
+// Registered on load, i.e. before the print mode's own handler (export/print.ts): a sweep still computing
+// (e.g. printed right after a location change) is in the report.
+if (typeof window !== 'undefined') window.addEventListener('beforeprint', () => flushSync(flushSweeps));
 
 /** Starts (or keeps) the background sweep for `req`; a job for other inputs is dropped. */
 function startSweep(req: SweepRequest): void {
@@ -596,8 +623,9 @@ function previousSweep(req: SweepRequest): TiltSweepResult | null {
  * dragging the tilt never recomputes it. Other building/panel/system/horizon changes are applied once
  * they have settled (SWEEP_SETTLE_MS), so a slider drag computes one sweep instead of one per step, and
  * that sweep runs in the background in short slices. Meanwhile the previous result is returned with
- * `updating: true`. The first result for a site and weather series is computed at once. Null without a
- * matching weather series; pass enabled = false to skip the computation (returns null).
+ * `updating: true`. The first result for a site and weather series is computed in the background as well
+ * and is null until then (the hook re-renders when it is done). Null without a matching weather series;
+ * pass enabled = false to skip the computation (returns null).
  */
 export function useTiltSweep(enabled = true): TiltSweepResult | null {
   const { config, terrain } = useDeferredInputs();
@@ -615,17 +643,14 @@ export function useTiltSweep(enabled = true): TiltSweepResult | null {
   const previous = req && !cached ? previousSweep(req) : null;
   useEffect(() => {
     if (!req) return;
-    if (cached)
-      lastSweep = { req, result: cached }; // the one shown: "previous" for the next change
-    else if (previous) startSweep(req);
+    if (cached) rememberSweep(req, cached);
+    else startSweep(req);
   });
   if (!req || !weather) return null;
   const updating = !sameDeps(sweepRequest(config, shape, terrain, weather).deps, req.deps);
   if (cached) return updating ? asUpdating(cached) : cached;
   if (previous) return asUpdating(previous);
-  const sweep = createSweep(req);
-  while (!sweep.done()) sweep.step();
-  return finishSweep(req, sweep.points);
+  return null; // first result for this site and weather: computing in the background (startSweep)
 }
 
 /**

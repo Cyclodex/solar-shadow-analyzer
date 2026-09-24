@@ -5,10 +5,13 @@ import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
-import { PROVISIONAL_DELAY_MS } from '../hooks/useModel';
+import { PROVISIONAL_DELAY_MS, flushSweeps } from '../hooks/useModel';
 import { TiltControl } from './TiltControl';
 
 const { latitude, longitude } = DEFAULT_CONFIG.location;
+
+/** Finishes the tilt sweep computed in the background (useTiltSweep). */
+const finishSweep = (): void => act(() => flushSweeps());
 
 describe('TiltControl', () => {
   beforeEach(() => {
@@ -25,6 +28,8 @@ describe('TiltControl', () => {
   it('shows the optimum of the loaded weather series', () => {
     useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(latitude, longitude, 2025) });
     render(<TiltControl />);
+    expect(screen.getByText('Optimum wird berechnet …')).toBeInTheDocument();
+    finishSweep();
     expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
     expect(screen.getByText(/höchster Jahresertrag aller Stockwerke: [\d’']+\skWh/)).toBeInTheDocument();
   });
@@ -32,6 +37,7 @@ describe('TiltControl', () => {
   it('hides the optimum while new weather data load (the old series belongs to another site)', () => {
     useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(latitude, longitude, 2025) });
     render(<TiltControl />);
+    finishSweep();
     expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
 
     // Location change: the loader keeps the previous series while the new one loads.
@@ -46,6 +52,7 @@ describe('TiltControl', () => {
     act(() =>
       useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(46.0, 8.95, 2025) }),
     );
+    finishSweep();
     expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
     expect(screen.queryByText('Optimum wird berechnet …')).not.toBeInTheDocument();
   });
@@ -60,6 +67,7 @@ describe('TiltControl', () => {
     expect(screen.getByText('Optimum wird berechnet …')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /übernehmen/ })).not.toBeInTheDocument();
     act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    finishSweep();
     expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
   });
 
@@ -91,6 +99,7 @@ describe('TiltControl', () => {
     vi.useFakeTimers();
     useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(latitude, longitude, 2025) });
     render(<TiltControl />);
+    finishSweep();
     const optimum = screen.getByText(/^Optimum: \d+°$/);
     const region = optimum.closest('[aria-live]')!;
     expect(region).not.toHaveAttribute('aria-busy');

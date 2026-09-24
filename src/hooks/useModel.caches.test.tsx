@@ -7,7 +7,14 @@ import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
-import { useDailyProfile, useHeatmap, useInstantPower, useSimulation, useTiltSweep } from './useModel';
+import {
+  flushSweeps,
+  useDailyProfile,
+  useHeatmap,
+  useInstantPower,
+  useSimulation,
+  useTiltSweep,
+} from './useModel';
 
 // Count the expensive model builders (mocks are hoisted above the imports); the hooks must share their results.
 vi.mock('../model/analysis', async (importOriginal) => {
@@ -38,6 +45,8 @@ describe('model hook caches', () => {
       sim: useSimulation(),
       sweep: useTiltSweep(),
     }));
+    act(() => flushSweeps()); // the sweep's first result is computed in the background
+    expect(result.current.sweep?.points).toHaveLength(19);
     expect(sunGrid).toHaveBeenCalledTimes(1);
     // One track for the simulation and all 19 sweep tilts.
     expect(sunTrack).toHaveBeenCalledTimes(1);

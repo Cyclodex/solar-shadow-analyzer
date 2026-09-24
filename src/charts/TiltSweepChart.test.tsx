@@ -6,6 +6,7 @@ import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
 import { estimateTextWidth } from '../components/svg/text';
+import { flushSweeps } from '../hooks/useModel';
 import { TiltSweepChart } from './TiltSweepChart';
 
 // Focus in these tests stands for keyboard focus (jsdom's :focus-visible depends on earlier events).
@@ -16,6 +17,13 @@ const series = clearSkyYear(DEFAULT_CONFIG.location.latitude, DEFAULT_CONFIG.loc
 const PLOT_W = 532;
 const tilt = (): number => useConfigStore.getState().config.panels.tiltFromVertical;
 const xOf = (theta: number): number => 52 + (theta / 90) * PLOT_W;
+
+/** Renders the chart and finishes its tilt sweep (computed in the background, useTiltSweep). */
+function renderChart(): ReturnType<typeof render> {
+  const r = render(<TiltSweepChart />);
+  act(() => flushSweeps());
+  return r;
+}
 
 /** x-span of an SVG text (jsdom has no layout: estimated width, as the chart does without a canvas). */
 function textSpan(el: Element): [number, number] {
@@ -43,13 +51,13 @@ describe('TiltSweepChart', () => {
   });
 
   it('waits for weather data', () => {
-    render(<TiltSweepChart />);
+    renderChart();
     expect(screen.getByText('Der Neigungsvergleich wird berechnet …')).toBeInTheDocument();
   });
 
   it('draws floors, total, current tilt and optimum', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    const { container } = render(<TiltSweepChart />);
+    const { container } = renderChart();
     const img = screen.getByRole('img', { name: 'Neigungsvergleich' });
     expect(img).toHaveAccessibleDescription(
       /^Jahresertrag je Neigung von 0° bis 90°\. Optimum aller Stockwerke bei \d+° mit [\d’']+\skWh\. Aktuelle Neigung 45°\. 2\. OG: Optimum \d+°/,
@@ -63,7 +71,7 @@ describe('TiltSweepChart', () => {
 
   it('lists θ, β = 90° − θ and the yields per row in the data table (units in the headers)', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    renderChart();
     const details = screen.getByText('Werte als Tabelle').closest('details');
     if (!details) throw new Error('disclosure expected');
     act(() => {
@@ -89,7 +97,7 @@ describe('TiltSweepChart', () => {
   it('is busy while annual inputs load and while the sweep updates after another input changed', () => {
     vi.useFakeTimers();
     useDataStore.getState().setWeather({ status: 'ready', series });
-    const { container } = render(<TiltSweepChart />);
+    const { container } = renderChart();
     const busy = (): boolean => container.querySelector('[aria-busy="true"]') !== null;
     // Settle timer, then the background sweep it starts.
     const settle = (): void => {
@@ -121,14 +129,14 @@ describe('TiltSweepChart', () => {
       obstacles: [{ ...createObstacle('o1', 'Haus'), distance: 6, height: 10 }],
     });
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    renderChart();
     expect(screen.getByText(/Gerechnet in 5°-Schritten\./)).toBeInTheDocument();
     expect(screen.queryByText(/Hindernis-Horizonte/)).not.toBeInTheDocument();
   });
 
   it('click on the chart sets the tilt (snapped to the 5° points)', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    renderChart();
     const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
     const x = (26 / 90) * PLOT_W;
     fireEvent.pointerMove(slider, { clientX: x, clientY: 40, pointerId: 1, pointerType: 'mouse' });
@@ -142,7 +150,7 @@ describe('TiltSweepChart', () => {
   it('arrow keys step through the sweep points', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
     useConfigStore.getState().patch('panels', { tiltFromVertical: 47 });
-    render(<TiltSweepChart />);
+    renderChart();
     const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
     expect(slider).toHaveAttribute('aria-valuetext', 'θ 47°, β 43°');
     fireEvent.keyDown(slider, { key: 'ArrowRight' });
@@ -158,7 +166,7 @@ describe('TiltSweepChart', () => {
 
   it('places the optimum label where neither the θ marker nor a curve crosses it', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    const { container } = render(<TiltSweepChart />);
+    const { container } = renderChart();
     const label = screen.getByText(/^Optimum \d+°$/);
     const [x0, x1] = textSpan(label);
     const markerX = xOf(45);
@@ -180,7 +188,7 @@ describe('TiltSweepChart', () => {
 
   it('keyboard focus shows the tooltip; Escape hides it without changing the tilt', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    render(<TiltSweepChart />);
+    renderChart();
     const slider = screen.getByRole('slider', { name: 'Neigung im Neigungsvergleich' });
     act(() => slider.focus());
     expect(screen.getByText('θ 45° · β 45°')).toBeInTheDocument();
@@ -194,7 +202,7 @@ describe('TiltSweepChart', () => {
 
   it('the total line can be hidden', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
-    const { container } = render(<TiltSweepChart />);
+    const { container } = renderChart();
     const toggle = screen.getByRole('button', { name: 'Summe zeigen' });
     expect(toggle).toHaveAttribute('aria-pressed', 'true');
     fireEvent.click(toggle);
