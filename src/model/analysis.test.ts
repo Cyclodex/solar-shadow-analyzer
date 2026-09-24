@@ -12,7 +12,7 @@ import {
   tiltSweep,
 } from './analysis';
 import { simulateYear, floorPowerW, createFloorModel, sunTrack } from './simulation';
-import { sunPosition } from './sun';
+import { solarPath, sunPosition } from './sun';
 import { clearSkyYear, CLEAR_SKY_TEMPERATURE_C } from './weather';
 import { clearSkyIrradiance, poaIrradiance, skyViewFactor } from './irradiance';
 import { instantState, panelLayout, shadeFromAbove, sunInFacade } from './geometry';
@@ -216,12 +216,16 @@ describe('dailyProfile', () => {
     expect(shaded).toBeGreaterThan(0);
   });
 
-  it('gives the same result with a prebuilt floor model', () => {
+  it('gives the same result with a prebuilt floor model and solar path', () => {
     const c = cfg({ building: { numFloors: 3 } });
     c.horizon.obstacles = [{ ...createObstacle('a', 'A'), offsetAlong: -10, distance: 15, height: 12 }];
     const hz = floorHorizons(c, null);
     const date = '2025-02-10';
-    expect(dailyProfile(c, date, hz, 10, createFloorModel(c, hz))).toEqual(dailyProfile(c, date, hz, 10));
+    const expected = dailyProfile(c, date, hz, 10);
+    expect(dailyProfile(c, date, hz, 10, createFloorModel(c, hz))).toEqual(expected);
+    const { latitude, longitude, timezone } = c.location;
+    const path = solarPath(date, latitude, longitude, timezone, 10);
+    expect(dailyProfile(c, date, hz, 10, createFloorModel(c, hz), path)).toEqual(expected);
   });
 
   it('skips the missing hour on the spring-forward day', () => {

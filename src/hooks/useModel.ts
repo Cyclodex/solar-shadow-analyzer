@@ -23,6 +23,7 @@ import {
   createFloorModel,
   createStepResult,
   evaluateStep,
+  stepMonths,
   sunTrack,
   type FloorModel,
   type SunTrack,
@@ -86,6 +87,8 @@ const floorModelCache = createCache<FloorModel>(4);
 // weather series' sun track (site + facade + series).
 const sunGridCache = createCache<SunGrid>(2);
 const sunTrackCache = createCache<SunTrack>(2);
+// Local month of every weather step (series + time zone): shared by every simulation of a series.
+const monthsCache = createCache<Uint8Array>(2);
 
 /** Heatmap resolution: local clock slots of 10 minutes. */
 const HEATMAP_SLOT_MINUTES = 10;
@@ -107,6 +110,7 @@ export function clearModelCaches(): void {
     floorModelCache,
     sunGridCache,
     sunTrackCache,
+    monthsCache,
   ]) {
     c.clear();
   }
@@ -146,6 +150,12 @@ function trackOf(config: Config, weather: WeatherSeries): SunTrack {
   return sunTrackCache.get([latitude, longitude, config.building.facadeAzimuth, weather], () =>
     sunTrack(config, weather),
   );
+}
+
+/** Local month (0…11) of every step of a weather series in the site's time zone (no geometry). */
+function monthsOf(config: Config, weather: WeatherSeries): Uint8Array {
+  const tz = config.location.timezone;
+  return monthsCache.get([weather, tz], () => stepMonths(weather.timesUtc, weather.year, tz));
 }
 
 /** Sun positions of the heatmap grid (10-min slots of every day of `year`; site only). */
@@ -409,7 +419,11 @@ export function useSimulation(): SimulationResult | null {
         weather,
         horizons,
         {},
-        { model: floorModelOf(config, horizons), track: trackOf(config, weather) },
+        {
+          model: floorModelOf(config, horizons),
+          track: trackOf(config, weather),
+          months: monthsOf(config, weather),
+        },
       ),
   );
 }
@@ -698,7 +712,17 @@ export function useDailyProfile(date?: string): DailyProfilePoint[] {
   const { building, panels, system } = config;
   const { latitude, longitude, timezone } = config.location;
   return dailyCache.get([d, latitude, longitude, timezone, building, panels, system, horizons], () =>
-    dailyProfile(config, d, horizons, 10, floorModelOf(config, horizons)),
+    dailyProfile(
+      config,
+      d,
+      horizons,
+      10,
+      floorModelOf(config, horizons),
+      // Same sun positions as useSolarPath(d): a tilt or geometry step only re-evaluates the power.
+      solarPathCache.get([d, latitude, longitude, timezone, 10], () =>
+        solarPath(d, latitude, longitude, timezone, 10),
+      ),
+    ),
   );
 }
 

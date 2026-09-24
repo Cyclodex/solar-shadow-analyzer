@@ -7,7 +7,7 @@ import type {
   WeatherSeries,
 } from './types';
 import { MS_PER_DAY, MS_PER_MINUTE, dayOfYear, dayOffsetsForYear, daysInYear } from './time';
-import { solarPath, sunPosition } from './sun';
+import { solarPath, sunPosition, type SolarPathPoint } from './sun';
 import { panelLayout, shadeFromAbove, sunInFacade } from './geometry';
 import { horizonAt } from './horizon';
 import { clearSkyIrradiance } from './irradiance';
@@ -209,7 +209,8 @@ export function tiltSweep(
  * Clear-sky AC power and shade per floor over the local day `date` (solarPath grid, 00:00–24:00 every
  * `stepMinutes`; clear sky as clearSkyIrradiance, air temperature CLEAR_SKY_TEMPERATURE_C).
  * floorsShade = shaded area fraction by the row above while the beam reaches that floor, else 0.
- * `model` = createFloorModel(config, horizons) (default options) when already built elsewhere.
+ * `model` = createFloorModel(config, horizons) (default options) and `path` = solarPath(date, site, stepMinutes)
+ * when already built elsewhere (neither the sun positions nor, for a tilt change, the path change).
  */
 export function dailyProfile(
   config: Config,
@@ -217,9 +218,14 @@ export function dailyProfile(
   horizons: readonly (HorizonProfile | null | undefined)[],
   stepMinutes = 10,
   model: FloorModel = createFloorModel(config, horizons),
+  path: readonly SolarPathPoint[] = solarPath(
+    date,
+    config.location.latitude,
+    config.location.longitude,
+    config.location.timezone,
+    stepMinutes,
+  ),
 ): DailyProfilePoint[] {
-  const { latitude, longitude, timezone } = config.location;
-  const path = solarPath(date, latitude, longitude, timezone, stepMinutes);
   const doy = dayOfYear(date);
   const out = createStepResult(model.numFloors);
   return path.map((p) => {

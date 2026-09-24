@@ -350,6 +350,8 @@ export interface PrebuiltInputs {
   model?: FloorModel;
   /** sunTrack(config, weather) — depends only on the site, the facade azimuth and the weather series. */
   track?: SunTrack;
+  /** stepMonths(weather.timesUtc, weather.year, config.location.timezone) — weather series + time zone only. */
+  months?: Uint8Array;
 }
 
 /**
@@ -368,7 +370,7 @@ export function simulateYear(
 ): SimulationResult {
   const model = prebuilt.model ?? createFloorModel(config, horizons, opts);
   const track = prebuilt.track ?? sunTrack(config, weather);
-  const months = stepMonths(weather.timesUtc, weather.year, config.location.timezone);
+  const months = prebuilt.months ?? stepMonths(weather.timesUtc, weather.year, config.location.timezone);
   const t = runYear(model, weather, track, months, true);
   const ratedKw = model.power.ratedW / 1000;
   const floors: FloorYield[] = [];

@@ -117,7 +117,7 @@ describe('simulateYear', () => {
     }
   });
 
-  it('gives the same result with a prebuilt floor model and sun track', () => {
+  it('gives the same result with a prebuilt floor model, sun track and step months', () => {
     const w = cloudyYear(3);
     const c = cfg({ building: { numFloors: 3 } });
     c.horizon.obstacles = [{ ...createObstacle('a', 'A'), offsetAlong: 10, distance: 20, height: 12 }];
@@ -128,6 +128,8 @@ describe('simulateYear', () => {
       simulateYear(c, w, hz, opts, { model: createFloorModel(c, hz, opts), track: sunTrack(c, w) }),
     ).toEqual(expected);
     expect(simulateYear(c, w, hz, opts, { track: sunTrack(c, w) })).toEqual(expected);
+    const months = stepMonths(w.timesUtc, w.year, c.location.timezone);
+    expect(simulateYear(c, w, hz, opts, { months })).toEqual(expected);
     expect(simulateYear(c, w, hz, {}, { model: createFloorModel(c, hz) })).toEqual(simulateYear(c, w, hz));
   });
 

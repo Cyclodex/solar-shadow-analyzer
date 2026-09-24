@@ -163,6 +163,128 @@ export interface SkyViewGrid {
 const KINK_SUBDIV = 8;
 
 /**
+ * The layout-independent part of a sky grid: cell edge angles, their sines and cosines, the kernel
+ * integrals and the sub-sample directions. Every tilt step rebuilds the grid (createFloorModel), so these
+ * ≈ 0.5 million trigonometric calls are computed once per grid shape instead (the values are identical).
+ */
+interface SkyGridTables {
+  nAlt: number;
+  nPhi: number;
+  step: number;
+  phiStart: number;
+  altEdges: Float64Array;
+  sinEdges: Float64Array;
+  /** Per altitude edge r (nAlt + 1): a = altEdges[r]·DEG, cos a, sin a. */
+  cosA: Float64Array;
+  sinA: Float64Array;
+  /** Per row (nAlt): ∫cos²a da, ∫sin a·cos a da, cos/sin of the mid altitude, sub-sample step. */
+  ic: Float64Array;
+  is: Float64Array;
+  cosAm: Float64Array;
+  sinAm: Float64Array;
+  ha: Float64Array;
+  /** Per row × KINK_SUBDIV: cos/sin of the sub-sample altitudes. */
+  subCosA: Float64Array;
+  subSinA: Float64Array;
+  /** Per column (nPhi): cos/sin of the left (0) and right (1) edge, sin φ1 − sin φ0, φ1 − φ0, mid φ, sub step. */
+  cosF0: Float64Array;
+  sinF0: Float64Array;
+  cosF1: Float64Array;
+  sinF1: Float64Array;
+  dSinF: Float64Array;
+  dF: Float64Array;
+  cosFm: Float64Array;
+  sinFm: Float64Array;
+  hf: Float64Array;
+  /** Per column × KINK_SUBDIV: cos/sin of the sub-sample azimuths. */
+  subCosF: Float64Array;
+  subSinF: Float64Array;
+}
+
+const skyGridTables = new Map<string, SkyGridTables>();
+
+function gridTables(nAlt: number, nPhi: number, step: number, phiStart: number): SkyGridTables {
+  const key = `${nAlt},${nPhi},${step},${phiStart}`;
+  const hit = skyGridTables.get(key);
+  if (hit) return hit;
+  const f = (n: number): Float64Array => new Float64Array(n);
+  const t: SkyGridTables = {
+    nAlt,
+    nPhi,
+    step,
+    phiStart,
+    altEdges: f(nAlt + 1),
+    sinEdges: f(nAlt + 1),
+    cosA: f(nAlt + 1),
+    sinA: f(nAlt + 1),
+    ic: f(nAlt),
+    is: f(nAlt),
+    cosAm: f(nAlt),
+    sinAm: f(nAlt),
+    ha: f(nAlt),
+    subCosA: f(nAlt * KINK_SUBDIV),
+    subSinA: f(nAlt * KINK_SUBDIV),
+    cosF0: f(nPhi),
+    sinF0: f(nPhi),
+    cosF1: f(nPhi),
+    sinF1: f(nPhi),
+    dSinF: f(nPhi),
+    dF: f(nPhi),
+    cosFm: f(nPhi),
+    sinFm: f(nPhi),
+    hf: f(nPhi),
+    subCosF: f(nPhi * KINK_SUBDIV),
+    subSinF: f(nPhi * KINK_SUBDIV),
+  };
+  for (let r = 0; r <= nAlt; r++) {
+    t.altEdges[r] = r * step;
+    t.sinEdges[r] = Math.sin(r * step * DEG);
+    const a = t.altEdges[r] * DEG;
+    t.cosA[r] = Math.cos(a);
+    t.sinA[r] = Math.sin(a);
+  }
+  for (let r = 0; r < nAlt; r++) {
+    const a0 = t.altEdges[r] * DEG;
+    const a1 = t.altEdges[r + 1] * DEG;
+    const am = (a0 + a1) / 2;
+    t.ic[r] = (a1 - a0) / 2 + (Math.sin(2 * a1) - Math.sin(2 * a0)) / 4; // ∫cos²a da
+    t.is[r] = (Math.sin(a1) ** 2 - Math.sin(a0) ** 2) / 2; // ∫sin a·cos a da
+    t.cosAm[r] = Math.cos(am);
+    t.sinAm[r] = Math.sin(am);
+    const ha = (a1 - a0) / KINK_SUBDIV;
+    t.ha[r] = ha;
+    for (let i = 0; i < KINK_SUBDIV; i++) {
+      const a = a0 + (i + 0.5) * ha;
+      t.subCosA[r * KINK_SUBDIV + i] = Math.cos(a);
+      t.subSinA[r * KINK_SUBDIV + i] = Math.sin(a);
+    }
+  }
+  for (let c = 0; c < nPhi; c++) {
+    const f0 = (phiStart + c * step) * DEG;
+    const f1 = f0 + step * DEG;
+    const fm = (f0 + f1) / 2;
+    t.cosF0[c] = Math.cos(f0);
+    t.sinF0[c] = Math.sin(f0);
+    t.cosF1[c] = Math.cos(f1);
+    t.sinF1[c] = Math.sin(f1);
+    t.dSinF[c] = Math.sin(f1) - Math.sin(f0);
+    t.dF[c] = f1 - f0;
+    t.cosFm[c] = Math.cos(fm);
+    t.sinFm[c] = Math.sin(fm);
+    const hf = (f1 - f0) / KINK_SUBDIV;
+    t.hf[c] = hf;
+    for (let j = 0; j < KINK_SUBDIV; j++) {
+      const fj = f0 + (j + 0.5) * hf;
+      t.subCosF[c * KINK_SUBDIV + j] = Math.cos(fj);
+      t.subSinF[c * KINK_SUBDIV + j] = Math.sin(fj);
+    }
+  }
+  if (skyGridTables.size >= 4) skyGridTables.clear();
+  skyGridTables.set(key, t);
+  return t;
+}
+
+/**
  * Cell weights of F = (1/π)∫ max(0, d·N)·V(d) dΩ over the sky (a > 0) for `layout`. Cells fully in front
  * of the panel use the exact integral of the cosine kernel, cells crossing the panel plane are sub-sampled.
  * Direction (a, φ) in the facade frame: d_n = cos a·cos φ, d_u = −cos a·sin φ, d_z = sin a (as sunInFacade).
@@ -179,58 +301,54 @@ export function skyViewGrid(layout: PanelLayout, opts: SkyViewOptions = {}): Sky
   const Nn = layout.normal.n;
   const Nz = layout.normal.z;
   const Nu = layout.normal.u;
+  const t = gridTables(nAlt, nPhi, step, phiStart);
+  const { cosA, sinA, subCosA, subSinA, subCosF, subSinF } = t;
 
-  const altEdges = new Float64Array(nAlt + 1);
-  const sinEdges = new Float64Array(nAlt + 1);
-  for (let r = 0; r <= nAlt; r++) {
-    altEdges[r] = r * step;
-    sinEdges[r] = Math.sin(r * step * DEG);
-  }
   const open = new Float64Array(nPhi * nAlt);
   const belowRow = new Float64Array(nPhi * nAlt);
-  const dN = (a: number, f: number): number =>
-    -Math.cos(a) * Math.sin(f) * Nu + Math.cos(a) * Math.cos(f) * Nn + Math.sin(a) * Nz;
+  // d·N of the direction (a, φ) from its cosines and sines.
+  const dN = (ca: number, sa: number, cf: number, sf: number): number =>
+    -ca * sf * Nu + ca * cf * Nn + sa * Nz;
   const d: FacadeVector = { u: 0, n: 0, z: 0 };
 
   for (let c = 0; c < nPhi; c++) {
-    const f0 = (phiStart + c * step) * DEG;
-    const f1 = f0 + step * DEG;
-    const fm = (f0 + f1) / 2;
+    const cf0 = t.cosF0[c];
+    const sf0 = t.sinF0[c];
+    const cf1 = t.cosF1[c];
+    const sf1 = t.sinF1[c];
     for (let r = 0; r < nAlt; r++) {
-      const a0 = altEdges[r] * DEG;
-      const a1 = altEdges[r + 1] * DEG;
-      const am = (a0 + a1) / 2;
-      const k00 = dN(a0, f0);
-      const k01 = dN(a0, f1);
-      const k10 = dN(a1, f0);
-      const k11 = dN(a1, f1);
+      const k00 = dN(cosA[r], sinA[r], cf0, sf0);
+      const k01 = dN(cosA[r], sinA[r], cf1, sf1);
+      const k10 = dN(cosA[r + 1], sinA[r + 1], cf0, sf0);
+      const k11 = dN(cosA[r + 1], sinA[r + 1], cf1, sf1);
       let w: number;
       if (Math.min(k00, k01, k10, k11) >= 0 && Nu === 0) {
         // ∫∫ (cos a·cos φ·N_n + sin a·N_z)·cos a da dφ over the cell, exact.
-        const ic = (a1 - a0) / 2 + (Math.sin(2 * a1) - Math.sin(2 * a0)) / 4; // ∫cos²a da
-        const is = (Math.sin(a1) ** 2 - Math.sin(a0) ** 2) / 2; // ∫sin a·cos a da
-        w = Nn * (Math.sin(f1) - Math.sin(f0)) * ic + Nz * (f1 - f0) * is;
+        w = Nn * t.dSinF[c] * t.ic[r] + Nz * t.dF[c] * t.is[r];
       } else if (Math.max(k00, k01, k10, k11) <= 0) {
         w = 0;
       } else {
         // Straddles the panel plane: midpoint rule on a KINK_SUBDIV² sub-grid.
-        const ha = (a1 - a0) / KINK_SUBDIV;
-        const hf = (f1 - f0) / KINK_SUBDIV;
+        const ha = t.ha[r];
+        const hf = t.hf[c];
         w = 0;
         for (let i = 0; i < KINK_SUBDIV; i++) {
-          const a = a0 + (i + 0.5) * ha;
-          for (let j = 0; j < KINK_SUBDIV; j++)
-            w += Math.max(0, dN(a, f0 + (j + 0.5) * hf)) * Math.cos(a) * ha * hf;
+          const ca = subCosA[r * KINK_SUBDIV + i];
+          const sa = subSinA[r * KINK_SUBDIV + i];
+          for (let j = 0; j < KINK_SUBDIV; j++) {
+            const k = c * KINK_SUBDIV + j;
+            w += Math.max(0, dN(ca, sa, subCosF[k], subSinF[k])) * ca * ha * hf;
+          }
         }
       }
       w /= Math.PI;
       const idx = c * nAlt + r;
       open[idx] = w;
       if (w > 0) {
-        const ca = Math.cos(am);
-        d.u = -ca * Math.sin(fm);
-        d.n = ca * Math.cos(fm);
-        d.z = Math.sin(am);
+        const ca = t.cosAm[r];
+        d.u = -ca * t.sinFm[c];
+        d.n = ca * t.cosFm[c];
+        d.z = t.sinAm[r];
         belowRow[idx] = w * (1 - rowAboveBlockedFraction(d, layout));
       }
     }
@@ -240,8 +358,8 @@ export function skyViewGrid(layout: PanelLayout, opts: SkyViewOptions = {}): Sky
     nPhi,
     nAlt,
     phiStartDeg: phiStart,
-    altEdges,
-    sinEdges,
+    altEdges: t.altEdges,
+    sinEdges: t.sinEdges,
     open,
     belowRow,
   };
