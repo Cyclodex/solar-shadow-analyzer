@@ -1,0 +1,12 @@
+/* Same look as the generic SelectField. */
+.field {
+  composes: field from '../../components/SelectField.module.css';
+}
+
+.label {
+  composes: label from '../../components/SelectField.module.css';
+}
+
+.select {
+  composes: select from '../../components/SelectField.module.css';
+}
