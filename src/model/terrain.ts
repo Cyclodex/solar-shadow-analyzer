@@ -457,6 +457,8 @@ export interface FetchTerrainHorizonsOptions extends Omit<FetchTerrainOptions, '
   beforeDownload?: () => Promise<void>;
   /** Computes the heights missing in the result cache. Default computeTerrainHorizons (this thread). */
   compute?: TerrainComputer;
+  /** Called with the heights found in the result cache before the missing ones are computed. */
+  onCached?: (cached: Record<number, TerrainHorizonResult>) => void;
 }
 
 /** Result of fetchTerrainHorizon. */
@@ -673,6 +675,20 @@ export async function fetchTerrainHorizon(
   return results[observerHeight];
 }
 
+/** The results of `observerHeights` at a site that are in the localStorage result cache (keyed by height). */
+export function cachedTerrainHorizons(
+  latitude: number,
+  longitude: number,
+  observerHeights: readonly number[],
+): Record<number, TerrainHorizonResult> {
+  const out: Record<number, TerrainHorizonResult> = {};
+  for (const h of observerHeights) {
+    const cached = readCachedResult(resultCacheKey(latitude, longitude, h));
+    if (cached) out[h] = cached;
+  }
+  return out;
+}
+
 /**
  * fetchTerrainHorizon for several observer heights of one site (keyed by height): each height comes from
  * the localStorage result cache if there, the others are computed together from one download (`compute`,
@@ -688,18 +704,14 @@ export async function fetchTerrainHorizons(
   const heights = [...new Set(opts.observerHeights ?? [DEFAULT_OBSERVER_HEIGHT_M])];
   const useCache = opts.cache ?? true;
   throwIfAborted(signal);
-  const out: Record<number, TerrainHorizonResult> = {};
-  const missing: number[] = [];
-  for (const h of heights) {
-    const cached = useCache ? readCachedResult(resultCacheKey(latitude, longitude, h)) : null;
-    if (cached) out[h] = cached;
-    else missing.push(h);
-  }
+  const out = useCache ? cachedTerrainHorizons(latitude, longitude, heights) : {};
+  const missing = heights.filter((h) => !out[h]);
   if (missing.length === 0) {
     const tiles = heights.length > 0 ? out[heights[0]].tiles : 0;
     onProgress?.(tiles, tiles);
     return out;
   }
+  if (missing.length < heights.length) opts.onCached?.({ ...out });
   if (opts.beforeDownload) {
     const ready = opts.beforeDownload();
     await (signal ? raceAbort(ready, signal) : ready);

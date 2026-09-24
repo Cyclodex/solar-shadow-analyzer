@@ -5,7 +5,7 @@ import { Spinner } from '../components/Spinner';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { LIMITS } from '../model/defaults';
-import { useResultsReady, useTiltSweep } from '../hooks/useModel';
+import { useAnnualResultsState, useTiltSweep } from '../hooks/useModel';
 import { useConfigSection, usePatch } from '../state/configStore';
 import styles from './TiltControl.module.css';
 
@@ -21,6 +21,7 @@ const de = {
   clearSky: '(klarer Himmel)',
   computing: 'Optimum wird berechnet …',
   sweepNote: 'Gerechnet in 5°-Schritten.',
+  provisional: 'vorläufig – Geländehorizont wird geladen',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -36,14 +37,17 @@ const messages: Messages<typeof de> = {
     clearSky: '(clear sky)',
     computing: 'Computing optimum …',
     sweepNote: 'Computed in 5° steps.',
+    provisional: 'provisional – loading terrain horizon',
   },
 };
 
 /**
  * Prominent tilt control (θ from vertical, β = 90° − θ as secondary hint) with the optimum tilt of the
- * tilt sweep (annual total of all floors) as slider mark and apply button. While the annual inputs are
- * still arriving (weather of a new site or year, terrain) a spinner replaces the optimum; while the sweep
- * is being updated after another input changed, the previous optimum is shown dimmed.
+ * tilt sweep (annual total of all floors) as slider mark and apply button. While the weather of a new site
+ * or year is still arriving a spinner replaces the optimum; while only the terrain horizon is (after
+ * PROVISIONAL_DELAY_MS), the optimum without it is shown dimmed and marked as provisional, without the
+ * apply button; while the sweep is being updated after another input changed, the previous optimum is
+ * shown dimmed.
  */
 export function TiltControl() {
   const t = useMessages(messages);
@@ -53,13 +57,15 @@ export function TiltControl() {
   const panels = useConfigSection('panels');
   const patch = usePatch();
   // While a new weather series loads, the store still holds the previous one (possibly of another site or
-  // year), and a newly arrived series or terrain horizon reaches the deferred sweep one render later: no
-  // optimum until the inputs are final (useResultsReady).
-  const ready = useResultsReady();
-  const sweep = useTiltSweep(ready);
+  // year), and a newly arrived series reaches the deferred sweep one render later: no optimum until the
+  // weather is final. While only the terrain horizon loads, the optimum is provisional.
+  const annualState = useAnnualResultsState();
+  const sweep = useTiltSweep(annualState !== 'loading');
+  const provisional = annualState === 'provisional';
   const theta = panels.tiltFromVertical;
   const optimum = sweep?.optimum;
   const updating = sweep?.updating === true;
+  const dimmed = updating || provisional;
   const setTilt = (v: number): void => patch('panels', { tiltFromVertical: v });
 
   return (
@@ -95,14 +101,14 @@ export function TiltControl() {
       <div className={styles.optimum} aria-live="polite" aria-busy={updating || undefined}>
         {sweep && optimum ? (
           <>
-            <div className={updating ? `${styles.optimumText} ${styles.updating}` : styles.optimumText}>
+            <div className={dimmed ? `${styles.optimumText} ${styles.updating}` : styles.optimumText}>
               <strong>{t.optimum(f.deg(optimum.tiltFromVertical))}</strong>
               <span className={styles.sub}>
                 {t.optimumSub(f.kwh(optimum.totalKwh))} {sweep.source === 'clear-sky' ? t.clearSky : ''}
               </span>
-              <span className={styles.sub}>{t.sweepNote}</span>
+              <span className={styles.sub}>{provisional ? t.provisional : t.sweepNote}</span>
             </div>
-            {optimum.tiltFromVertical === theta ? (
+            {provisional ? null : optimum.tiltFromVertical === theta ? (
               <span className={styles.badge}>{t.isOptimum}</span>
             ) : (
               <Button size="sm" onClick={() => setTilt(optimum.tiltFromVertical)}>

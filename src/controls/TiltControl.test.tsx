@@ -5,6 +5,7 @@ import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
+import { PROVISIONAL_DELAY_MS } from '../hooks/useModel';
 import { TiltControl } from './TiltControl';
 
 const { latitude, longitude } = DEFAULT_CONFIG.location;
@@ -60,6 +61,30 @@ describe('TiltControl', () => {
     expect(screen.queryByRole('button', { name: /übernehmen/ })).not.toBeInTheDocument();
     act(() => useDataStore.getState().setTerrain({ status: 'error' }));
     expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
+  });
+
+  it('shows the optimum without terrain as provisional, without the apply button', () => {
+    vi.useFakeTimers();
+    useConfigStore.getState().patch('panels', { tiltFromVertical: 5 });
+    useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+    useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(latitude, longitude, 2025) });
+    useDataStore.getState().setTerrain({ status: 'loading' });
+    render(<TiltControl />);
+    expect(screen.getByText('Optimum wird berechnet …')).toBeInTheDocument();
+    act(() => {
+      vi.advanceTimersByTime(PROVISIONAL_DELAY_MS);
+    });
+    for (let i = 0; i < 2; i++)
+      act(() => {
+        vi.runOnlyPendingTimers(); // the background sweep
+      });
+    expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
+    expect(screen.getByText('vorläufig – Geländehorizont wird geladen')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /übernehmen/ })).not.toBeInTheDocument();
+
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(screen.queryByText(/vorläufig/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /übernehmen/ })).toBeInTheDocument();
   });
 
   it('marks the previous optimum while the sweep is updated for another input', () => {

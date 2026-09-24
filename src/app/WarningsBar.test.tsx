@@ -95,6 +95,11 @@ describe('WarningsBar', () => {
     expect(screen.getByText('Details', { selector: 'summary' })).toBeInTheDocument();
     act(() => useDataStore.getState().setTerrain({ status: 'loading', error: null }));
     expect(notices()).toEqual(['Geländehorizont wird geladen …']);
+    // Download progress for the eyes; the live region does not announce every tile.
+    act(() => useDataStore.getState().setTerrain({ progress: 7 / 16 }));
+    expect(notices()).toEqual(['Geländehorizont wird geladen … 44 %']);
+    const pct = screen.getByText((_, el) => el?.tagName === 'SPAN' && el.textContent === ' 44 %');
+    expect(pct).toHaveAttribute('aria-hidden', 'true');
   });
 
   it('offers to restore the configuration a share link replaced', () => {

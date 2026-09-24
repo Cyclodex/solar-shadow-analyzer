@@ -9,6 +9,7 @@ import {
   TERRARIUM_URL,
   TILE_CONCURRENCY,
   TILE_RETRIES,
+  cachedTerrainHorizons,
   clearTerrainTileCache,
   computeHorizon,
   computeHorizons,
@@ -758,14 +759,18 @@ describe('fetchTerrainHorizons', () => {
       return computeTerrainHorizons(lat, lon, heights, opts);
     };
     const beforeDownload = vi.fn(async () => {});
+    const onCached = vi.fn();
+    expect(Object.keys(cachedTerrainHorizons(SITE.latitude, SITE.longitude, [4, 9]))).toEqual(['4']);
     const r = await fetchTerrainHorizons(SITE.latitude, SITE.longitude, {
       fetchImpl: f.impl,
       observerHeights: [4, 9],
       compute,
       beforeDownload,
+      onCached,
     });
     expect(computed).toEqual([[9]]);
     expect(beforeDownload).toHaveBeenCalledTimes(1);
+    expect(onCached).toHaveBeenCalledWith({ 4: r[4] }); // before the computation of 9 m
     expect(r[4].siteElevation).toBe(500);
     expect(r[9].siteElevation).toBe(500);
     // Both cached now: no computation, no waiting, the final progress once.

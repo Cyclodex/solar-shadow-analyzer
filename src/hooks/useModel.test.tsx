@@ -11,8 +11,10 @@ import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import {
+  PROVISIONAL_DELAY_MS,
   SWEEP_SETTLE_MS,
   useAnnualInputsPending,
+  useAnnualResultsState,
   useDailyProfile,
   useEconomics,
   useFocusFloor,
@@ -27,8 +29,10 @@ import {
   useSolarPath,
   useSunTimes,
   useResultsReady,
+  useTerrainPending,
   useTerrainProfile,
   useTiltSweep,
+  useWeatherPending,
 } from './useModel';
 import { useWeatherBusy } from './useWeather';
 
@@ -265,6 +269,45 @@ describe('model hooks', () => {
     expect(result.current).toBe(false);
     act(() => useDataStore.getState().setWeather({ status: 'loading' }));
     expect(result.current).toBe(true);
+  });
+
+  it('annual results: loading until the weather is final, provisional while only the terrain loads', () => {
+    vi.useFakeTimers();
+    patch('horizon', { terrainEnabled: true });
+    useDataStore.getState().setTerrain({ status: 'loading' });
+    useDataStore.getState().setWeather({ status: 'loading' });
+    const { result } = renderHook(() => ({
+      state: useAnnualResultsState(),
+      weather: useWeatherPending(),
+      terrain: useTerrainPending(),
+    }));
+    expect(result.current).toEqual({ state: 'loading', weather: true, terrain: true });
+    act(() => {
+      vi.advanceTimersByTime(PROVISIONAL_DELAY_MS * 3);
+    });
+    expect(result.current.state).toBe('loading'); // the weather gates, however long it takes
+
+    act(() => setWeather());
+    expect(result.current).toEqual({ state: 'loading', weather: false, terrain: true });
+    act(() => {
+      vi.advanceTimersByTime(PROVISIONAL_DELAY_MS);
+    });
+    expect(result.current.state).toBe('provisional');
+    // New site: its weather is not there yet → loading again (no numbers of the previous site) …
+    act(() => patch('location', { latitude: 53.55, longitude: 9.99 }));
+    expect(result.current.state).toBe('loading');
+    // … and the delay starts again once it is.
+    act(() => setWeather(clearSkyYear(53.55, 9.99, 2025)));
+    expect(result.current.state).toBe('loading');
+    act(() => {
+      vi.advanceTimersByTime(PROVISIONAL_DELAY_MS);
+    });
+    expect(result.current.state).toBe('provisional');
+    act(() => useDataStore.getState().setTerrain({ status: 'ready', profile: flat(3), profiles: null }));
+    expect(result.current).toEqual({ state: 'final', weather: false, terrain: false });
+    act(() => patch('horizon', { terrainEnabled: false }));
+    act(() => useDataStore.getState().setTerrain({ status: 'loading' }));
+    expect(result.current.state).toBe('final'); // a disabled terrain horizon never pends
   });
 
   it('each floor gets the terrain horizon of its own height', () => {

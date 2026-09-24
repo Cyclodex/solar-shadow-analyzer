@@ -295,21 +295,37 @@ function useAnnualWeather(config: Config): WeatherSeries | null {
 }
 
 /**
- * True while inputs of the annual results are still arriving: the weather series is loading, or the
- * terrain horizon is enabled and loading — and while a newly arrived series or terrain horizon has not
- * reached the (deferred) annual results yet. Annual numbers computed meanwhile are provisional.
+ * True while the weather series of the annual results is still arriving: it is loading, or a newly
+ * arrived series has not reached the (deferred) annual results yet.
  */
-export function useAnnualInputsPending(): boolean {
-  const terrainEnabled = useConfigSection('horizon').terrainEnabled;
-  const loading = useDataStore(
-    (s) => s.weather.status === 'loading' || (terrainEnabled && s.terrain.status === 'loading'),
-  );
+export function useWeatherPending(): boolean {
+  const loading = useDataStore((s) => s.weather.status === 'loading');
   const weather = useDataStore((s) => s.weather.series);
-  const terrain = useDataStore(terrainSourceOf);
   // Same deferral as useDeferredInputs / useAnnualWeather: differs only in the urgent render.
   const deferredWeather = useDeferredValue(weather);
+  return loading || deferredWeather !== weather;
+}
+
+/**
+ * True while the terrain horizon is enabled and still arriving: it is loading, or a newly arrived horizon
+ * has not reached the (deferred) annual results yet. Annual numbers computed meanwhile lack the terrain.
+ */
+export function useTerrainPending(): boolean {
+  const terrainEnabled = useConfigSection('horizon').terrainEnabled;
+  const loading = useDataStore((s) => s.terrain.status === 'loading');
+  const terrain = useDataStore(terrainSourceOf);
   const deferredTerrain = useDeferredValue(terrain);
-  return loading || deferredWeather !== weather || (terrainEnabled && deferredTerrain !== terrain);
+  return terrainEnabled && (loading || deferredTerrain !== terrain);
+}
+
+/**
+ * True while inputs of the annual results are still arriving: the weather series (useWeatherPending) or
+ * the enabled terrain horizon (useTerrainPending). Annual numbers computed meanwhile are provisional.
+ */
+export function useAnnualInputsPending(): boolean {
+  const weather = useWeatherPending();
+  const terrain = useTerrainPending();
+  return weather || terrain;
 }
 
 /**
@@ -321,6 +337,48 @@ export function useResultsReady(): boolean {
   const pending = useAnnualInputsPending();
   const weatherBusy = useWeatherBusy();
   return !pending && !weatherBusy;
+}
+
+/**
+ * How long the terrain horizon may be pending before annual results without it are shown as provisional
+ * (ms). A fast link or a cached horizon finishes within it: skeleton → final, without a provisional flash.
+ */
+export const PROVISIONAL_DELAY_MS = 1500;
+
+/** Presentation state of the annual results, see useAnnualResultsState. */
+export type AnnualResultsState = 'loading' | 'provisional' | 'final';
+
+/**
+ * Presentation state of the annual results (headline numbers, optimum tilt):
+ * - 'loading': the weather of the configured site and year has not reached the results (numbers would
+ *   belong to another site or year: never show them), or the terrain horizon is pending for less than
+ *   PROVISIONAL_DELAY_MS;
+ * - 'provisional': only the terrain horizon is still pending (a slow download, ~2 MB): the results are
+ *   computed without it — show them marked as provisional, but offer no export or derived action;
+ * - 'final': as useResultsReady().
+ */
+export function useAnnualResultsState(): AnnualResultsState {
+  const weatherPending = useWeatherPending();
+  const weatherBusy = useWeatherBusy();
+  const terrainPending = useTerrainPending();
+  const weatherReady = !weatherPending && !weatherBusy;
+  const waited = useHeldFor(weatherReady && terrainPending, PROVISIONAL_DELAY_MS);
+  if (!weatherReady) return 'loading';
+  if (!terrainPending) return 'final';
+  return waited ? 'provisional' : 'loading';
+}
+
+/** True once `active` has been true for `ms` without interruption (false while inactive). */
+function useHeldFor(active: boolean, ms: number): boolean {
+  const [held, setHeld] = useState(false);
+  // Reset during render (not in an effect): the next activation waits again.
+  if (!active && held) setHeld(false);
+  useEffect(() => {
+    if (!active) return;
+    const id = setTimeout(() => setHeld(true), ms);
+    return () => clearTimeout(id);
+  }, [active, ms]);
+  return active && held;
 }
 
 /**

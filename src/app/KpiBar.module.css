@@ -121,3 +121,14 @@
     border: 1px solid CanvasText;
   }
 }
+
+/* Annual numbers computed without the terrain horizon, which is still loading (marked, not hidden). */
+.provisional .value {
+  color: var(--text-muted);
+}
+
+.provisionalNote {
+  margin: calc(-1 * var(--space-1)) 0 var(--space-2) var(--space-1);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
