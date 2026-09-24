@@ -1,8 +1,11 @@
 /// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { basePath } from './scripts/basePath.ts';
 
 export default defineConfig({
+  // '/' by default; the GitHub Pages build sets BASE_PATH=/solar-shadow-analyzer/ (.github/workflows/pages.yml).
+  base: basePath(),
   plugins: [react()],
   build: {
     // three.js + R3F form one ~960 kB chunk that is only loaded lazily with the 3D view.

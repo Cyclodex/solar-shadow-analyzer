@@ -1,9 +1,12 @@
 import { existsSync } from 'node:fs';
 import { defineConfig, devices } from '@playwright/test';
+import { basePath } from './scripts/basePath.ts';
 
 // Override with E2E_PORT to run several e2e sessions side by side.
 const PORT = Number(process.env.E2E_PORT ?? 4173);
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+// BASE_PATH (e.g. /solar-shadow-analyzer/ as on GitHub Pages) is passed on to the build and `vite preview`;
+// the specs navigate relative to it (page.goto('./')).
+const BASE_URL = `http://127.0.0.1:${PORT}${basePath()}`;
 
 // Browser: PLAYWRIGHT_CHROMIUM_PATH if set, else the Claude Code sandbox's pinned Chromium if it exists (its
 // revision differs from @playwright/test's, so never run `playwright install` in the sandbox). Everywhere else

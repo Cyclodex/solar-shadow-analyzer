@@ -9,7 +9,7 @@ test('app loads, shows the main heading and annual results', async ({ page }) =>
   const errors: string[] = [];
   page.on('pageerror', (err) => errors.push(err.message));
 
-  await page.goto('/');
+  await page.goto('./');
 
   await expect(page).toHaveTitle(/Verschattungsanalyse/i);
   await expect(page.getByRole('heading', { name: /Verschattungsanalyse/i }).first()).toBeVisible();
@@ -20,7 +20,7 @@ test('app loads, shows the main heading and annual results', async ({ page }) =>
 
 test('no horizontal scrolling on a 360 px phone', async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
-  await page.goto('/');
+  await page.goto('./');
   await expect(page.getByRole('heading', { name: /Verschattungsanalyse/i }).first()).toBeVisible();
   const [scrollWidth, clientWidth] = await page.evaluate(() => [
     document.documentElement.scrollWidth,

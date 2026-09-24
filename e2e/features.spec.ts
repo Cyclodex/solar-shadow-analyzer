@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
 });
 
 test('3D view renders a WebGL canvas with content', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   const canvas = page.locator('canvas').first();
   await expect(canvas).toBeVisible({ timeout: 20_000 });
   // Wait until the scene has drawn something other than a single flat colour.
@@ -69,7 +69,7 @@ async function settled(canvas: Locator): Promise<number[]> {
 }
 
 test('"Aus Sonnenrichtung" survives a click, follows the time, gives way at night', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.getByTitle('Juni-Sonnenwende').click();
   const time = page.getByRole('slider', { name: 'Uhrzeit (Ortszeit)' });
   await time.fill('780'); // 13:00
@@ -108,10 +108,11 @@ test('"Aus Sonnenrichtung" survives a click, follows the time, gives way at nigh
 
 test('share link restores the configuration', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await page.goto('/');
+  await page.goto('./');
   await page.getByRole('button', { name: /Teilen/ }).click();
   const link = await page.evaluate(() => navigator.clipboard.readText());
-  expect(link).toMatch(/#c=/);
+  // The app's own address, under its base path (BASE_PATH), plus the config hash.
+  expect(link.startsWith(`${new URL('./', page.url()).href}#c=`)).toBe(true);
 
   // Change the tilt, then open the copied link: the original tilt (45°) must come back.
   const tilt = page.getByRole('slider', { name: /Neigung θ ab Senkrechte/ });
@@ -126,7 +127,7 @@ test('share link restores the configuration', async ({ page, context }) => {
 });
 
 test('language toggle switches to English', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   await page.getByRole('radio', { name: 'English', exact: true }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(/Shading analysis/i);
 });
