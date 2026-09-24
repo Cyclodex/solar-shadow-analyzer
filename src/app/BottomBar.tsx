@@ -74,9 +74,11 @@ type Panel = 'time' | 'tilt';
 /**
  * Publishes the height the bar covers as --bottom-bar-h on <html>: global.css pads the end of the page by
  * it and keeps focused elements above the bar (scroll-padding-bottom); other fixed elements (e.g. toasts)
- * can stay clear of it.
+ * can stay clear of it. Measured again when the bar's border box changes (an open slider, the safe-area
+ * padding of phones) and when the bottom safe-area inset changes (`probe`: iOS Safari changes it when its
+ * toolbar collapses; the floating dock moves up by it without changing its size).
  */
-function useBarHeight(ref: RefObject<HTMLElement | null>): void {
+function useBarHeight(ref: RefObject<HTMLElement | null>, probe: RefObject<HTMLElement | null>): void {
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el) return;
@@ -88,12 +90,13 @@ function useBarHeight(ref: RefObject<HTMLElement | null>): void {
     };
     update();
     const observer = typeof ResizeObserver === 'function' ? new ResizeObserver(update) : null;
-    observer?.observe(el);
+    observer?.observe(el, { box: 'border-box' });
+    if (probe.current) observer?.observe(probe.current);
     return () => {
       observer?.disconnect();
       root.style.removeProperty('--bottom-bar-h');
     };
-  }, [ref]);
+  }, [ref, probe]);
 }
 
 /** The clock time slider (mounted only while its panel is open). */
@@ -213,9 +216,10 @@ export function BottomBar() {
   const theta = useConfigSection('panels').tiltFromVertical;
   const [panel, setPanel] = useState<Panel | null>(null);
   const barRef = useRef<HTMLDivElement>(null);
+  const safeProbeRef = useRef<HTMLSpanElement>(null);
   const timeId = useId();
   const tiltId = useId();
-  useBarHeight(barRef);
+  useBarHeight(barRef, safeProbeRef);
 
   const step = (dir: 1 | -1): void => {
     const { minutes: m, setMinutes, setPlaying } = useTimeStore.getState();
@@ -279,6 +283,7 @@ export function BottomBar() {
         {panel === 'tilt' && <TiltPanel t={t} />}
       </div>
       <JumpMenu t={t} />
+      <span ref={safeProbeRef} className={styles.safeProbe} aria-hidden="true" />
     </div>
   );
 }

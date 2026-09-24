@@ -1,5 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { useConfigStore } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
@@ -128,6 +128,41 @@ describe('BottomBar', () => {
     expect(document.documentElement.style.getPropertyValue('--bottom-bar-h')).toMatch(/^\d+px$/);
     unmount();
     expect(document.documentElement.style.getPropertyValue('--bottom-bar-h')).toBe('');
+  });
+
+  it('measures again when its border box or the bottom safe-area inset changes', () => {
+    const observed: [Element, ResizeObserverOptions | undefined][] = [];
+    let notify = (): void => {};
+    vi.stubGlobal(
+      'ResizeObserver',
+      class {
+        constructor(cb: ResizeObserverCallback) {
+          notify = () => cb([], this as unknown as ResizeObserver);
+        }
+        observe(el: Element, options?: ResizeObserverOptions): void {
+          observed.push([el, options]);
+        }
+        unobserve(): void {}
+        disconnect(): void {}
+      },
+    );
+    onTestFinished(() => {
+      vi.unstubAllGlobals();
+    });
+    render(<BottomBar />);
+    const region = bar();
+    // The bar's border box (its padding grows by the inset on phones) and a probe of the inset's height
+    // (the floating dock only moves up by it).
+    expect(observed).toHaveLength(2);
+    expect(observed[0]).toEqual([region, { box: 'border-box' }]);
+    const probe = observed[1][0];
+    expect(region).toContainElement(probe as HTMLElement);
+    expect(probe).toHaveAttribute('aria-hidden', 'true');
+
+    const rect = vi.spyOn(region, 'getBoundingClientRect').mockReturnValue(DOMRect.fromRect({ height: 95 }));
+    onTestFinished(() => rect.mockRestore());
+    act(notify);
+    expect(document.documentElement.style.getPropertyValue('--bottom-bar-h')).toBe('95px');
   });
 
   it('English texts', () => {
