@@ -13,7 +13,7 @@ import {
   pathPoints,
   setConfig,
   svgTexts,
-} from './svg/testUtils';
+} from '../test/svg';
 
 /** Config and time with a clearly shaded lower row (see ProfileView tests). */
 function shadedCase(): void {

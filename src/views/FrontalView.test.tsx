@@ -12,7 +12,7 @@ import {
   figureOf,
   setConfig,
   svgTexts,
-} from './svg/testUtils';
+} from '../test/svg';
 
 describe('FrontalView', () => {
   beforeEach(() => {

@@ -15,7 +15,7 @@ import {
   pathPoints,
   setConfig,
   svgTexts,
-} from './svg/testUtils';
+} from '../test/svg';
 
 const allText = (container: HTMLElement): string => svgTexts(figureOf(container)).join(' | ');
 

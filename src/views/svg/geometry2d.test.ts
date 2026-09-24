@@ -19,7 +19,7 @@ import {
   wrapText,
   type Box,
 } from './geometry2d';
-import { pathPoints } from './testUtils';
+import { pathPoints } from '../../test/svg';
 
 const box: Box = { x0: 0, y0: 0, x1: 100, y1: 50 };
 

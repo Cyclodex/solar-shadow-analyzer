@@ -44,9 +44,11 @@ src/
   app/                     App-Shell: Header, WarningsBar, KpiBar, ViewToggles, ShareButton, ExportMenu, Footer,
                            DataLoader (startet die Loader), useDocumentSettings (<html> data-theme/lang, Titel,
                            theme-color)
-  components/              Generische UI-Bausteine: Button, Card, InfoTip, NumberField (+ numberInput.ts),
+  components/              Generische UI-Bausteine: Button, InfoTip, NumberField (+ numberInput.ts),
                            Placeholder, Section, Segmented, SelectField, Skeleton, Slider, Spinner, TextField,
                            Toggle, ViewCard, icons, cssVars
+    svg/                   SVG-Helfer für Diagramme und 2D-Ansichten: useElementWidth, useSvgId, paths, text
+                           (Textbreiten, Fliesslayout), legend (gemeinsamer Legendenstil), HatchPattern
   controls/                Eingaben (Sidebar): Sidebar, TimeControls, TiltControl und je Einstellungsgruppe eine
                            *Section.tsx (Location, Building, Panel, System, Horizon, Weather, Economics)
     location/              PlaceSearch, PresetSelect, MyLocationButton, CompassDial, TimeZoneField, timeZones, icons
@@ -55,16 +57,16 @@ src/
   views/                   2D-Ansichten: FrontalView, ProfileView (Seite), SunPathView, PanelShadowView
     svg/                   Reine Layout-Module ohne React (frontalLayout, profileLayout, sunPathLayout,
                            panelShadowLayout, geometry2d, legend, constants) + SvgFigure, Legend, ViewNotice,
-                           primitives, ids, messages, useElementWidth, svg.module.css; testUtils.ts (nur für Tests)
+                           primitives, messages, svg.module.css
     scene3d/               3D-Ansicht (three.js/R3F), lazy: index.ts → Scene3D → SceneView; SceneStage, SceneContent,
                            Building, PanelRows, Ground, Surroundings, SkyAndLights, SunMarker, CameraRig, Label,
                            SceneErrorBoundary, useSceneData; coords.ts, sceneLayout, palette, shadeMaterial
                            (Modellschatten-Overlay), textures, webgl, messages
   charts/                  Analyse: DailyProfileChart, ShadeHeatmap (Canvas), MonthlyYieldChart, TiltSweepChart,
                            EconomicsCard, MonthlyTable
-    lib/                   Chart-Bausteine ohne Library: scale, Axes, paths, text, timeAxis, legend/SvgLegend,
-                           ChartTooltip, ChartStats, DataTable, HatchPattern, heatmap, monthlyTable, colors,
-                           canvasTheme, floors, focus, sourceLabel, usePlotPointer, useElementWidth, useSvgId
+    lib/                   Chart-Bausteine ohne Library: scale, Axes, timeAxis, legend/ChartLegend, ChartTooltip,
+                           ChartStats, DataTable, heatmap, monthlyTable, colors, canvasTheme, floors, focus,
+                           sourceLabel, usePlotPointer
   export/                  png, csv (RFC 4180), resultsCsv (Monatsertrag, Neigungsvergleich, Heatmap), configFile
                            (JSON speichern/laden), clipboard, download, filenames, Druckbericht (print.ts, print.css,
                            PrintReport.tsx)
@@ -73,8 +75,9 @@ src/
   state/                   configStore, timeStore, uiStore, dataStore, urlSync (#c=-Hash), storage (localStorage,
                            das Fehler abfängt)
   i18n/                    index.ts (useLang, useMessages, useFormat, floorLabel, compassPoint …), common.ts
-  styles/                  global.css: Design-Tokens (CSS-Variablen) für Dark/Light, globale Styles
-  test/                    utils.ts: resetStores(), TEST_DATE
+  styles/                  global.css: Design-Tokens (CSS-Variablen) für Dark/Light, globale Styles; tokens.ts:
+                           Token-Zugriff aus TypeScript (Stockwerksfarben, useThemeKey, cssVar, parseCssColor)
+  test/                    utils.ts: resetStores(), TEST_DATE; svg.ts: Helfer für die Tests der SVG-Ansichten
 
 e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts)
 scripts/validate-terrain.ts  Gelände-Horizont gegen PVGIS printhorizon prüfen (braucht Netzwerk)
