@@ -1,13 +1,15 @@
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { sunGrid } from '../model/analysis';
 import { DEFAULT_CONFIG } from '../model/defaults';
+import { createFloorModel, sunTrack } from '../model/simulation';
 import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
 import { useDailyProfile, useHeatmap, useInstantPower, useSimulation, useTiltSweep } from './useModel';
 
-// Count the expensive model builders; the hooks must share their results.
+// Count the expensive model builders (mocks are hoisted above the imports); the hooks must share their results.
 vi.mock('../model/analysis', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../model/analysis')>();
   return { ...actual, sunGrid: vi.fn(actual.sunGrid) };
@@ -16,9 +18,6 @@ vi.mock('../model/simulation', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../model/simulation')>();
   return { ...actual, sunTrack: vi.fn(actual.sunTrack), createFloorModel: vi.fn(actual.createFloorModel) };
 });
-
-const { sunGrid } = await import('../model/analysis');
-const { createFloorModel, sunTrack } = await import('../model/simulation');
 
 const { latitude, longitude } = DEFAULT_CONFIG.location;
 const patch = useConfigStore.getState().patch;
@@ -45,7 +44,7 @@ describe('model hook caches', () => {
     const { heat, sim } = result.current;
 
     act(() => patch('panels', { tiltFromVertical: 40 }));
-    act(() => patch('building', { floorHeight: 3 }));
+    act(() => patch('building', { floorHeight: 300 }));
     expect(result.current.heat).not.toBe(heat);
     expect(result.current.sim).not.toBe(sim);
     expect(sunGrid).toHaveBeenCalledTimes(1);

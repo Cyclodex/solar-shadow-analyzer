@@ -64,7 +64,7 @@ describe('TiltControl', () => {
     const region = optimum.closest('[aria-live]')!;
     expect(region).not.toHaveAttribute('aria-busy');
 
-    act(() => useConfigStore.getState().patch('building', { floorHeight: 3.2 }));
+    act(() => useConfigStore.getState().patch('building', { floorHeight: 320 }));
     expect(region).toHaveAttribute('aria-busy', 'true');
     expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
     for (let i = 0; i < 2; i++)

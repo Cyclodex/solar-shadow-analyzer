@@ -418,8 +418,8 @@ export function ShadeHeatmap() {
   return <HeatmapCard floor={floor} heatmap={heatmap} stats={stats} />;
 }
 
-/** Height of the statistics row and the canvas (plot, axis, legend and ramp), px. */
-const PLACEHOLDER_HEIGHT = 380;
+/** Height of the statistics row and the canvas (plot, axis, legend and ramp) on a wide screen, px. */
+const PLACEHOLDER_HEIGHT = 404;
 
 function HeatmapPlaceholder() {
   const t = useMessages(messages);
