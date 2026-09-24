@@ -40,13 +40,19 @@ describe('terrainDownloadGate', () => {
 
   it('waits for held downloads, at most TERRAIN_GATE_MAX_MS', async () => {
     let finish = (): void => {};
-    void holdTerrainDownload(new Promise<void>((resolve) => (finish = resolve)));
+    holdTerrainDownload(new Promise<void>((resolve) => (finish = resolve)));
+    const release = holdTerrainDownload();
     const gate = terrainDownloadGate();
     expect(await state(gate)).toBe('waiting');
     finish();
+    expect(await state(gate)).toBe('waiting'); // the other hold
+    release();
+    release(); // idempotent
     expect(await state(gate)).toBe('open');
-    // A failed download also opens it.
-    void holdTerrainDownload(Promise.reject(new Error('chunk'))).catch(() => {});
+    // A failed download also releases its hold.
+    const failed = Promise.reject(new Error('chunk'));
+    failed.catch(() => {});
+    holdTerrainDownload(failed);
     expect(await state(terrainDownloadGate())).toBe('open');
 
     useDataStore.getState().setWeather({ status: 'loading' });

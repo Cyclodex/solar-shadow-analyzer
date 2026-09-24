@@ -123,7 +123,8 @@
 }
 
 /* Annual numbers computed without the terrain horizon, which is still loading (marked, not hidden). */
-.provisional .value {
+.provisional .value,
+.provisional .floorValue {
   color: var(--text-muted);
 }
 
