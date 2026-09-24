@@ -1,5 +1,5 @@
 import { act, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
@@ -41,5 +41,36 @@ describe('TiltControl', () => {
     );
     expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
     expect(screen.queryByText('Optimum wird berechnet …')).not.toBeInTheDocument();
+  });
+
+  it('shows the spinner while the terrain horizon loads', () => {
+    useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(latitude, longitude, 2025) });
+    act(() => {
+      useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    render(<TiltControl />);
+    expect(screen.getByText('Optimum wird berechnet …')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /übernehmen/ })).not.toBeInTheDocument();
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
+  });
+
+  it('marks the previous optimum while the sweep is updated for another input', () => {
+    vi.useFakeTimers();
+    useDataStore.getState().setWeather({ status: 'ready', series: clearSkyYear(latitude, longitude, 2025) });
+    render(<TiltControl />);
+    const optimum = screen.getByText(/^Optimum: \d+°$/);
+    const region = optimum.closest('[aria-live]')!;
+    expect(region).not.toHaveAttribute('aria-busy');
+
+    act(() => useConfigStore.getState().patch('building', { floorHeight: 3.2 }));
+    expect(region).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByText(/^Optimum: \d+°$/)).toBeInTheDocument();
+    for (let i = 0; i < 2; i++)
+      act(() => {
+        vi.runAllTimers();
+      });
+    expect(region).not.toHaveAttribute('aria-busy');
   });
 });

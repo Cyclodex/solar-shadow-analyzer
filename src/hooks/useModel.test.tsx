@@ -26,9 +26,11 @@ import {
   useSimulation,
   useSolarPath,
   useSunTimes,
+  useResultsReady,
   useTerrainProfile,
   useTiltSweep,
 } from './useModel';
+import { useWeatherBusy } from './useWeather';
 
 const { latitude, longitude } = DEFAULT_CONFIG.location;
 const series = clearSkyYear(latitude, longitude, 2025);
@@ -74,6 +76,35 @@ describe('model hooks', () => {
     expect(result.current.sweep).not.toBeNull();
     act(() => patch('weather', { year: 2024 }));
     expect(result.current.sim).toBeNull();
+    expect(result.current.sweep).toBeNull();
+  });
+
+  it('results are ready only for final inputs: matching weather, nothing loading', () => {
+    setWeather();
+    const { result } = renderHook(() => ({
+      busy: useWeatherBusy(),
+      ready: useResultsReady(),
+      sweep: useTiltSweep(),
+    }));
+    expect(result.current).toMatchObject({ busy: false, ready: true });
+    expect(result.current.sweep).toMatchObject({ year: 2025, source: 'clear-sky' });
+
+    // New site: the previous series is stale even before the loader has set 'loading'.
+    act(() => patch('location', { latitude: 53.55, longitude: 9.99 }));
+    expect(result.current).toMatchObject({ busy: true, ready: false });
+    act(() => useDataStore.getState().setWeather({ status: 'loading' }));
+    expect(result.current).toMatchObject({ busy: true, ready: false });
+    act(() =>
+      useDataStore.getState().setWeather({ status: 'error', series: clearSkyYear(53.554, 9.993, 2025) }),
+    );
+    expect(result.current).toMatchObject({ busy: false, ready: true });
+
+    // Terrain (enabled) still loading: the weather is fine, the results are not final.
+    act(() => {
+      patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    expect(result.current).toMatchObject({ busy: false, ready: false });
   });
 
   it('the tilt sweep ignores tilt changes and recomputes other changes once they settled', () => {
@@ -166,6 +197,16 @@ describe('model hooks', () => {
     act(() => patch('location', { latitude: latitude + 0.001 }));
     expect(result.current.heat).not.toBe(before.heat);
     expect(result.current.sunTimes).not.toBe(before.sunTimes);
+  });
+
+  it('the heatmap defaults to the shaded floor (never the top floor)', () => {
+    patch('building', { numFloors: 3 });
+    act(() => useUiStore.getState().setFocusFloor(2));
+    const { result } = renderHook(() => ({ heat: useHeatmap(), top: useHeatmap(2) }));
+    expect(result.current.heat.floor).toBe(1);
+    expect(result.current.top.floor).toBe(2);
+    act(() => useUiStore.getState().setFocusFloor(0));
+    expect(result.current.heat.floor).toBe(0);
   });
 
   it('the heatmap can stay out of a render (enabled = false)', () => {

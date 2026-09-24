@@ -321,6 +321,35 @@ describe('ExportMenu', () => {
     expect(downloads[0].name).toBe('verschattung-neigungsvergleich-47.100-N-7.450-E-2024-klarer-himmel.csv');
   });
 
+  it('treats provisional results as computing: inputs still loading, a tilt sweep being updated', async () => {
+    act(() => {
+      useDataStore.getState().setWeather({ status: 'ready', series });
+      useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    render(<ExportMenu />);
+    let menu = openMenu();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
+    for (const name of [/Monatsertrag je Stockwerk/, /Neigungsvergleich/]) {
+      const item = within(menu).getByRole('menuitem', { name });
+      expect(item).toHaveAttribute('aria-disabled', 'true');
+      expect(item).toHaveTextContent('wird berechnet …');
+    }
+    fireEvent.keyDown(menu, { key: 'Escape' });
+
+    // Terrain done (failed: computed without it). Right after another input changed, the tilt sweep
+    // shows the previous result until it is recomputed: not exported.
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    menu = openMenu();
+    const tilt = await within(menu).findByRole('menuitem', { name: /^Neigungsvergleich CSV$/ });
+    expect(within(menu).getByRole('menuitem', { name: /Monatsertrag/ })).not.toHaveAttribute('aria-disabled');
+    act(() => useConfigStore.getState().patch('system', { lossesPct: 18 }));
+    expect(tilt).toHaveAttribute('aria-disabled', 'true');
+    fireEvent.click(tilt);
+    expect(downloads).toHaveLength(0);
+    await within(menu).findByRole('menuitem', { name: /^Neigungsvergleich CSV$/ });
+  });
+
   it('prints a report in the light theme with an inputs appendix, then restores the theme', async () => {
     let printed: { theme: string; dataTheme?: string; printing: boolean; appendix?: string | null } | null =
       null;

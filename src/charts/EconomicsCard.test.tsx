@@ -42,6 +42,18 @@ describe('EconomicsCard', () => {
     expect(screen.queryByRole('slider')).toBeNull();
   });
 
+  it('stays busy while the terrain horizon loads', () => {
+    act(() => {
+      useDataStore.getState().setWeather({ status: 'ready', series });
+      useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    const { container } = render(<EconomicsCard />);
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
   it('shows savings, payback and balance per floor and in total, from the model', () => {
     act(() => useDataStore.getState().setWeather({ status: 'ready', series }));
     const kwh = simulatedKwh();

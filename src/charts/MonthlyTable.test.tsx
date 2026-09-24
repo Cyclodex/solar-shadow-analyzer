@@ -29,6 +29,24 @@ describe('MonthlyTable', () => {
     expect(screen.getByRole('button', { name: 'Monatstabelle als CSV herunterladen' })).toBeDisabled();
   });
 
+  it('is busy and exports nothing while an annual input still loads', () => {
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    act(() => {
+      useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    const { container } = render(<MonthlyTable />);
+    const csv = screen.getByRole('button', { name: 'Monatstabelle als CSV herunterladen' });
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    expect(csv).toBeDisabled();
+    fireEvent.click(csv);
+    expect(downloadText).not.toHaveBeenCalled();
+
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+    expect(csv).toBeEnabled();
+  });
+
   it('lists 12 months and the year per floor with loss and shaded hours', () => {
     useDataStore.getState().setWeather({ status: 'ready', series });
     render(<MonthlyTable />);

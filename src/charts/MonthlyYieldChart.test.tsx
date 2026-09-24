@@ -25,6 +25,19 @@ describe('MonthlyYieldChart', () => {
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
   });
 
+  it('marks the bars as provisional while the terrain horizon loads', () => {
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    act(() => {
+      useConfigStore.getState().patch('horizon', { terrainEnabled: true });
+      useDataStore.getState().setTerrain({ status: 'loading' });
+    });
+    const { container } = render(<MonthlyYieldChart />);
+    expect(screen.getByRole('img')).toBeInTheDocument();
+    expect(container.querySelector('[aria-busy="true"]')).not.toBeNull();
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+  });
+
   it('draws grouped bars with hatched losses, totals and the data source', () => {
     useDataStore.getState().setWeather({ status: 'error', series, usingFallback: true });
     const { container } = render(<MonthlyYieldChart />);

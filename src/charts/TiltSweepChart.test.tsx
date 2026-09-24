@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_CONFIG } from '../model/defaults';
+import { DEFAULT_CONFIG, createObstacle } from '../model/defaults';
 import { clearSkyYear } from '../model/weather';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
@@ -59,6 +59,46 @@ describe('TiltSweepChart', () => {
     expect(screen.getByText('θ 45°')).toBeInTheDocument();
     expect(screen.getByText(/^Optimum \d+°$/)).toBeInTheDocument();
     expect(screen.getByText(/Gerechnet in 5°-Schritten\./)).toBeInTheDocument();
+  });
+
+  it('is busy while annual inputs load and while the sweep updates after another input changed', () => {
+    vi.useFakeTimers();
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    const { container } = render(<TiltSweepChart />);
+    const busy = (): boolean => container.querySelector('[aria-busy="true"]') !== null;
+    // Settle timer, then the background sweep it starts.
+    const settle = (): void => {
+      for (let i = 0; i < 2; i++)
+        act(() => {
+          vi.runAllTimers();
+        });
+    };
+    expect(busy()).toBe(false);
+
+    // Another input changed: the previous sweep is shown until the new one is computed.
+    act(() => useConfigStore.getState().patch('system', { lossesPct: 18 }));
+    expect(busy()).toBe(true);
+    expect(screen.getByRole('img', { name: 'Neigungsvergleich' })).toBeInTheDocument();
+    settle();
+    expect(busy()).toBe(false);
+
+    // Terrain horizon (enabled) still loading: the curves are provisional.
+    act(() => useDataStore.getState().setTerrain({ status: 'loading' }));
+    act(() => useConfigStore.getState().patch('horizon', { terrainEnabled: true }));
+    settle();
+    expect(busy()).toBe(true);
+    act(() => useDataStore.getState().setTerrain({ status: 'error' }));
+    expect(busy()).toBe(false);
+  });
+
+  it('computes obstacle horizons per tilt (no approximation caption)', () => {
+    useConfigStore.getState().patch('horizon', {
+      obstacles: [{ ...createObstacle('o1', 'Haus'), distance: 6, height: 10 }],
+    });
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    render(<TiltSweepChart />);
+    expect(screen.getByText(/Gerechnet in 5°-Schritten\./)).toBeInTheDocument();
+    expect(screen.queryByText(/Hindernis-Horizonte/)).not.toBeInTheDocument();
   });
 
   it('click on the chart sets the tilt (snapped to the 5° points)', () => {
