@@ -142,3 +142,36 @@ test('service worker caches the app: it reloads offline with results and the 3D 
   await expect(view.locator('canvas')).toBeVisible({ timeout: 20_000 });
   expect(errors).toEqual([]);
 });
+
+test('a new version waits for "Neu laden", then takes over', async ({ page }) => {
+  test.slow(); // installs the worker twice
+  const errors = trackErrors(page);
+  await page.goto('./');
+  const appUrl = new URL('./', page.url()).href;
+  const controller = () => page.evaluate(() => navigator.serviceWorker.controller?.scriptURL);
+  await expect(page.getByRole('status').filter({ hasText: 'Offline verfügbar' })).toBeVisible({
+    timeout: 30_000,
+  });
+  await page.reload();
+  expect(await controller()).toBe(`${appUrl}sw.js`);
+
+  // A new deploy: the same worker under another URL. (Routing sw.js does not work for this: Playwright
+  // sees only the first request for it, not the update check.)
+  await page.evaluate(async () => {
+    const { scope } = await navigator.serviceWorker.ready;
+    await navigator.serviceWorker.register(new URL('sw.js?next', scope).href, { scope });
+  });
+  const notice = page.getByRole('status').filter({ hasText: 'Neue Version verfügbar' });
+  await expect(notice).toBeVisible({ timeout: 30_000 });
+  // It waits: the page keeps running on its version.
+  expect(await controller()).toBe(`${appUrl}sw.js`);
+
+  await Promise.all([
+    page.waitForEvent('framenavigated'),
+    notice.getByRole('button', { name: 'Neu laden' }).click(),
+  ]);
+  await expect.poll(controller).toBe(`${appUrl}sw.js?next`);
+  await expect(page.getByRole('heading', { name: /Verschattungsanalyse/i }).first()).toBeVisible();
+  await expect(notice).toBeHidden();
+  expect(errors).toEqual([]);
+});

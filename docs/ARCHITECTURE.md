@@ -297,14 +297,18 @@ Gemeinsame Texte liegen in `i18n/common.ts`. Zahlen/Daten werden über `useForma
   - `getContext` liefert `null`, deshalb zeigt die 3D-Ansicht ihren Hinweis ohne WebGL und die Heatmap zeichnet nicht.
     `SceneStage.test.tsx` mockt `./webgl`, um die DOM-Teile der 3D-Ansicht zu testen.
 - **E2E** (`npm run e2e`, Playwright gegen den `vite preview`-Build, Chromium + SwiftShader, Open-Meteo und Kacheln
-  blockiert, Port über `E2E_PORT`): App lädt mit Jahresertrag; kein horizontales Scrollen bei 360 px; 3D-Canvas zeichnet
-  Inhalt (mehr als 20 Farben, kein Screenshot-Vergleich); Kamera-Preset «Aus Sonnenrichtung» bleibt nach einem Klick
+  blockiert, Port über `E2E_PORT`): App lädt mit Jahresertrag; kein horizontales Scrollen bei 360 px, auch mit
+  iPhone-User-Agent und geöffneter Anleitung des Knopfs «Installieren» (bleibt im Bild); 3D-Canvas zeichnet Inhalt
+  (mehr als 20 Farben, kein Screenshot-Vergleich); Kamera-Preset «Aus Sonnenrichtung» bleibt nach einem Klick
   erhalten, folgt der Uhrzeit und weicht nachts der Übersicht; Teilen-Link stellt die Konfiguration wieder her;
-  Sprachumschaltung DE → EN. `pwa.spec.ts`: Manifest gültig und unter dem Basis-Pfad, Icons ladbar (Grösse,
-  `maskable`/`apple-touch-icon` deckend); Service Worker registriert sich, kontrolliert die Seite nach einem Reload
-  und hat den 3D-Chunk im Precache; offline (`context.setOffline`) lädt die App mit Clear-Sky-Ergebnissen und
-  3D-Ansicht, ohne Konsolenfehler. Nur dort laufen Service Worker; die übrigen Specs blockieren sie
-  (`serviceWorkers: 'block'`), damit `page.route()` jede Anfrage sieht. Mit `BASE_PATH` laufen Build, `vite preview`
-  und `baseURL` unter dem Pfad (die Specs navigieren relativ mit `page.goto('./')`).
+  Sprachumschaltung DE → EN. `pwa.spec.ts`: Manifest gültig und unter dem Basis-Pfad, `id` wie Chromiums
+  `Page.getAppId`, Icons ladbar (Grösse, `maskable`/`apple-touch-icon` deckend); Service Worker registriert sich,
+  kontrolliert die Seite nach einem Reload und hat den 3D-Chunk im Precache; offline (`context.setOffline`) lädt die
+  App mit Clear-Sky-Ergebnissen und 3D-Ansicht, ohne Konsolenfehler; eine neue Version (derselbe Worker als
+  `sw.js?next` registriert, weil Playwright die Update-Anfrage für `sw.js` nicht umleitet) wartet mit «Neue Version
+  verfügbar» und übernimmt erst nach «Neu laden» (schlägt mit `registerType: 'autoUpdate'` fehl). Nur dort laufen
+  Service Worker; die übrigen Specs blockieren sie (`serviceWorkers: 'block'`), damit `page.route()` jede Anfrage
+  sieht. Mit `BASE_PATH` laufen Build, `vite preview` und `baseURL` unter dem Pfad (die Specs navigieren relativ mit
+  `page.goto('./')`).
 - **CI** (`.github/workflows/ci.yml`, Node aus `.nvmrc`): Lint, `format:check`, Typecheck, Tests und Build; danach
   E2E mit dem von Playwright installierten Chromium.
