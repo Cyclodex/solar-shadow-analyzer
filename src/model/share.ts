@@ -36,8 +36,11 @@ export const MAX_BUILDING_VERTICES = 64;
 export const MAX_TOTAL_BUILDING_VERTICES = 2000;
 /** Footprints with a smaller area (m², after rounding) are dropped as degenerate. */
 export const MIN_BUILDING_AREA = 0.5;
-/** Rings with more raw vertices are dropped before any work is done on them (untrusted input). */
-const MAX_RAW_RING_VERTICES = 4096;
+/**
+ * Rings with more raw vertices are dropped before any work is done on them (untrusted input). Real parts need far
+ * fewer: the largest keyhole ring (bridgeHoles) within 500 m of six city sites had 127 vertices (2026-09-25).
+ */
+export const MAX_RAW_RING_VERTICES = 1024;
 
 /** decodeConfig rejects longer inputs (a full config with 720 horizon points is ≈ 15 k chars). */
 const MAX_ENCODED_LENGTH = 200_000;
@@ -250,8 +253,9 @@ function sanitizeHorizonPoints(v: unknown): HorizonPoint[] {
 
 /**
  * Footprint ring: [east, north] tuples (or {e, n} / {x, y} objects), clamped to ±2000 m and rounded to 0.1 m;
- * consecutive and closing duplicates removed; counter-clockwise; simplified to MAX_BUILDING_VERTICES. Null if
- * any vertex is invalid, fewer than 3 remain or the area is below MIN_BUILDING_AREA.
+ * consecutive and closing duplicates removed; counter-clockwise; simplified to at most MAX_BUILDING_VERTICES
+ * (simplifyRing also drops the repeats that simplification can leave next to each other, so a second pass is a
+ * no-op). Null if any vertex is invalid, fewer than 3 remain or the area is below MIN_BUILDING_AREA.
  */
 function sanitizeRing(v: unknown): Ring | null {
   if (!Array.isArray(v) || v.length < 3 || v.length > MAX_RAW_RING_VERTICES) return null;
@@ -287,6 +291,8 @@ function sanitizeBuildings(v: unknown): Building[] {
   let vertices = 0;
   for (const raw of v) {
     if (out.length >= MAX_BUILDINGS) break;
+    // No footprint (≥ 3 vertices) fits any more: stop before simplifying rings that would be dropped anyway.
+    if (vertices + 3 > MAX_TOTAL_BUILDING_VERTICES) break;
     if (!isRecord(raw)) continue;
     const item = ownRecord(raw);
     const footprint = sanitizeRing(item.footprint);

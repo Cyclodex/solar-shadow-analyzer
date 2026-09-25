@@ -7,6 +7,7 @@ import {
   assembleBuildingParts,
   buildingTileUrl,
   clearBuildingTileCache,
+  coverageFraction,
   decodeBuildingTile,
   fetchSwisstopoBuildings,
   lonLatToTile,
@@ -483,6 +484,11 @@ describe('fetchSwisstopoBuildings', () => {
     props: { render_height: 15, render_min_height: 0 },
   };
   const instant = { sleep: () => Promise.resolve(), random: () => 0 };
+  /** Swiss tiles have map data besides buildings (a layer without features is not in the tile at all). */
+  const landcover: FixtureLayer = {
+    name: 'landcover',
+    features: [{ props: { class: 'wood' }, rings: [rect(0, 0, 10, 10)] }],
+  };
 
   function stubFetch(
     tiles: Map<string, Uint8Array>,
@@ -558,11 +564,11 @@ describe('fetchSwisstopoBuildings', () => {
 
   it('returns typed errors and never throws', async () => {
     const tiles = cutIntoTiles([building], tiles4);
-    const notFound = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
-      fetchImpl: stubFetch(tiles, { fail: { '8530/5765': [404] } }),
+    const forbidden = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl: stubFetch(tiles, { fail: { '8530/5765': [403] } }),
       retry: instant,
     });
-    expect(notFound).toMatchObject({ ok: false, error: { kind: 'http', status: 404 }, tileCount: 4 });
+    expect(forbidden).toMatchObject({ ok: false, error: { kind: 'http', status: 403 }, tileCount: 4 });
 
     const down = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
       fetchImpl: stubFetch(tiles, { fail: { '8530/5765': [500, 500, 500, 500, 500] } }),
@@ -629,5 +635,191 @@ describe('fetchSwisstopoBuildings', () => {
         : base(input)) as typeof fetch;
     const r = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, { fetchImpl });
     expect(r).toMatchObject({ ok: true, parts: [], covered: false, attribution: SWISSTOPO_ATTRIBUTION });
+  });
+
+  it('outside the tileset (404, e.g. Paris, Vienna): no data, covered false — not an error', async () => {
+    const fetchImpl = stubFetch(new Map()); // every tile 404
+    const r = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl,
+      retry: instant,
+    });
+    expect(r).toMatchObject({ ok: true, parts: [], covered: false, coverage: 0, tileCount: 4, bytes: 0 });
+    expect(fetchImpl.urls.filter((u) => u.endsWith('.pbf'))).toHaveLength(4); // 404 is not retried
+    // One missing tile: the others still count, the gap shows in the coverage.
+    const tiles = cutIntoTiles([building], tiles4, [landcover]);
+    tiles.delete(`${Math.floor(site.x)}/${Math.floor(site.y)}`); // the tile holding most of the circle
+    clearBuildingTileCache();
+    const partial = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl: stubFetch(tiles),
+      retry: instant,
+    });
+    expect(partial.ok && partial.covered).toBe(true);
+    expect(partial.ok && partial.coverage).toBeGreaterThan(0.05);
+    expect(partial.ok && partial.coverage).toBeLessThan(0.95);
+  });
+
+  it('retries a tile whose download breaks off (network), and reports a lasting failure as network', async () => {
+    const tiles = cutIntoTiles([building], tiles4);
+    const base = stubFetch(tiles);
+    let broken = 0;
+    const dropping = (times: number) =>
+      (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const res = await base(input, init);
+        if (!String(input).endsWith('8531/5766.pbf') || broken >= times) return res;
+        broken++;
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        let sent = false;
+        const body = new ReadableStream<Uint8Array>({
+          pull(c) {
+            if (sent) c.error(new TypeError('network error'));
+            else c.enqueue(bytes.subarray(0, 100));
+            sent = true;
+          },
+        });
+        return new Response(body, { status: 200 });
+      }) as typeof fetch;
+    const r = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl: dropping(1),
+      retry: instant,
+    });
+    expect(r.ok && r.parts.length).toBe(1);
+    expect(broken).toBe(1);
+
+    clearBuildingTileCache();
+    broken = 0;
+    const lasting = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl: dropping(Infinity),
+      retry: { ...instant, retries: 2 },
+    });
+    expect(lasting).toMatchObject({ ok: false, error: { kind: 'network', message: 'network error' } });
+    expect(broken).toBe(3);
+  });
+
+  it('a stalled tile times out and is retried (per-attempt time limit)', async () => {
+    const tiles = cutIntoTiles([building], tiles4);
+    const base = stubFetch(tiles);
+    let stalls = 0;
+    const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).endsWith('8530/5766.pbf') && stalls++ === 0)
+        return new Promise<Response>(() => undefined);
+      return base(input, init);
+    }) as typeof fetch;
+    const r = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl,
+      retry: { ...instant, attemptTimeoutMs: 20 },
+    });
+    expect(r.ok && r.parts.length).toBe(1);
+    expect(stalls).toBe(2);
+  });
+
+  it('a failing tile aborts the running requests and is the reported error', async () => {
+    const tiles = cutIntoTiles([building], tiles4);
+    const base = stubFetch(tiles);
+    const aborted: string[] = [];
+    const fetchImpl = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('8530/5765.pbf')) return Promise.resolve(new Response('', { status: 400 }));
+      if (!url.endsWith('.pbf')) return base(input, init);
+      // The other tiles hang until aborted.
+      return new Promise<Response>((_resolve, reject) =>
+        init?.signal?.addEventListener('abort', () => {
+          aborted.push(url);
+          reject(new DOMException('aborted', 'AbortError'));
+        }),
+      );
+    }) as typeof fetch;
+    const r = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl,
+      retry: instant,
+    });
+    expect(r).toMatchObject({ ok: false, error: { kind: 'http', status: 400 } });
+    expect(aborted).toHaveLength(3);
+  });
+
+  it('an aborted import never returns ok, also when every tile comes from the cache', async () => {
+    const fetchImpl = stubFetch(cutIntoTiles([building], tiles4));
+    const warm = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, { fetchImpl });
+    expect(warm.ok).toBe(true);
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const r = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl,
+      signal: ctrl.signal,
+    });
+    expect(r).toMatchObject({ ok: false, error: { kind: 'aborted' } });
+    // Aborted while the attribution loads (tiles from the cache, tiles.json not yet read): aborted as well.
+    clearBuildingTileCache();
+    const noJson = ((input: RequestInfo | URL, init?: RequestInit) =>
+      String(input) === SWISSTOPO_VT_TILEJSON
+        ? Promise.resolve(new Response('', { status: 404 }))
+        : fetchImpl(input, init)) as typeof fetch;
+    expect(
+      (await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, { fetchImpl: noJson })).ok,
+    ).toBe(true);
+    const late = new AbortController();
+    const abortingJson = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) !== SWISSTOPO_VT_TILEJSON) return fetchImpl(input, init);
+      // tiles.json answers slowly; the user aborts after the (cached) tiles are done.
+      setTimeout(() => late.abort(), 10);
+      return new Promise<Response>(() => undefined);
+    }) as typeof fetch;
+    const tileRequests = fetchImpl.urls.length;
+    const r2 = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl: abortingJson,
+      signal: late.signal,
+    });
+    expect(fetchImpl.urls).toHaveLength(tileRequests); // every tile from the cache
+    expect(r2).toMatchObject({ ok: false, error: { kind: 'aborted' } });
+  });
+
+  it('coverage: share of the circle inside CH/FL from the not_CH_LI country polygon (border sites)', async () => {
+    // Everything west of the site (x < site.x) lies outside CH/FL: half of the circle.
+    const sx = Math.round(site.x * E);
+    const outsideLayer = (t: TileId): FixtureLayer => {
+      const x0 = t.x * E;
+      const y0 = t.y * E;
+      const west = clipRingToBox(
+        rect(0, 0, sx, 1e9),
+        x0 - BUFFER,
+        y0 - BUFFER,
+        x0 + E + BUFFER,
+        y0 + E + BUFFER,
+      );
+      return {
+        name: 'administrative_unit',
+        features:
+          west.length >= 3
+            ? [
+                {
+                  props: { admin_level: 2, class: 'country', iso_a2: 'not_CH_LI' },
+                  rings: [west.map(([x, y]): [number, number] => [x - x0, y - y0])],
+                },
+                {
+                  // The CH polygon and other admin units are ignored.
+                  props: { admin_level: 2, class: 'country', iso_a2: 'CH' },
+                  rings: [rect(0, 0, E, E)],
+                },
+              ]
+            : [],
+      };
+    };
+    const tiles = new Map<string, Uint8Array>();
+    for (const t of tiles4) {
+      const one = cutIntoTiles([building], [t], [outsideLayer(t), landcover]);
+      for (const [k, v] of one) tiles.set(k, v);
+    }
+    const decoded = decodeAll(tiles);
+    expect(decoded.some((d) => d.outside.length > 0)).toBe(true);
+    const half = coverageFraction(decoded, KRAMGASSE.latitude, KRAMGASSE.longitude, 300);
+    expect(half).toBeGreaterThan(0.47);
+    expect(half).toBeLessThan(0.53);
+    const r = await fetchSwisstopoBuildings(KRAMGASSE.latitude, KRAMGASSE.longitude, 300, {
+      fetchImpl: stubFetch(tiles),
+    });
+    expect(r).toMatchObject({ ok: true, covered: true, coverage: half });
+    // Without any not_CH_LI polygon the whole circle is covered; tiles without map data count as outside.
+    const inside = decodeAll(cutIntoTiles([building], tiles4, [landcover]));
+    expect(coverageFraction(inside, KRAMGASSE.latitude, KRAMGASSE.longitude, 300)).toBe(1);
+    expect(coverageFraction([], KRAMGASSE.latitude, KRAMGASSE.longitude, 300)).toBe(0);
   });
 });

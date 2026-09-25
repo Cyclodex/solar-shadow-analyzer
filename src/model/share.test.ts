@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { Building, Config } from './types';
 import { DEFAULT_CONFIG, LIMITS, createBuilding, createObstacle, type FieldLimit } from './defaults';
-import { ringArea } from './polygon';
+import { bridgeHoles, dropDuplicateVertices, ringArea } from './polygon';
 import {
   HORIZON_POINT_LIMITS,
   MAX_BUILDINGS,
@@ -10,6 +10,7 @@ import {
   MAX_HORIZON_POINTS,
   MAX_LOCATION_NAME_LENGTH,
   MAX_OBSTACLES,
+  MAX_RAW_RING_VERTICES,
   MAX_TEXT_LENGTH,
   MAX_TOTAL_BUILDING_VERTICES,
   MIN_BUILDING_AREA,
@@ -978,6 +979,46 @@ describe('sanitizeConfig: surroundings', () => {
     expect(kept).toHaveLength(Math.floor(MAX_TOTAL_BUILDING_VERTICES / 60));
     // Absurdly long raw rings are rejected before any work.
     expect(horizonOf({ buildings: [{ footprint: new Array(5000).fill([1, 2]) }] }).buildings).toEqual([]);
+    const ringOf = (n: number): [number, number][] =>
+      Array.from({ length: n }, (_, k): [number, number] => {
+        const a = (2 * Math.PI * k) / n;
+        return [300 * Math.cos(a), 300 * Math.sin(a)];
+      });
+    expect(horizonOf({ buildings: [{ footprint: ringOf(MAX_RAW_RING_VERTICES) }] }).buildings).toHaveLength(
+      1,
+    );
+    expect(horizonOf({ buildings: [{ footprint: ringOf(MAX_RAW_RING_VERTICES + 1) }] }).buildings).toEqual(
+      [],
+    );
+  });
+
+  it('is idempotent for keyhole rings (courtyards) that get simplified, also through a share link', () => {
+    // 61-gon (r = 20 m) with a small shaft joined by bridgeHoles (repeated bridge vertices): the courtyard is
+    // simplified away and its bridge vertices end up next to each other; they are dropped in the first pass.
+    const sweep: [number, number, number][] = [];
+    for (let n = 58; n <= 72; n++)
+      for (const w of [0.2, 0.3, 0.5, 1]) for (const hv of [3, 4, 5]) sweep.push([n, w, hv]);
+    let simplified = 0;
+    for (const [n, w, hv] of sweep) {
+      const outer = Array.from({ length: n }, (_, i): [number, number] => [
+        20 * Math.cos((2 * Math.PI * i) / n),
+        20 * Math.sin((2 * Math.PI * i) / n),
+      ]);
+      const hole = Array.from({ length: hv }, (_, i): [number, number] => [
+        2 + w * Math.cos((2 * Math.PI * i) / hv),
+        1 + w * Math.sin((2 * Math.PI * i) / hv),
+      ]);
+      const footprint = bridgeHoles(outer, [hole]);
+      const once = sanitizeConfig({
+        horizon: { buildings: [{ footprint, height: 20, source: 'swisstopo', removed: true }] },
+      });
+      const [b] = once.horizon.buildings;
+      if (footprint.length > MAX_BUILDING_VERTICES) simplified++;
+      expect(dropDuplicateVertices(b!.footprint)).toEqual(b!.footprint);
+      expect(sanitizeConfig(once)).toEqual(once);
+      expect(decodeConfig(encodeConfig(once))).toEqual(once);
+    }
+    expect(simplified).toBeGreaterThan(100);
   });
 
   it('keeps ids unique and flags only on imported buildings, and only when true', () => {

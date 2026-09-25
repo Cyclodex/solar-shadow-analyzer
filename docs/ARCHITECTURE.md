@@ -327,8 +327,11 @@ paralleler Zweig erhöht sie); die Werte für «fehlend» stehen eingefroren in 
 coord ±2000 m, je 0.1 m), `surfaceModel.radius` 150–500 m (Schritt 50), `buildingImport.radius` 0–1000 m (10).
 
 `sanitizeConfig`: höchstens `MAX_BUILDINGS` = 150 Gebäude, `MAX_BUILDING_VERTICES` = 64 Ecken je Gebäude (längere
-Grundrisse vereinfacht, Visvalingam-Whyatt, nur Ecken entfernt), `MAX_TOTAL_BUILDING_VERTICES` = 2000 Ecken insgesamt
-(spätere Gebäude fallen weg); Ecken auf 0.1 m gerundet und geklemmt, doppelte Ecken und der Schlusspunkt entfernt,
+Grundrisse vereinfacht, Visvalingam-Whyatt in O(n log n), nur Ecken entfernt; dabei benachbart gewordene gleiche
+Ecken, etwa die Brücke eines weggefallenen Hofs, fallen ebenfalls weg, sodass ein zweiter Durchlauf nichts ändert),
+`MAX_TOTAL_BUILDING_VERTICES` = 2000 Ecken insgesamt (spätere Gebäude fallen weg, ohne noch vereinfacht zu werden),
+Ringe mit mehr als `MAX_RAW_RING_VERTICES` = 1024 Rohecken ungeprüft verworfen (echte Teile: höchstens 127 Ecken
+als Schlüssellochring im 500-m-Umkreis von sechs Stadtorten); Ecken auf 0.1 m gerundet und geklemmt, doppelte Ecken und der Schlusspunkt entfernt,
 Ringe gegen den Uhrzeigersinn (umgedreht ab der zweiten Ecke), Fläche unter `MIN_BUILDING_AREA` = 0.5 m² verworfen,
 eindeutige ids (`b<k>`), `removed`/`edited` nur bei `source: 'swisstopo'` und nur als `true`. Gebäude ohne Anker
 erhalten den Standort als Anker (Radius 0). Gespeicherte Configs (localStorage) ohne die Felder bekommen die
@@ -390,8 +393,16 @@ Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200
   mindestens 5 m, `render_min_height` überall 0), ohne Feature-ids, Polygone mit 16 Einheiten Puffer (≈ 6.5 m) über
   die Kachel hinaus beschnitten. Jedes Teil wird auf seine Kachel beschnitten und Stücke gleicher Höhe und Klasse
   werden über Kachelkanten wieder zusammengefügt (Kramgasse 49, vier Kacheln: ohne das 179 getrennte Paare, danach 0;
-  im 300-m-Umkreis 1'545 → 1'513 Teile). `class: 'underground'` wird übersprungen; ausserhalb CH/FL enthalten die
-  Kacheln keine Gebäude (`covered: false`). 300 m um die Kramgasse: 4 Kacheln, 694 kB, 1.2 s, Dekodieren ≈ 55 ms,
+  im 300-m-Umkreis 1'545 → 1'513 Teile). `class: 'underground'` wird übersprungen. Ausserhalb CH/FL enthalten die
+  Kacheln keine Gebäude, ausserhalb der Grenzen des Kachelsatzes (`tiles.json` bounds `[3.57, 44.18, 13.66, 48.88]`,
+  z. B. Paris, Wien) antwortet der Server mit 404: beides ist «keine Daten», kein Fehler (`covered: false`, Hinweis
+  «nur in der Schweiz und Liechtenstein verfügbar»). **Grenzorte:** Die Kacheln enthalten nur die Gebäude auf der
+  Seite von CH/FL; `coverage` (0–1) ist der Anteil des Umkreises in CH/FL, berechnet aus dem Länderpolygon
+  `administrative_unit` (admin_level 2, `iso_a2: 'not_CH_LI'`) derselben Kacheln (300 m: Kreuzlingen 0.41,
+  Genf-Moillesulaz 0.77, Chiasso 0.78, Bern 1). B und C zeigen bei `coverage < 1` den Hinweis «Gebäude ausserhalb
+  der Schweiz und Liechtensteins fehlen» (Gebäudeliste, Laserscan-Status). Die Maske `trees === false` darf Zellen
+  ausserhalb CH/FL (`DecodedTile.outside`) nicht zu Boden machen, sonst verschwinden dort Gebäude, die der
+  Laserscan hat. 300 m um die Kramgasse: 4 Kacheln, 694 kB, 1.2 s, Dekodieren ≈ 55 ms,
   Zusammensetzen ≈ 30 ms (Node). `npm run validate:buildings` prüft live.
 - **Laserscan:** STAC v1 `data.geo.admin.ch/api/stac/v1/collections/ch.swisstopo.swisssurface3d-raster/items?bbox=…`
   (neuestes Jahr je Kachel), COG float32 LZW (Prädiktor 1), 512 × 512 Kacheln, NoData −9999, 0.5 m; volle Auflösung
@@ -403,8 +414,15 @@ Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200
   Druckbericht mit den Gebäuden). Die Attribution der Vektorkacheln kommt aus `tiles.json`.
 - **Anfragen:** FSDI-Nutzungsbedingungen: «API Rest Services (general) | \*.geo.admin.ch | 21 Mio requests / year | 40
   requests / minute». Suche frühestens 300 ms nach der letzten Eingabe, mit Cache. Alle Anfragen über
-  `fetchWithRetry` (`fetchRetry.ts`): gestutzter exponentieller Backoff mit Jitter, wie geo.admin.ch es verlangt
-  (1 s, 2 s, 4 s … höchstens 8 s, plus 0–1 s, Frist 20 s), nur Netzwerkfehler, 408, 429 und 5xx. Netzwerkcode wirft
+  `fetchRetry.ts`: gestutzter exponentieller Backoff mit Jitter, wie geo.admin.ch es verlangt (1 s, 2 s, 4 s …
+  höchstens 8 s, plus 0–1 s), nur Netzwerkfehler, Zeitüberschreitungen, 408, 429 und 5xx. Jeder Versuch hat eine
+  Frist (`attemptTimeoutMs`, Standard 15 s, Kacheln 10 s), danach wird er abgebrochen und wiederholt; nach
+  `deadlineMs` (Standard 20 s, Kacheln 15 s) beginnt kein neuer Versuch mehr (höchstens also diese Zeit plus ein
+  Versuch). Antworten mit Inhalt
+  (Kacheln, COG-Bereiche des Laserscans, JSON) über `fetchBytesWithRetry` bzw. `fetchReadWithRetry` lesen: nur dann
+  liegt das Lesen des Körpers in der Wiederholung und in der Frist (eine abbrechende Mobilverbindung mitten im
+  Download ist ein Netzwerkfehler und wird wiederholt). `fetchWithRetry` kehrt schon nach den Kopfzeilen zurück.
+  Der Abbruch durch den Aufrufer (`AbortSignal`) ergibt immer `'aborted'`, nie ein Ergebnis. Netzwerkcode wirft
   nie bis zur UI (typisierte Fehler), nimmt `AbortSignal` und ein `fetchImpl` für Tests. Ohne Nutzeraktion gibt es
   keine Anfrage ausser dem Import der Umgebung nach der Wahl einer Adresse.
 - **Ablauf nach einer Adresswahl:** Die Adresssuche setzt Standort (Label, 1e-6°, Zeitzone Europe/Zurich bzw.

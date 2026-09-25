@@ -74,32 +74,75 @@ export function ringDistance(ring: readonly ReadonlyVertex[], x: number, y: numb
 
 /**
  * Visvalingam–Whyatt simplification to at most `maxVertices` vertices (≥ 3): repeatedly removes the vertex
- * whose triangle with its neighbours has the smallest area. Coordinates are never changed, so the result of
- * an already small enough ring is an unchanged copy (idempotent).
+ * whose triangle with its neighbours has the smallest area (ties: the earliest vertex). Coordinates are never
+ * changed. Removing vertices can make two equal vertices neighbours (a keyhole ring from bridgeHoles whose
+ * small courtyard is simplified away): such repeats are dropped at the end (dropDuplicateVertices), so the
+ * result may have fewer than `maxVertices` vertices, and simplifying it again returns an unchanged copy
+ * (idempotent; a ring that is already small enough is returned as an unchanged copy). O(n log n) (binary heap
+ * of triangle areas): rings come from untrusted input (share links, files).
  */
 export function simplifyRing(ring: readonly ReadonlyVertex[], maxVertices: number): Ring {
-  const out = ring.map((p): Vertex => [p[0], p[1]]);
+  const pts = ring.map((p): Vertex => [p[0], p[1]]);
   const target = Math.max(3, Math.floor(maxVertices));
+  const n = pts.length;
+  if (n <= target) return pts;
+  // Circular doubly linked list over the original indices; order (and so "earliest") never changes.
+  const prev = Array.from({ length: n }, (_, i) => (i - 1 + n) % n);
+  const next = Array.from({ length: n }, (_, i) => (i + 1) % n);
+  const removed = new Uint8Array(n);
+  const version = new Uint32Array(n);
   const tri = (k: number): number => {
-    const n = out.length;
-    const a = out[(k - 1 + n) % n];
-    const b = out[k];
-    const c = out[(k + 1) % n];
+    const a = pts[prev[k]];
+    const b = pts[k];
+    const c = pts[next[k]];
     return Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
   };
-  while (out.length > target) {
-    let best = 0;
-    let bestArea = Infinity;
-    for (let k = 0; k < out.length; k++) {
-      const a = tri(k);
-      if (a < bestArea) {
-        bestArea = a;
-        best = k;
+  // Min-heap of [area, index, version]; stale entries (older version, removed vertex) are skipped when popped.
+  type Entry = [number, number, number];
+  const heap: Entry[] = [];
+  const less = (p: Entry, q: Entry): boolean => p[0] < q[0] || (p[0] === q[0] && p[1] < q[1]);
+  const push = (e: Entry): void => {
+    heap.push(e);
+    for (let i = heap.length - 1; i > 0;) {
+      const parent = (i - 1) >> 1;
+      if (!less(heap[i], heap[parent])) break;
+      [heap[i], heap[parent]] = [heap[parent], heap[i]];
+      i = parent;
+    }
+  };
+  const pop = (): Entry | undefined => {
+    const top = heap[0];
+    const last = heap.pop();
+    if (heap.length > 0 && last) {
+      heap[0] = last;
+      for (let i = 0; ;) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < heap.length && less(heap[l], heap[m])) m = l;
+        if (r < heap.length && less(heap[r], heap[m])) m = r;
+        if (m === i) break;
+        [heap[i], heap[m]] = [heap[m], heap[i]];
+        i = m;
       }
     }
-    out.splice(best, 1);
+    return top;
+  };
+  for (let k = 0; k < n; k++) push([tri(k), k, 0]);
+  for (let left = n; left > target;) {
+    const e = pop();
+    if (!e) break;
+    const k = e[1];
+    if (removed[k] || e[2] !== version[k]) continue;
+    removed[k] = 1;
+    left--;
+    const p = prev[k];
+    const q = next[k];
+    next[p] = q;
+    prev[q] = p;
+    for (const j of [p, q]) push([tri(j), j, ++version[j]]);
   }
-  return out;
+  return dropDuplicateVertices(pts.filter((_, i) => !removed[i]));
 }
 
 /**

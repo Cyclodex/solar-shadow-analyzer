@@ -43,7 +43,7 @@ const q = (f: number): number => heights[Math.min(heights.length - 1, Math.floor
 
 console.log(`Site ${latitude}, ${longitude}, radius ${radius} m — ${result.attribution}`);
 console.log(
-  `Tiles: ${result.tileCount}, ${(result.bytes / 1024).toFixed(0)} kB, ${ms.toFixed(0)} ms (covered: ${result.covered})`,
+  `Tiles: ${result.tileCount}, ${(result.bytes / 1024).toFixed(0)} kB, ${ms.toFixed(0)} ms (covered: ${result.covered}, share of the circle in CH/FL: ${result.coverage})`,
 );
 console.log(
   `Parts: ${parts.length} (pieces joined across tile edges: ${result.mergedPieces}), vertices: ${vertices}`,

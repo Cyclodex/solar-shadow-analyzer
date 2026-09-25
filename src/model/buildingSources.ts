@@ -1,11 +1,12 @@
 import { VectorTile, classifyRings } from '@mapbox/vector-tile';
 import { PbfReader } from 'pbf';
 import { type GeoPoint, WGS84_A, lonLatToEnu, wgs84Radii } from './enu';
-import { NetError, fetchWithRetry, type RetryOptions } from './fetchRetry';
+import { NetError, fetchBytesWithRetry, fetchReadWithRetry, type RetryOptions } from './fetchRetry';
 import {
   clipRingToBox,
   dropDuplicateVertices,
   ensureCcw,
+  pointInRing,
   ringArea,
   ringBounds,
   ringDistance,
@@ -21,7 +22,11 @@ import { toDeg, toRad } from './units';
 // `render_min_height` (numbers, whole metres, min. 5 m). Checked on live tiles 2026-09-25 (Kramgasse 49, Bern:
 // 14/8530–8531/5765–5766, 2,366–4,858 building features per tile): extent 4096, no feature ids, polygons
 // clipped at a 16-unit buffer (≈ 6.5 m) around each tile, render_min_height 0 everywhere. Outside CH/FL the
-// tiles have no `building` layer (Munich, Mulhouse, Como: only `administrative_unit`).
+// tiles have no `building` layer (Munich, Mulhouse, Como: only `administrative_unit`), and outside the
+// tileset's bounds ([3.57, 44.18, 13.66, 48.88], e.g. Paris, Vienna) the server answers 404: both count as
+// "no data" (covered false), not as an error. Tiles at the border hold buildings on the CH/FL side only; the
+// `administrative_unit` layer has the area outside CH/FL as a country polygon (admin_level 2, iso_a2
+// 'not_CH_LI'), from which `coverage` (share of the circle inside CH/FL) is computed.
 // A building crossing a tile edge appears in both tiles, each copy cut at that tile's buffer: 322 of the
 // 14,655 parts in the four Kramgasse tiles straddle an inner tile edge, 204 of them are cut in both tiles.
 // Each part is therefore clipped to its own tile's exact square, and pieces meeting across a tile edge with
@@ -55,11 +60,15 @@ const SEAM_KINK_UNITS = 0.5;
 /** Polygons whose bounding box stays farther than radius + this (m) from the point are skipped early. */
 const PREFILTER_MARGIN_M = 100;
 
-/** Default retry parameters for tiles: fewer and shorter than the geo.admin.ch defaults (interactive import). */
+/**
+ * Default retry parameters for tiles: fewer and shorter than the geo.admin.ch defaults (interactive import). A tile
+ * (≤ 220 kB) that has not fully arrived after 10 s is requested again (0.5 Mbit/s needs 3.5 s).
+ */
 const TILE_RETRY: Omit<RetryOptions, 'signal' | 'fetchImpl'> = {
   retries: 3,
   maxDelayMs: 4000,
   deadlineMs: 15000,
+  attemptTimeoutMs: 10000,
 };
 
 /** One building part around the requested point. */
@@ -98,8 +107,13 @@ export type BuildingFetchResult =
       tileCount: number;
       /** Bytes received (Content-Length where exposed, else decoded size). */
       bytes: number;
-      /** False when no tile had map data (outside CH/FL): parts is then empty for that reason. */
+      /** False when the circle lies outside CH/FL (no tile data there): parts is then empty for that reason. */
       covered: boolean;
+      /**
+       * Share of the circle's area inside CH/FL, 0–1 (0.001; sampled on a grid). Below 1 at border sites
+       * (Basel, Kreuzlingen, Geneva, Chiasso …): buildings on the other side of the border are missing.
+       */
+      coverage: number;
       /** Pieces joined across tile edges (a part assembled from n pieces counts n − 1). */
       mergedPieces: number;
     }
@@ -184,9 +198,19 @@ export interface TilePolygon {
 export interface DecodedTile {
   tile: TileId;
   polygons: TilePolygon[];
-  /** Names of all layers in the tile (a tile outside CH/FL has only 'administrative_unit'). */
+  /**
+   * Names of all layers in the tile (a tile outside CH/FL has only 'administrative_unit'; a tile the server does
+   * not have (404, outside the tileset's bounds) none).
+   */
   layers: string[];
+  /** Areas outside CH/FL in this tile ('not_CH_LI' country polygons, [outer, ...holes], global tile units). */
+  outside: Ring[][];
 }
+
+/** Layer with the administrative units (country polygons among them). */
+export const ADMIN_LAYER = 'administrative_unit';
+/** iso_a2 of the country polygon covering everything outside Switzerland and Liechtenstein. */
+const OUTSIDE_CH_LI = 'not_CH_LI';
 
 function isGzip(bytes: Uint8Array): boolean {
   return bytes.length > 2 && bytes[0] === 0x1f && bytes[1] === 0x8b;
@@ -206,10 +230,27 @@ export function decodeBuildingTile(bytes: Uint8Array, tile: TileId): DecodedTile
   const layers = Object.keys(vt.layers);
   const layer = vt.layers[BUILDING_LAYER];
   const polygons: TilePolygon[] = [];
-  if (!layer) return { tile, polygons, layers };
-  const scale = UNITS / layer.extent;
   const ox = tile.x * UNITS;
   const oy = tile.y * UNITS;
+  const outside: Ring[][] = [];
+  const admin = vt.layers[ADMIN_LAYER];
+  if (admin) {
+    const scale = UNITS / admin.extent;
+    for (let i = 0; i < admin.length; i++) {
+      const f = admin.feature(i);
+      if (f.type !== 3 || f.properties.iso_a2 !== OUTSIDE_CH_LI) continue;
+      for (const poly of classifyRings(f.loadGeometry())) {
+        const rings = poly
+          .map((r) =>
+            dropDuplicateVertices(r.map((p): [number, number] => [ox + p.x * scale, oy + p.y * scale])),
+          )
+          .filter((r) => r.length >= 3);
+        if (rings.length > 0) outside.push(rings);
+      }
+    }
+  }
+  if (!layer) return { tile, polygons, layers, outside };
+  const scale = UNITS / layer.extent;
   for (let i = 0; i < layer.length; i++) {
     const f = layer.feature(i);
     if (f.type !== 3) continue;
@@ -235,7 +276,54 @@ export function decodeBuildingTile(bytes: Uint8Array, tile: TileId): DecodedTile
       });
     }
   }
-  return { tile, polygons, layers };
+  return { tile, polygons, layers, outside };
+}
+
+/** A tile the server does not have (404): no data, like a tile outside CH/FL. */
+function emptyTile(tile: TileId): DecodedTile {
+  return { tile, polygons: [], layers: [], outside: [] };
+}
+
+/** Grid points per radius for coverageFraction (≈ π · 24² ≈ 1,800 points in the circle). */
+const COVERAGE_GRID = 24;
+
+/**
+ * Share of the circle (radius m around the point) inside CH/FL, 0–1 rounded to 0.001, from decoded tiles: a grid
+ * point counts as outside when its tile has no map data (only 'administrative_unit', or 404) or when it lies in
+ * the tile's 'not_CH_LI' country polygon; points in tiles not given are not counted. Pure (no network).
+ */
+export function coverageFraction(
+  tiles: readonly DecodedTile[],
+  latitude: number,
+  longitude: number,
+  radius: number,
+): number {
+  const byKey = new Map(tiles.map((t) => [`${t.tile.x}/${t.tile.y}`, t]));
+  const zoom = tiles[0]?.tile.z ?? BUILDING_TILE_ZOOM;
+  const site = lonLatToTile(latitude, longitude, zoom);
+  const metresPerUnit = (2 * Math.PI * WGS84_A * Math.cos(toRad(latitude))) / (2 ** zoom * UNITS);
+  const reach = radius / metresPerUnit;
+  const step = reach / COVERAGE_GRID;
+  let inside = 0;
+  let total = 0;
+  for (let i = -COVERAGE_GRID; i <= COVERAGE_GRID; i++) {
+    for (let j = -COVERAGE_GRID; j <= COVERAGE_GRID; j++) {
+      if (i * i + j * j > COVERAGE_GRID * COVERAGE_GRID) continue;
+      const x = site.x * UNITS + i * step;
+      const y = site.y * UNITS + j * step;
+      const t = byKey.get(`${Math.floor(x / UNITS)}/${Math.floor(y / UNITS)}`);
+      // Not among the tiles given (the rim may reach a few dm past tilesForRadius, whose ellipsoidal radii differ
+      // slightly from the Mercator scale used here): not counted, so an inland site stays at exactly 1.
+      if (!t) continue;
+      total++;
+      if (!t.layers.some((l) => l !== ADMIN_LAYER)) continue;
+      const out = t.outside.some(
+        ([outer, ...holes]) => pointInRing(outer, x, y) && !holes.some((h) => pointInRing(h, x, y)),
+      );
+      if (!out) inside++;
+    }
+  }
+  return total > 0 ? Math.round((inside / total) * 1000) / 1000 : 0;
 }
 
 // ── Assembly: clip to tiles, join across tile edges, ENU ──
@@ -611,13 +699,13 @@ function tilesetAttribution(
 ): Promise<string> {
   attributionPromise ??= (async () => {
     try {
-      const res = await fetchWithRetry(SWISSTOPO_VT_TILEJSON, {
+      const json: unknown = await fetchReadWithRetry(SWISSTOPO_VT_TILEJSON, (res) => res.json(), {
         fetchImpl,
         signal,
         retries: 1,
         jitterMs: 200,
+        attemptTimeoutMs: 8000,
       });
-      const json: unknown = await res.json();
       const a =
         typeof json === 'object' && json !== null ? (json as Record<string, unknown>).attribution : null;
       return typeof a === 'string' && a.trim() !== '' ? a.trim() : SWISSTOPO_ATTRIBUTION;
@@ -632,7 +720,9 @@ function tilesetAttribution(
 async function loadTile(
   t: TileId,
   opts: FetchBuildingsOptions,
+  signal: AbortSignal,
 ): Promise<{ tile: DecodedTile; bytes: number }> {
+  if (signal.aborted) throw abortedError();
   const url = buildingTileUrl(t);
   const hit = tileCache.get(url);
   if (hit) {
@@ -640,27 +730,37 @@ async function loadTile(
     tileCache.set(url, hit);
     return { tile: hit.tile, bytes: 0 }; // nothing downloaded
   }
-  const res = await fetchWithRetry(url, {
-    ...TILE_RETRY,
-    ...opts.retry,
-    signal: opts.signal,
-    fetchImpl: opts.fetchImpl,
-  });
-  const raw = new Uint8Array(await res.arrayBuffer());
-  const length = Number(res.headers.get('content-length'));
-  const bytes = Number.isFinite(length) && length > 0 ? length : raw.byteLength;
-  let tile: DecodedTile;
+  let entry: { tile: DecodedTile; bytes: number };
   try {
-    tile = decodeBuildingTile(await maybeGunzip(raw), t);
+    // The body is read inside the retry loop: a dropped or stalled download is retried like a failed request.
+    const res = await fetchBytesWithRetry(url, {
+      ...TILE_RETRY,
+      ...opts.retry,
+      signal,
+      fetchImpl: opts.fetchImpl,
+    });
+    const length = Number(res.headers.get('content-length'));
+    const bytes = Number.isFinite(length) && length > 0 ? length : res.bytes.byteLength;
+    try {
+      entry = { tile: decodeBuildingTile(await maybeGunzip(res.bytes), t), bytes };
+    } catch (e) {
+      throw new DecodeError(`${url}: ${e instanceof Error ? e.message : String(e)}`);
+    }
   } catch (e) {
-    throw new DecodeError(`${url}: ${e instanceof Error ? e.message : String(e)}`);
+    // Outside the tileset's bounds the server has no tile: no data there, not an error.
+    if (!(e instanceof NetError && e.kind === 'http' && e.status === 404)) throw e;
+    entry = { tile: emptyTile(t), bytes: 0 };
   }
-  const entry = { tile, bytes };
   tileCache.set(url, entry);
   while (tileCache.size > TILE_CACHE_MAX) tileCache.delete(tileCache.keys().next().value as string);
   return entry;
 }
 
+function abortedError(): NetError {
+  return new NetError('aborted', '', 'The import was aborted.', 0);
+}
+
+/** Typed error: aborted (caller's signal), the NetError's kind, 'decode' for unreadable tiles (and other data errors). */
 function toSourceError(e: unknown, signal: AbortSignal | undefined): BuildingSourceError {
   if (signal?.aborted) return { kind: 'aborted', message: 'The import was aborted.' };
   if (e instanceof NetError) {
@@ -672,7 +772,9 @@ function toSourceError(e: unknown, signal: AbortSignal | undefined): BuildingSou
 /**
  * Building parts within `radius` m of (latitude, longitude) from the swisstopo base vector tiles (z14, 1–4 tiles
  * for 300 m), footprints in ENU metres around that point. Tiles are fetched with retries (truncated exponential
- * backoff + jitter, fetchRetry.ts) and cached in memory. Never throws: failures return { ok: false, error }.
+ * backoff + jitter, a time limit per attempt, body included; fetchRetry.ts) and cached in memory. When one tile
+ * fails, the other requests are aborted. Never throws: failures return { ok: false, error }; once `signal` is
+ * aborted the result is { ok: false, error: { kind: 'aborted' } }, also when every tile came from the cache.
  */
 export async function fetchSwisstopoBuildings(
   latitude: number,
@@ -682,7 +784,12 @@ export async function fetchSwisstopoBuildings(
 ): Promise<BuildingFetchResult> {
   let bytes = 0;
   let tileCount = 0;
+  // Aborts the sibling requests when one tile fails; follows the caller's signal.
+  const inner = new AbortController();
+  const forward = (): void => inner.abort();
+  opts.signal?.addEventListener('abort', forward, { once: true });
   try {
+    if (opts.signal?.aborted) throw abortedError();
     if (
       !Number.isFinite(latitude) ||
       !Number.isFinite(longitude) ||
@@ -706,11 +813,16 @@ export async function fetchSwisstopoBuildings(
     let next = 0;
     let done = 0;
     let failed = false;
+    let firstError: unknown = null;
     const worker = async (): Promise<void> => {
       while (next < ids.length && !failed) {
         const i = next++;
-        const r = await loadTile(ids[i], opts).catch((e: unknown) => {
-          failed = true; // the other workers start no further tiles
+        const r = await loadTile(ids[i], opts, inner.signal).catch((e: unknown) => {
+          if (!failed) {
+            failed = true; // the other workers start no further tiles …
+            firstError = e; // … (reported instead of the aborts it causes) …
+            inner.abort(); // … and the running requests stop
+          }
           throw e;
         });
         decoded[i] = r.tile;
@@ -719,11 +831,20 @@ export async function fetchSwisstopoBuildings(
         opts.onProgress?.(done, ids.length, bytes);
       }
     };
-    await Promise.all(Array.from({ length: Math.min(TILE_CONCURRENCY, ids.length) }, worker));
+    await Promise.all(Array.from({ length: Math.min(TILE_CONCURRENCY, ids.length) }, worker)).catch(
+      (e: unknown) => {
+        throw failed ? firstError : e;
+      },
+    );
     const { parts, mergedPieces } = assembleBuildingParts(decoded, latitude, longitude, radius);
-    const covered = decoded.some((t) => t.layers.some((l) => l !== 'administrative_unit'));
-    return { ok: true, parts, attribution: await attribution, tileCount, bytes, covered, mergedPieces };
+    const coverage = coverageFraction(decoded, latitude, longitude, radius);
+    const covered = coverage > 0 || parts.length > 0;
+    const text = await attribution;
+    if (opts.signal?.aborted) throw abortedError();
+    return { ok: true, parts, attribution: text, tileCount, bytes, covered, coverage, mergedPieces };
   } catch (e) {
     return { ok: false, error: toSourceError(e, opts.signal), tileCount, bytes };
+  } finally {
+    opts.signal?.removeEventListener('abort', forward);
   }
 }

@@ -118,6 +118,54 @@ describe('simplifyRing', () => {
     ]);
     expect(simplifyRing(r, 1)).toHaveLength(3);
   });
+
+  it('drops repeats left next to each other (keyhole ring whose courtyard is simplified away): idempotent', () => {
+    // 61-gon (r = 20 m) with a 0.2 m shaft joined by bridgeHoles: 67 vertices, the bridge vertices appear twice.
+    const outer = Array.from({ length: 61 }, (_, i): [number, number] => [
+      20 * Math.cos((2 * Math.PI * i) / 61),
+      20 * Math.sin((2 * Math.PI * i) / 61),
+    ]);
+    const hole = Array.from({ length: 4 }, (_, i): [number, number] => [
+      2 + 0.2 * Math.cos((Math.PI * i) / 2),
+      1 + 0.2 * Math.sin((Math.PI * i) / 2),
+    ]);
+    const ring = bridgeHoles(outer, [hole]);
+    expect(ring).toHaveLength(67);
+    const once = simplifyRing(ring, 64);
+    expect(once.length).toBeLessThanOrEqual(64);
+    expect(dropDuplicateVertices(once)).toEqual(once);
+    expect(simplifyRing(once, 64)).toEqual(once);
+  });
+
+  it('matches the plain O(n²) Visvalingam–Whyatt (smallest triangle first, ties: earliest vertex)', () => {
+    const reference = (ring: Ring, max: number): Ring => {
+      const out = ring.map((p): [number, number] => [p[0], p[1]]);
+      const tri = (k: number): number => {
+        const n = out.length;
+        const [a, b, c] = [out[(k - 1 + n) % n]!, out[k]!, out[(k + 1) % n]!];
+        return Math.abs((b[0] - a[0]) * (c[1] - a[1]) - (c[0] - a[0]) * (b[1] - a[1])) / 2;
+      };
+      while (out.length > Math.max(3, max)) {
+        let best = 0;
+        for (let k = 1; k < out.length; k++) if (tri(k) < tri(best)) best = k;
+        out.splice(best, 1);
+      }
+      return dropDuplicateVertices(out);
+    };
+    let seed = 7;
+    const rnd = (): number => (seed = (seed * 1103515245 + 12345) % 2147483648) / 2147483648;
+    for (let t = 0; t < 200; t++) {
+      const n = 5 + Math.floor(rnd() * 120);
+      // Whole-metre coordinates: many equal triangle areas (ties) and repeated vertices.
+      const ring = Array.from({ length: n }, (_, i): [number, number] => {
+        const a = (2 * Math.PI * i) / n;
+        const r = 10 + rnd() * 8;
+        return [Math.round(r * Math.cos(a)), Math.round(r * Math.sin(a))];
+      });
+      const max = 3 + Math.floor(rnd() * (n - 4));
+      expect(simplifyRing(ring, max)).toEqual(reference(ring, max));
+    }
+  });
 });
 
 describe('bridgeHoles', () => {
