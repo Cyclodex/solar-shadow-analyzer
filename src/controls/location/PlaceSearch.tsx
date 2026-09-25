@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type KeyboardEvent } from 'react';
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react';
 import { useFormat, useLang, useMessages, type Messages } from '../../i18n';
 import type { GeoErrorKind, SwissAddress } from '../../model/geocode';
 import { withGeocode } from '../../model/geocodeLazy';
@@ -210,6 +210,10 @@ export function PlaceSearch({ onSelectPlace, onSelectAddress }: PlaceSearchProps
     document.getElementById(`${id}-option-${activeIndex}`)?.scrollIntoView?.({ block: 'nearest' });
   }, [expanded, activeIndex, id]);
 
+  const inputRef = useRef<HTMLInputElement>(null);
+  /** The option was picked by touch: the on-screen keyboard closes (the input loses the focus). */
+  const touchPick = useRef(false);
+
   const choose = (option: Option): void => {
     if (option.kind === 'address') {
       onSelectAddress(option.address);
@@ -268,14 +272,17 @@ export function PlaceSearch({ onSelectPlace, onSelectAddress }: PlaceSearchProps
   const addressFailed = missed?.addresses !== undefined && missed.addresses !== 'aborted';
 
   return (
-    <div className={styles.root}>
+    // data-site-plan-source: the site plan opening after an address pick may take the focus from here.
+    <div className={styles.root} data-site-plan-source="">
       <label htmlFor={`${id}-input`} className={styles.label}>
         {t.label}
       </label>
       <div className={styles.inputWrap}>
         <SearchIcon className={styles.icon} />
         <input
+          ref={inputRef}
           id={`${id}-input`}
+          data-address-search=""
           className={styles.input}
           type="search"
           role="combobox"
@@ -319,10 +326,18 @@ export function PlaceSearch({ onSelectPlace, onSelectAddress }: PlaceSearchProps
                     className={styles.option}
                     // Keep the focus in the input (no blur before the click).
                     onMouseDown={(e) => e.preventDefault()}
+                    onPointerDown={(e) => {
+                      touchPick.current = e.pointerType === 'touch';
+                    }}
                     onMouseMove={() => {
                       if (i !== activeIndex) setActiveKey(option.key);
                     }}
-                    onClick={() => choose(option)}
+                    onClick={() => {
+                      choose(option);
+                      // By touch the keyboard would stay open over the site plan that opens next.
+                      if (touchPick.current) inputRef.current?.blur();
+                      touchPick.current = false;
+                    }}
                   >
                     {option.kind === 'address' ? (
                       <>

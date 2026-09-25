@@ -39,9 +39,12 @@ import { useSun } from './useSun';
 // SITE PLAN MAP (SVG top view, north up; owned by the buildings feature)
 // Footprints in a world group (anchor ENU metres, y flipped, non-scaling strokes), markers in screen pixels.
 // Touch rules (docs/ARCHITECTURE.md "Touch"): one finger scrolls the page (touch-action: pan-y); a tap acts
-// on the click the browser sends for a real tap; a sideways drag pans the plan (or moves the balcony along
-// its facade) only after TOUCH_SLOP px of sideways movement; two fingers zoom and pan. The mouse wheel
-// scrolls the page; Ctrl/⌘ + wheel (and trackpad pinch) zooms. Buttons and keys zoom as well.
+// on the click the browser sends for a real tap; a sideways drag pans the plan only after TOUCH_SLOP px of
+// sideways movement; two fingers zoom and pan. The balcony handle (an HTML target HIT_TOUCH px around it) leaves
+// the page the pan across its facade (touch-action pan-y for a facade running sideways on screen, pan-x for one
+// running up and down) and moves the balcony once the finger travels TOUCH_SLOP px along the facade (before, only
+// sideways: along a facade running up and down the page scrolled instead). The mouse wheel scrolls the page;
+// Ctrl/⌘ + wheel (and trackpad pinch) zooms. Buttons and keys zoom as well.
 // ─────────────────────────────────────────────
 
 /** Finger travel (px) that still counts as a tap; a sideways drag starts beyond it. */
@@ -51,6 +54,17 @@ const MOUSE_SLOP = 3;
 /** Hit radius around facade edges and the balcony handle (px): fingers, mouse. */
 const HIT_TOUCH = 22;
 const HIT_MOUSE = 12;
+/**
+ * A tap this close to a party wall (px) always explains it; farther away (within the hit radius) a tap inside
+ * another building selects that building: the neighbours of a narrow row house lie within the finger's reach
+ * of its party walls.
+ */
+const PARTY_EXACT_PX = 6;
+/** Room the zoom buttons take at the top right (px): marker labels stay out of it. */
+const ZOOM_COLUMN_W = 60;
+const ZOOM_COLUMN_H = 160;
+/** Estimated width per character of a marker label (12 px, semi-bold). */
+const LABEL_CHAR_PX = 7.2;
 /** Zoom step of the buttons and keys. */
 const ZOOM_STEP = 1.6;
 /** Keyboard pan step, share of the view. */
@@ -266,6 +280,13 @@ export function SitePlanMap({
   };
 
   const balcony = placement ? toScreen(sc, placementPoint(placement)) : null;
+  /** Screen direction (unit, y down) of the balcony's facade edge. */
+  const edgeDir: Vertex | null = placement
+    ? [
+        (placement.edge.b[0] - placement.edge.a[0]) / placement.edge.length,
+        -(placement.edge.b[1] - placement.edge.a[1]) / placement.edge.length,
+      ]
+    : null;
 
   // Ctrl/⌘ + wheel zooms at the cursor (trackpad pinch sends ctrlKey); a plain wheel scrolls the page and
   // shows how to zoom. A native listener: React's onWheel is passive and cannot prevent the page zoom.
@@ -319,7 +340,7 @@ export function SitePlanMap({
     moved.current = true;
   };
 
-  const onPointerDown = (e: PointerEvent<SVGSVGElement>): void => {
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>): void => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const touch = e.pointerType === 'touch';
     lastTouch.current = touch;
@@ -345,7 +366,7 @@ export function SitePlanMap({
     }
   };
 
-  const onPointerMove = (e: PointerEvent<SVGSVGElement>): void => {
+  const onPointerMove = (e: PointerEvent<HTMLDivElement>): void => {
     if (!pointers.current.has(e.pointerId)) return;
     const [px, py] = local(e.clientX, e.clientY);
     pointers.current.set(e.pointerId, [px, py]);
@@ -367,9 +388,14 @@ export function SitePlanMap({
     if (g.kind === 'press' && g.id === e.pointerId) {
       const dx = px - g.x0;
       const dy = py - g.y0;
-      const start = g.touch
-        ? Math.abs(dx) > TOUCH_SLOP && Math.abs(dx) > Math.abs(dy)
-        : Math.hypot(dx, dy) > MOUSE_SLOP;
+      // On the handle a drag follows its facade (the page keeps only the pan across it).
+      let start: boolean;
+      if (!g.touch) start = Math.hypot(dx, dy) > MOUSE_SLOP;
+      else if (g.handle && edgeDir) {
+        const along = dx * edgeDir[0] + dy * edgeDir[1];
+        const across = dy * edgeDir[0] - dx * edgeDir[1];
+        start = Math.abs(along) > TOUCH_SLOP && Math.abs(along) >= Math.abs(across);
+      } else start = Math.abs(dx) > TOUCH_SLOP && Math.abs(dx) > Math.abs(dy);
       if (!start) return;
       e.currentTarget.setPointerCapture?.(e.pointerId);
       moved.current = true;
@@ -389,7 +415,7 @@ export function SitePlanMap({
     }
   };
 
-  const onPointerEnd = (e: PointerEvent<SVGSVGElement>): void => {
+  const onPointerEnd = (e: PointerEvent<HTMLDivElement>): void => {
     pointers.current.delete(e.pointerId);
     if (e.currentTarget.hasPointerCapture?.(e.pointerId)) e.currentTarget.releasePointerCapture(e.pointerId);
     const g = gesture.current;
@@ -400,7 +426,7 @@ export function SitePlanMap({
     if (e.type === 'pointercancel') moved.current = false;
   };
 
-  const onClick = (e: MouseEvent<SVGSVGElement>): void => {
+  const onClick = (e: MouseEvent<HTMLDivElement>): void => {
     if (moved.current) {
       moved.current = false;
       return;
@@ -422,11 +448,7 @@ export function SitePlanMap({
       onPlace(placementAt(best, toWorld(sc, px, py)));
       return;
     }
-    if (best?.party) {
-      onPartyWall(best);
-      return;
-    }
-    // Otherwise the smallest footprint under the pointer.
+    // The smallest footprint under the pointer.
     const [x, y] = toWorld(sc, px, py);
     let found: MapBuilding | null = null;
     let area = Infinity;
@@ -437,6 +459,10 @@ export function SitePlanMap({
         area = a;
         found = b;
       }
+    }
+    if (best?.party && (bestD <= PARTY_EXACT_PX || !found || found.kind === 'own')) {
+      onPartyWall(best);
+      return;
     }
     onSelect(found?.id ?? null);
   };
@@ -511,6 +537,15 @@ export function SitePlanMap({
   }
 
   const markerPx = marker ? toScreen(sc, marker.point) : null;
+  // The label goes left of the marker where it would run under the zoom buttons or off the map.
+  const markerLeft =
+    markerPx !== null &&
+    marker !== null &&
+    ((): boolean => {
+      const right = markerPx[0] + 10 + marker.label.length * LABEL_CHAR_PX;
+      const underButtons = markerPx[1] < ZOOM_COLUMN_H && right > width - ZOOM_COLUMN_W;
+      return underButtons || right > width - 4;
+    })();
   const locationPx = location ? toScreen(sc, location) : null;
 
   return (
@@ -524,6 +559,11 @@ export function SitePlanMap({
         aria-label={labels.map}
         aria-describedby={`${descId} ${helpId}`}
         onKeyDown={onKeyDown}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerEnd}
+        onPointerCancel={onPointerEnd}
+        onClick={onClick}
       >
         <svg
           ref={svgRef}
@@ -533,11 +573,6 @@ export function SitePlanMap({
           viewBox={`0 0 ${width} ${height}`}
           aria-hidden="true"
           focusable="false"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerEnd}
-          onPointerCancel={onPointerEnd}
-          onClick={onClick}
         >
           <rect width={width} height={height} className={styles.ground} />
           <g transform={`matrix(${sc.s} 0 0 ${-sc.s} ${sc.tx} ${sc.ty})`}>
@@ -566,7 +601,12 @@ export function SitePlanMap({
               <path
                 d={`M${markerPx[0]} ${markerPx[1] - 7}L${markerPx[0] + 7} ${markerPx[1]}L${markerPx[0]} ${markerPx[1] + 7}L${markerPx[0] - 7} ${markerPx[1]}Z`}
               />
-              <text x={markerPx[0] + 10} y={markerPx[1] + 4} className={styles.markerText}>
+              <text
+                x={markerLeft ? markerPx[0] - 10 : markerPx[0] + 10}
+                y={markerPx[1] + 4}
+                textAnchor={markerLeft ? 'end' : 'start'}
+                className={styles.markerText}
+              >
                 {marker.label}
               </text>
             </g>
@@ -586,6 +626,20 @@ export function SitePlanMap({
             </text>
           </g>
         </svg>
+        {balcony && (
+          // Touch target of the balcony: its touch-action follows the facade (see the header).
+          <span
+            className={styles.handleTouch}
+            style={{
+              left: `${balcony[0]}px`,
+              top: `${balcony[1]}px`,
+              // The page may pan across the facade only: a drag along it moves the balcony.
+              touchAction: edgeDir && Math.abs(edgeDir[1]) > Math.abs(edgeDir[0]) ? 'pan-x' : 'pan-y',
+            }}
+            aria-hidden="true"
+            data-handle-touch=""
+          />
+        )}
       </div>
       <div className={styles.zoom}>
         <Button size="sm" variant="secondary" iconOnly icon={<PlusIcon />} onClick={() => zoomBy(ZOOM_STEP)}>

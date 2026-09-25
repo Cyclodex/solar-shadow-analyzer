@@ -1,6 +1,7 @@
 import { devices, expect, test, type Locator, type Page } from '@playwright/test';
 import { decode } from 'fast-png';
 import { PbfWriter } from 'pbf';
+import { DEFAULT_CONFIG } from '../src/model/defaults.ts';
 import { enuToLonLat } from '../src/model/enu.ts';
 import { wgs84ToLv95 } from '../src/model/lv95.ts';
 
@@ -13,6 +14,11 @@ import { wgs84ToLv95 } from '../src/model/lv95.ts';
 /** Default location of the app (DEFAULT_CONFIG): 47.1° N, 7.45° E. */
 const SITE = { latitude: 47.1, longitude: 7.45 };
 const Z = 14;
+/**
+ * Canvas colours (64 × 64 sample) above which the panel rows are in view past the own building's wing: measured 326
+ * with the wing fading, 77 with it opaque (the view shows its wall).
+ */
+const MIN_L_COLOURS = 200;
 const EXTENT = 4096;
 
 /** Fractional Web Mercator tile coordinates at zoom Z (as model/buildingSources.ts lonLatToTile). */
@@ -423,6 +429,55 @@ test('site plan: facade and balcony set the location; the buildings show in the 
   await expect
     .poll(async () => differingPixels(withBuildings, await canvas.screenshot()), { timeout: 10_000 })
     .toBeGreaterThan(2000);
+});
+
+test('an L-shaped own building: the wing in front of the facade fades, the default camera sees the panels', async ({
+  page,
+}) => {
+  // Facade 180° (south) in the inner corner of an L: the main block behind the facade line, a wing 12 m wide and
+  // 8 m deep in front of it east of the balcony (facade frame u = east, n = south), 25 m high. The default camera
+  // looks from the front right, beyond the wing: before, the view showed only the wing's wall.
+  const ring: [number, number][] = [
+    [-10, 12],
+    [14, 12],
+    [14, -8],
+    [2, -8],
+    [2, 0],
+    [-10, 0],
+  ];
+  const config = {
+    ...DEFAULT_CONFIG,
+    location: { ...DEFAULT_CONFIG.location, ...SITE },
+    building: { ...DEFAULT_CONFIG.building, facadeAzimuth: 180 },
+    horizon: {
+      ...DEFAULT_CONFIG.horizon,
+      terrainEnabled: false,
+      buildings: [{ id: 'b1', name: '', footprint: ring, base: 0, height: 25, source: 'swisstopo' }],
+      buildingImport: { ...SITE, radius: 300, date: '2026-09-25' },
+    },
+  };
+  await page.addInitScript((c) => {
+    localStorage.setItem('ssa.config', JSON.stringify({ state: { config: c }, version: 2 }));
+  }, config);
+  await page.goto('./');
+  const canvas = page.locator('canvas').first();
+  await expect(canvas).toBeVisible({ timeout: 20_000 });
+  await canvas.scrollIntoViewIfNeeded();
+  // Colours of the canvas scaled down to 64 × 64 px (the scene preserves its drawing buffer).
+  const colours = (): Promise<number> =>
+    canvas.evaluate((el: HTMLCanvasElement) => {
+      const probe = document.createElement('canvas');
+      probe.width = 64;
+      probe.height = 64;
+      const ctx = probe.getContext('2d');
+      if (!ctx) return 0;
+      ctx.drawImage(el, 0, 0, 64, 64);
+      const data = ctx.getImageData(0, 0, 64, 64).data;
+      const set = new Set<number>();
+      for (let i = 0; i < data.length; i += 4) set.add((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+      return set.size;
+    });
+  await expect.poll(colours, { timeout: 30_000 }).toBeGreaterThan(MIN_L_COLOURS);
 });
 
 test('another site: after moving the location far away the buildings are said to belong elsewhere', async ({

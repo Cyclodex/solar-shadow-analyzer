@@ -1,6 +1,7 @@
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { clearModelCaches } from '../hooks/useModel';
 import { INITIAL_INSTALL, useInstallStore } from '../pwa/install';
+import { useAddressPointStore } from '../state/addressPointStore';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { INITIAL_SHARE_LINK, useShareLinkStore } from '../state/shareLinkStore';
@@ -26,6 +27,7 @@ export function resetStores(): void {
     surroundingsImport: null,
   });
   useDataStore.getState().resetData();
+  useAddressPointStore.setState({ point: null, anchor: null });
   useShareLinkStore.setState(INITIAL_SHARE_LINK);
   useInstallStore.setState(INITIAL_INSTALL);
   clearModelCaches();

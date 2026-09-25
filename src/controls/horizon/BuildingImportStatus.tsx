@@ -20,7 +20,8 @@ const de = {
   select: (done: number, total: number) => `Gebäude werden ausgewählt … ${done} von ${total}`,
   progress: 'Fortschritt Gebäude-Import',
   abort: 'Abbrechen',
-  error: 'Die Gebäude konnten nicht geladen werden. Die bisherigen bleiben.',
+  error: 'Die Gebäude konnten nicht geladen werden.',
+  errorKept: 'Die Gebäude konnten nicht geladen werden. Die bisherigen bleiben.',
   retry: 'Erneut versuchen',
   details: 'Technische Details',
   network: 'Keine Verbindung zum Server (offline oder blockiert).',
@@ -53,7 +54,8 @@ const messages: Messages<typeof de> = {
     select: (done, total) => `Selecting buildings … ${done} of ${total}`,
     progress: 'Building import progress',
     abort: 'Cancel',
-    error: 'The buildings could not be loaded. The previous ones stay.',
+    error: 'The buildings could not be loaded.',
+    errorKept: 'The buildings could not be loaded. The previous ones stay.',
     retry: 'Try again',
     details: 'Technical details',
     network: 'No connection to the server (offline or blocked).',
@@ -106,6 +108,9 @@ export function BuildingImportStatus() {
   const s = useBuildingImportStore();
   const { buildings, buildingImport } = useConfigSection('horizon');
   const confirmRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
+  // «Erneut versuchen» and «Abbrechen» unmount with their block: the focus moves to the status.
+  const keepFocus = (): void => rootRef.current?.focus({ preventScroll: true });
   const edits = buildings.filter((b) => b.source === 'swisstopo' && (b.removed || b.edited)).length;
   const confirming = s.pendingConfirm !== null && s.status !== 'loading';
 
@@ -114,7 +119,7 @@ export function BuildingImportStatus() {
   }, [confirming]);
 
   return (
-    <>
+    <div ref={rootRef} tabIndex={-1} className={styles.importStatus}>
       {s.status === 'loading' && s.progress && (
         <div className={styles.loading}>
           <div className={styles.loadingText}>
@@ -133,7 +138,14 @@ export function BuildingImportStatus() {
               valueText={(pct) => f.pct(pct)}
             />
           </div>
-          <Button size="sm" variant="ghost" onClick={abortBuildingImport}>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              abortBuildingImport();
+              keepFocus();
+            }}
+          >
             {t.abort}
           </Button>
         </div>
@@ -141,7 +153,7 @@ export function BuildingImportStatus() {
 
       {s.status === 'error' && s.error && (
         <div className={styles.warn} role="alert">
-          <p>{t.error}</p>
+          <p>{buildings.length > 0 ? t.errorKept : t.error}</p>
           <p className={styles.cause}>{causeText(s.error, t)}</p>
           <details className={styles.details}>
             <summary>{t.details}</summary>
@@ -150,7 +162,14 @@ export function BuildingImportStatus() {
             </code>
           </details>
           <div>
-            <Button size="sm" icon={<ResetIcon />} onClick={() => retryBuildingImport()}>
+            <Button
+              size="sm"
+              icon={<ResetIcon />}
+              onClick={() => {
+                retryBuildingImport();
+                keepFocus();
+              }}
+            >
               {t.retry}
             </Button>
           </div>
@@ -192,7 +211,7 @@ export function BuildingImportStatus() {
           </div>
         </div>
       )}
-    </>
+    </div>
   );
 }
 

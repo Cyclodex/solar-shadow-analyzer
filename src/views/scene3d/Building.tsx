@@ -1,5 +1,5 @@
 import { memo, useEffect, useLayoutEffect, useMemo, useRef } from 'react';
-import { useThree } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import {
   BoxGeometry,
   BufferGeometry,
@@ -7,9 +7,14 @@ import {
   Float32BufferAttribute,
   Matrix4,
   type InstancedMesh,
+  type LineBasicMaterial,
+  type MeshStandardMaterial,
 } from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
-import { prismMesh } from './buildingsGeometry';
+import type { Vertex } from '../../model/polygon';
+import type { FacadeVector } from '../../model/types';
+import { blockingPrisms, ownBodyParts, prismBoxes, prismMesh, type ScenePrism } from './buildingsGeometry';
+import { threeToFacade } from './coords';
 import type { ScenePalette } from './palette';
 import {
   MODULE_THICKNESS,
@@ -17,6 +22,7 @@ import {
   RAIL_THICKNESS as RAIL,
   SLAB_THICKNESS,
   hasRailing,
+  rowTargets,
   type SceneDims,
 } from './sceneLayout';
 
@@ -35,6 +41,103 @@ const WINDOW_OFFSET = 0.012;
 const BEHIND_PANELS = MODULE_THICKNESS + 0.003;
 const POST = 0.04;
 const MAX_POST_SPACING = 1.3;
+/** Opacity of a wing of the own building that hides part of the panel rows (as the neighbours). */
+const WING_FADED_OPACITY = 0.22;
+/** Camera position in the facade frame (scratch, written every frame). */
+const WING_CAM: FacadeVector = { u: 0, n: 0, z: 0 };
+
+/** Prism geometry of rings in the facade frame (local axes x = u, y = z, z = n; prismMesh maps b → z = −b). */
+function facadePrismGeometry(rings: readonly Vertex[][], top: number): BufferGeometry {
+  const mesh = prismMesh(
+    rings.map((ring, i) => ({
+      id: `own${i}`,
+      kind: 'imported',
+      ring: ring.map(([u, n]): Vertex => [u, -n]),
+      base: 0,
+      top,
+    })),
+  );
+  const g = new BufferGeometry();
+  g.setAttribute('position', new Float32BufferAttribute(mesh.positions, 3));
+  g.setAttribute('normal', new Float32BufferAttribute(mesh.normals, 3));
+  return g;
+}
+
+function setWingFaded(material: MeshStandardMaterial | LineBasicMaterial, faded: boolean): void {
+  material.transparent = faded;
+  material.opacity = faded ? WING_FADED_OPACITY : 1;
+  material.depthWrite = !faded;
+  // `transparent` selects another shader program variant.
+  material.needsUpdate = true;
+}
+
+/**
+ * A wing of the own building in front of the facade (the facade in the inner corner of an L): translucent
+ * while it hides part of the panel rows from the camera, like the neighbours (not in the "from the sun" view);
+ * its shadow stays. Before, the default camera of such a facade saw only this wing's wall.
+ */
+function OwnWing({
+  ring,
+  top,
+  palette,
+  targets,
+  facadeAzimuth,
+  fade,
+}: {
+  ring: Vertex[];
+  top: number;
+  palette: ScenePalette;
+  targets: readonly FacadeVector[];
+  facadeAzimuth: number;
+  fade: boolean;
+}) {
+  const geometry = useMemo(() => facadePrismGeometry([ring], top), [ring, top]);
+  const edges = useMemo(() => new EdgesGeometry(geometry, 20), [geometry]);
+  useEffect(
+    () => () => {
+      geometry.dispose();
+      edges.dispose();
+    },
+    [geometry, edges],
+  );
+  const prisms = useMemo(
+    (): ScenePrism[] => [{ id: 'wing', kind: 'imported', ring, base: 0, top }],
+    [ring, top],
+  );
+  const boxes = useMemo(() => prismBoxes(prisms), [prisms]);
+  const points = useMemo(() => targets.map((p) => ({ x: p.u, y: p.n, z: p.z })), [targets]);
+  const bodyRef = useRef<MeshStandardMaterial>(null);
+  const edgeRef = useRef<LineBasicMaterial>(null);
+  const faded = useRef(false);
+  useFrame(({ camera }) => {
+    const cam = threeToFacade(camera.position, facadeAzimuth, WING_CAM);
+    const blocked = fade && blockingPrisms({ x: cam.u, y: cam.n, z: cam.z }, points, prisms, boxes).size > 0;
+    const body = bodyRef.current;
+    const edge = edgeRef.current;
+    if (blocked === faded.current || !body || !edge) return;
+    faded.current = blocked;
+    setWingFaded(body, blocked);
+    setWingFaded(edge, blocked);
+  });
+  return (
+    <group>
+      <mesh geometry={geometry} castShadow receiveShadow>
+        <meshStandardMaterial
+          ref={bodyRef}
+          color={palette.color('wall')}
+          roughness={0.92}
+          metalness={0}
+          polygonOffset
+          polygonOffsetFactor={2}
+          polygonOffsetUnits={2}
+        />
+      </mesh>
+      <lineSegments geometry={edges}>
+        <lineBasicMaterial ref={edgeRef} color={palette.color('wall-edge')} />
+      </lineSegments>
+    </group>
+  );
+}
 
 interface WindowRect {
   x: number;
@@ -109,9 +212,11 @@ export interface BuildingProps {
   dims: SceneDims;
   /** 0 = night … 1 = day: windows glow faintly at night. */
   day: number;
+  /** Fade wings of the own building that hide the panel rows (not in the "from the sun" view). */
+  fade?: boolean;
 }
 
-export const Building = memo(function Building({ palette, dims, day }: BuildingProps) {
+export const Building = memo(function Building({ palette, dims, day, fade = true }: BuildingProps) {
   const invalidate = useThree((s) => s.invalidate);
   const { railN, balconyWidth, railHeight, storeyHeight, topStorey, own } = dims;
   const bw = dims.buildingWidth;
@@ -124,18 +229,14 @@ export const Building = memo(function Building({ palette, dims, day }: BuildingP
   // A taller real building gets windows up to its roof.
   const windowTop = Math.max(topStorey, Math.floor((bh - storeyHeight) / storeyHeight + 1e-9));
 
+  // The own footprint: the part behind the facade line always opaque, wings in front of it fade (OwnWing).
+  const parts = useMemo(() => (own ? ownBodyParts(own) : null), [own]);
   // Keyed on the sizes they use, not on dims: a tilt step changes dims but none of these.
   const body = useMemo(() => {
-    if (!own) return new BoxGeometry(bw, bh, bd).translate(0, bh / 2, -bd / 2);
-    // Local axes of the facade group: x = u, y = z, z = n. prismMesh maps (a, b) → (x = a, z = −b).
-    const mesh = prismMesh([
-      { id: 'own', kind: 'imported', ring: own.ring.map(([u, n]) => [u, -n]), base: 0, top: bh },
-    ]);
-    const g = new BufferGeometry();
-    g.setAttribute('position', new Float32BufferAttribute(mesh.positions, 3));
-    g.setAttribute('normal', new Float32BufferAttribute(mesh.normals, 3));
-    return g;
-  }, [own, bw, bh, bd]);
+    if (!parts) return new BoxGeometry(bw, bh, bd).translate(0, bh / 2, -bd / 2);
+    return facadePrismGeometry(parts.behind, bh);
+  }, [parts, bw, bh, bd]);
+  const targets = useMemo(() => (parts && parts.wings.length > 0 ? rowTargets(dims) : []), [parts, dims]);
   const edges = useMemo(() => new EdgesGeometry(body, 20), [body]);
   const windows = useMemo(
     () => windowRects(u0, u1, bw, storeyHeight, windowTop, doorStoreys),
@@ -198,6 +299,17 @@ export const Building = memo(function Building({ palette, dims, day }: BuildingP
       <lineSegments geometry={edges}>
         <lineBasicMaterial color={palette.color('wall-edge')} />
       </lineSegments>
+      {parts?.wings.map((ring, i) => (
+        <OwnWing
+          key={i}
+          ring={ring}
+          top={bh}
+          palette={palette}
+          targets={targets}
+          facadeAzimuth={dims.facadeAzimuth}
+          fade={fade}
+        />
+      ))}
       {windows.length > 0 && (
         <instancedMesh
           key={windows.length}

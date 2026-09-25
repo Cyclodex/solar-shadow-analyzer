@@ -17,7 +17,9 @@ import {
   useSimulationConfig,
 } from '../hooks/useModel';
 import { useProvisionalNote } from '../controls/horizon/provisional';
+import { UnconfirmedResultsNote } from '../controls/location/PlacementPrompt';
 import { useConfig } from '../state/configStore';
+import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { floorColor } from '../styles/tokens';
 import styles from './KpiBar.module.css';
@@ -197,7 +199,12 @@ export function KpiBar() {
   const { numFloors } = config.building;
   const loading = annualState === 'loading' || simulation === null;
   const ready = simulation !== null && !loading;
-  const provisional = ready && annualState === 'provisional';
+  // The laser scan waits for the location (an address point inside the building, site plan not applied): the
+  // values hold for that point without the scan, so they are provisional too.
+  const unconfirmed = useDataStore(
+    (s) => s.surface.status === 'waiting' && config.horizon.surfaceModel.enabled,
+  );
+  const provisional = ready && (annualState === 'provisional' || unconfirmed);
   const topDown = [...placements].reverse();
 
   // ── Annual (one snapshot: simulation + simConfig) ──
@@ -271,7 +278,12 @@ export function KpiBar() {
           {t.year} {config.weather.year}
         </h3>
         {loading && <span className="sr-only">{t.loading}</span>}
-        {provisional && <p className={styles.provisionalNote}>{provisionalNote}</p>}
+        {provisional &&
+          (unconfirmed ? (
+            <UnconfirmedResultsNote className={styles.provisionalNote} />
+          ) : (
+            <p className={styles.provisionalNote}>{provisionalNote}</p>
+          ))}
         <dl className={styles.grid}>
           <Kpi
             label={t.annualYield}

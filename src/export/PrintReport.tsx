@@ -71,6 +71,8 @@ const de = {
   perYear: '%/Jahr',
   lifetime: 'Betrachtungsdauer',
   link: 'Link zu dieser Konfiguration',
+  linkLong: (n: string) =>
+    `Der ganze Link hat ${n} Zeichen (mit den gespeicherten Gebäuden) und ist auf Papier nicht brauchbar: In der App über «Teilen» kopieren.`,
   placement: 'Lage am Gebäude',
   placed: (az: string, dir: string) =>
     `Balkon auf der Fassade ${az} ${dir}, im Lageplan gesetzt; Koordinaten auf 0.000001° (höchstens 0.07 m)`,
@@ -95,7 +97,7 @@ const de = {
   surfaceWaiting: 'wartet auf die Bestätigung von Fassade und Balkon im Lageplan',
   surfaceError: 'konnte nicht geladen werden',
   surfaceUnavailable: 'nur in der Schweiz und Liechtenstein verfügbar',
-  withPrisms: 'gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+  withPrisms: 'gerechnet mit den Umgebungsgebäuden als Gebäude mit flachem Dach',
   withoutScan: 'gerechnet ohne Laserscan',
   addressBuilding: 'Gebäude an der Adresse',
   sources: 'Datenquellen',
@@ -149,6 +151,8 @@ const messages: Messages<typeof de> = {
     perYear: '%/year',
     lifetime: 'Evaluation period',
     link: 'Link to this configuration',
+    linkLong: (n) =>
+      `The full link has ${n} characters (with the stored buildings) and is of no use on paper: copy it in the app with «Share».`,
     placement: 'Position on the building',
     placed: (az, dir) =>
       `balcony on the ${az} ${dir} facade, set in the site plan; coordinates to 0.000001° (at most 0.07 m)`,
@@ -173,7 +177,7 @@ const messages: Messages<typeof de> = {
     surfaceWaiting: 'waiting for facade and balcony to be confirmed in the site plan',
     surfaceError: 'could not be loaded',
     surfaceUnavailable: 'available in Switzerland and Liechtenstein only',
-    withPrisms: 'computed with the surrounding buildings as flat-roofed blocks',
+    withPrisms: 'computed with the surrounding buildings as flat-roofed buildings',
     withoutScan: 'computed without the laser scan',
     addressBuilding: 'Building at the address',
     sources: 'Data sources',
@@ -210,6 +214,24 @@ function Group({ title, items }: { title: string; items: [string, ReactNode][] }
         ))}
       </dl>
     </div>
+  );
+}
+
+/** Longest share link printed in full (characters); longer ones (stored buildings: ~10'000) are shortened. */
+export const PRINT_LINK_MAX = 500;
+/** Characters of a shortened link that are printed. */
+const PRINT_LINK_HEAD = 120;
+
+/** The share link: in full up to PRINT_LINK_MAX characters, else its start with «…» and a note. */
+function ShareLink({ url, label, long }: { url: string; label: string; long: (n: string) => string }) {
+  const f = useFormat();
+  const short = url.length > PRINT_LINK_MAX;
+  return (
+    <p className={styles.link}>
+      <span className={styles.linkLabel}>{label}:</span>{' '}
+      <span className={styles.url}>{short ? `${url.slice(0, PRINT_LINK_HEAD)}…` : url}</span>
+      {short && <span className={styles.linkNote}>{long(f.int(url.length))}</span>}
+    </p>
   );
 }
 
@@ -392,10 +414,7 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
           ]}
         />
       </div>
-      <p className={styles.link}>
-        <span className={styles.linkLabel}>{t.link}:</span>{' '}
-        <span className={styles.url}>{shareUrl(config)}</span>
-      </p>
+      <ShareLink url={shareUrl(config)} label={t.link} long={t.linkLong} />
     </section>
   );
 }

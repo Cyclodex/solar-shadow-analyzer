@@ -228,15 +228,16 @@ ruft direkt aus dem Browser folgende Dienste auf:
   Standort, die heruntergeladene Datei kann importiert werden.
 
 Der Gerätestandort wird nur auf Klick über die Geolocation-API des Browsers abgefragt. Konfiguration (inkl.
-Koordinaten und Umgebungsgebäuden), UI-Einstellungen, zwischengespeicherte Wetter- und Geländedaten und fertige
-Laserscan-Horizonte liegen im `localStorage`, die Angaben des Gebäuderegisters nur bis zum Neuladen im Speicher der
+Koordinaten und Umgebungsgebäuden), UI-Einstellungen, zwischengespeicherte Wetter- und Geländedaten, fertige
+Laserscan-Horizonte und der Punkt der zuletzt gewählten Adresse (`ssa.addressPoint`, damit der Laserscan erst nach
+dem Setzen des Balkons im Lageplan lädt) liegen im `localStorage`, die Angaben des Gebäuderegisters nur bis zum Neuladen im Speicher der
 Seite, die App-Dateien für den Offline-Start im Cache des Service Workers (nur Dateien der App selbst). Wird die Seite verlassen,
 bevor der URL-Hash nachgeführt ist, übergibt der `sessionStorage` (`ssa.pendingHash`) ihn dem nächsten Aufruf im
 selben Tab; dort merkt sich die App auch, wann sie sich wegen einer neuen Version selbst neu geladen hat
 (`ssa.chunkReload`). Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet. **Der
 Link enthält immer den genauen Standort** (Koordinaten auf 0.000001°, etwa 10 cm, nach einer Adresssuche auch die
 Adresse als Bezeichnung) **und die gespeicherten Nachbargebäude** (Grundrisse und Höhen); wer ihn erhält, sieht beides.
-Der Druckbericht druckt denselben Link. Der Sonnenstand wird lokal berechnet.
+Der Druckbericht druckt denselben Link, ab 500 Zeichen (mit Gebäuden) nur gekürzt. Der Sonnenstand wird lokal berechnet.
 
 ## Einschränkungen
 

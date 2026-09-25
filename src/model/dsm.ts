@@ -27,7 +27,12 @@ import { NetError, fetchBytesWithRetry, fetchReadWithRetry, type RetryOptions } 
 import { FLOOR_HORIZON_STEP_DEG } from './horizon';
 import { lv95LocalFrame, lv95ToWgs84, wgs84ToLv95, type Lv95Point } from './lv95';
 import { pointInRing, ringBounds, ringDistance, type ReadonlyVertex } from './polygon';
-import { OWN_BUILDING_EXCLUSION, ownExclusionZone, type OwnExclusionZone } from './surroundings';
+import {
+  OWN_BUILDING_EXCLUSION,
+  isOwnBuildingCell,
+  ownExclusionZone,
+  type OwnExclusionZone,
+} from './surroundings';
 import { toRad } from './units';
 import { DSM_WINDOW_MARGIN_M, dsmNeedsMasks, insideDsmExtent } from './dsmEstimate';
 
@@ -57,13 +62,18 @@ export {
 // location); ground from the height service (api3.geo.admin.ch, the DTM at the point) or, if that fails, the
 // 2 m DTM. Horizon angle = atan2(z_dsm − (ground + z), d); scan and ground are both LHN95 heights (never mixed
 // with Terrarium heights).
-// Sampling (binding): steps of DSM_RAY_STEP_M = 0.25 m out to the radius, nearest cell, and per output azimuth
-// (FLOOR_HORIZON_STEP_DEG = 0.5°) the maximum over DSM_SUB_RAYS + 1 rays spread across that azimuth's bin
-// (± 0.25°): thin objects between two ray directions (tree crowns, poles, edges) are not lost, so the horizon
-// errs on the high side. The research measured RMS 0.77–15.8° for one ray per 1° against the maximum over all
-// cells of the bin; dsm.test.ts compares the result with such a brute force over every cell.
-// Own building (surroundings.ts ownExclusionZone): samples behind the facade plane (n < 0.5 m) and in the own
-// balcony zone (0 ≤ n ≤ balcony depth + 0.5 m within the own building's extent along the facade) are skipped.
+// Sampling (binding): each ray visits every cell it crosses out to the radius (Amanatides–Woo traversal), at the
+// distance where it enters the cell (the steepest view of that cell along the ray; at least DSM_NEAR_M), and per
+// output azimuth (FLOOR_HORIZON_STEP_DEG = 0.5°) the maximum over DSM_SUB_RAYS + 1 rays spread across that
+// azimuth's bin (± 0.25°) is taken: thin objects between two ray directions (tree crowns, poles, edges) are not
+// lost. A fixed step along the ray (0.25 m before) skipped cells a ray only clips near the observer, so the
+// horizon of low floors came out too low (Breitenrain 1st floor: 407.9 instead of 391.3 kWh a year). The research
+// measured RMS 0.77–15.8° for one ray per 1° against the maximum over all cells of the bin; dsm.test.ts compares
+// the result with such a brute force over every cell and with a 2 mm march.
+// Own building (surroundings.ts ownExclusionZone, isOwnBuildingCell): cells whose centre lies behind the facade
+// plane (n < 0.5 m) or in the own balcony zone (0 ≤ n ≤ balcony depth + 0.5 m within the own building's extent
+// along the facade) are skipped; the test is on the cell that is read, not on a point of the ray (a ray grazing
+// the facade just outside the zone would otherwise read the own eaves: 60.4° at Breitenrain).
 // Masks: cells of removed or edited buildings (dsmMaskPolygons) and, without trees, every cell outside the union
 // of all swisstopo building footprints (vector tiles, fetched here) become ground, except outside CH/FL where
 // the footprints are missing (DecodedTile.outside).
@@ -87,8 +97,11 @@ export const DTM_COLLECTION = 'ch.swisstopo.swissalti3d';
 export const DTM_ASSET_SUFFIX = '_2_2056_5728.tif';
 /** Point height (ground at the site). */
 export const HEIGHT_SERVICE_URL = 'https://api3.geo.admin.ch/rest/services/height';
-/** Distance between samples along a ray, m. */
-export const DSM_RAY_STEP_M = 0.25;
+/**
+ * Nearest distance a cell counts at, m: the observer's own cell is entered at 0 m (a cell above the observer
+ * then gives a steep, not a vertical, horizon).
+ */
+export const DSM_NEAR_M = 0.25;
 /** Ray intervals per output azimuth step (the bin max takes DSM_SUB_RAYS + 1 rays, the edges shared). */
 export const DSM_SUB_RAYS = 4;
 /**
@@ -477,13 +490,15 @@ export interface MarchGeometry {
 export interface MarchOptions {
   stepDeg?: number;
   subRays?: number;
-  rayStep?: number;
+  /** Nearest distance a cell counts at, m (default DSM_NEAR_M). */
+  nearM?: number;
 }
 
 /**
- * Horizon of every height of one observer group (index = height): rays from (u = 0, n) in the facade frame,
- * DSM_RAY_STEP_M steps up to the radius, nearest cell, samples in the own-building zone skipped; each output
- * azimuth takes the maximum of the subRays + 1 rays across its bin (± stepDeg / 2). Degrees ≥ 0.
+ * Horizon of every height of one observer group (index = height): rays from (u = 0, n) in the facade frame up to
+ * the radius, through every cell they cross (Amanatides–Woo), each at the distance where the ray enters it (at
+ * least DSM_NEAR_M); cells whose centre lies in the own-building zone (isOwnBuildingCell) are skipped. Each
+ * output azimuth takes the maximum of the subRays + 1 rays across its bin (± stepDeg / 2). Degrees ≥ 0.
  */
 export function marchDsmHorizons(
   raster: Raster,
@@ -493,7 +508,7 @@ export function marchDsmHorizons(
 ): HorizonProfile[] {
   const stepDeg = opts.stepDeg ?? FLOOR_HORIZON_STEP_DEG;
   const sub = Math.max(1, Math.round(opts.subRays ?? DSM_SUB_RAYS));
-  const rayStep = opts.rayStep ?? DSM_RAY_STEP_M;
+  const near = opts.nearM ?? DSM_NEAR_M;
   const nOut = Math.max(1, Math.round(360 / stepDeg));
   const outStep = 360 / nOut;
   const nRays = nOut * sub;
@@ -513,64 +528,76 @@ export function marchDsmHorizons(
   const o = geo.toLv95(oe, on);
   const fx0 = (o.east - x0) / cell;
   const fy0 = (y1 - o.north) / cell;
-  const kMax = Math.floor(geo.radius / rayStep + 1e-9);
-  const { behindN, balconyN, u0, u1 } = geo.zone;
+  // Cell centre (i, j) → facade frame: u = uc + ui·i + uj·j, n = nc + ni·i + nj·j (LV95 → ENU → facade, affine).
+  const det = a * d - b * c;
+  const X0 = x0 + 0.5 * cell - p0.east;
+  const Y0 = y1 - 0.5 * cell - p0.north;
+  const E0 = (d * X0 - b * Y0) / det;
+  const N0 = (a * Y0 - c * X0) / det;
+  const Ei = (d * cell) / det;
+  const Ej = (b * cell) / det;
+  const Ni = (-c * cell) / det;
+  const Nj = (-a * cell) / det;
+  const gam = toRad(geo.facadeAzimuth);
+  const cg = Math.cos(gam);
+  const sg = Math.sin(gam);
+  const uc = -E0 * cg + N0 * sg;
+  const ui = -Ei * cg + Ni * sg;
+  const uj = -Ej * cg + Nj * sg;
+  const nc = E0 * sg + N0 * cg;
+  const ni = Ei * sg + Ni * cg;
+  const nj = Ej * sg + Nj * cg;
+  const zone = geo.zone;
+  const { behindN, balconyN } = zone;
   const nObs = group.n;
+  // Every point of a cell lies within half a diagonal of its centre (ENU scale ≈ LV95 scale, ≤ 1e-4 apart).
+  const halfDiag = cell * Math.SQRT1_2 * 1.001;
+  const nFreeFrom = Math.max(behindN, balconyN) + halfDiag;
   const EPS = 1e-12;
   for (let r = 0; r < nRays; r++) {
     const az = toRad((r * outStep) / sub);
     const s = Math.sin(az);
     const co = Math.cos(az);
-    const dx = a * s + b * co;
-    const dy = c * s + d * co;
-    const rel = az - toRad(geo.facadeAzimuth);
-    const du = -Math.sin(rel);
-    const dn = Math.cos(rel);
-    // Samples in front of the facade plane: n(t) = nObs + t·dn ≥ behindN.
-    let tLo = rayStep;
-    let tHi = geo.radius;
-    if (dn > EPS) tLo = Math.max(tLo, (behindN - nObs) / dn);
-    else if (dn < -EPS) tHi = Math.min(tHi, (behindN - nObs) / dn);
-    else if (nObs < behindN) continue;
-    // Own balcony zone: u ∈ [u0, u1] (u(t) = t·du) and n(t) ≤ balconyN → skipped interval [tIn, tOut].
-    let tIn = -Infinity;
-    let tOut = Infinity;
-    if (Math.abs(du) > EPS) {
-      const ta = u0 / du;
-      const tb = u1 / du;
-      tIn = Math.max(tIn, Math.min(ta, tb));
-      tOut = Math.min(tOut, Math.max(ta, tb));
-    } else if (u0 > 0 || u1 < 0) {
-      tIn = Infinity;
-    }
-    if (dn > EPS) tOut = Math.min(tOut, (balconyN - nObs) / dn);
-    else if (dn < -EPS) tIn = Math.max(tIn, (balconyN - nObs) / dn);
-    else if (nObs > balconyN) tIn = Infinity;
-    const kLo = Math.max(1, Math.ceil(tLo / rayStep - 1e-9));
-    const kHi = Math.min(kMax, Math.floor(tHi / rayStep + 1e-9));
-    let kIn = Infinity;
-    let kOut = -Infinity;
-    if (tIn <= tOut) {
-      kIn = Math.ceil(tIn / rayStep - 1e-9);
-      kOut = Math.floor(tOut / rayStep + 1e-9);
-    }
-    const sx = (rayStep * dx) / cell;
-    const sy = (-rayStep * dy) / cell;
+    // Index units per metre along the ray.
+    const vx = (a * s + b * co) / cell;
+    const vy = -(c * s + d * co) / cell;
+    const dn = Math.cos(az - gam);
+    // n(t) = nObs + t·dn. Beyond tStop every centre lies behind the facade plane; beyond tFree none can be in
+    // the own zone (no test needed).
+    const tStop = dn < -EPS ? (behindN - halfDiag - nObs) / dn : Infinity;
+    const tFree = dn > EPS ? (nFreeFrom - nObs) / dn : nObs >= nFreeFrom && dn >= 0 ? 0 : Infinity;
+    const tEnd = Math.min(geo.radius, tStop);
+    let ix = Math.floor(fx0);
+    let iy = Math.floor(fy0);
+    const sx = vx > 0 ? 1 : -1;
+    const sy = vy > 0 ? 1 : -1;
+    const tdx = vx !== 0 ? Math.abs(1 / vx) : Infinity;
+    const tdy = vy !== 0 ? Math.abs(1 / vy) : Infinity;
+    let tmx = vx > 0 ? (ix + 1 - fx0) / vx : vx < 0 ? (fx0 - ix) / -vx : Infinity;
+    let tmy = vy > 0 ? (iy + 1 - fy0) / vy : vy < 0 ? (fy0 - iy) / -vy : Infinity;
+    let t = 0;
     const base = r * nH;
-    for (let k = kLo; k <= kHi; k++) {
-      if (k >= kIn && k <= kOut) {
-        k = kOut;
-        continue;
+    while (t <= tEnd) {
+      if (ix < 0 || iy < 0 || ix >= w || iy >= hgt) break; // left the window (the observer is inside it)
+      const z = data[iy * w + ix];
+      if (
+        z === z &&
+        (t >= tFree || !isOwnBuildingCell(uc + ui * ix + uj * iy, nc + ni * ix + nj * iy, zone))
+      ) {
+        const inv = 1 / (t > near ? t : near);
+        for (let h = 0; h < nH; h++) {
+          const v = (z - zo[h]) * inv;
+          if (v > best[base + h]) best[base + h] = v;
+        }
       }
-      const fx = fx0 + k * sx;
-      const fy = fy0 + k * sy;
-      if (fx < 0 || fy < 0 || fx >= w || fy >= hgt) break; // left the window (the observer is inside it)
-      const z = data[(fy | 0) * w + (fx | 0)];
-      if (z !== z) continue;
-      const inv = 1 / (k * rayStep);
-      for (let h = 0; h < nH; h++) {
-        const v = (z - zo[h]) * inv;
-        if (v > best[base + h]) best[base + h] = v;
+      if (tmx < tmy) {
+        t = tmx;
+        tmx += tdx;
+        ix += sx;
+      } else {
+        t = tmy;
+        tmy += tdy;
+        iy += sy;
       }
     }
   }

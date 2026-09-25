@@ -4,7 +4,9 @@ import { DEFAULT_CONFIG } from '../../model/defaults';
 import { floorPlacements, panelLayout, shadeFromAbove, sunInFacade } from '../../model/geometry';
 import { solarPath } from '../../model/sun';
 import type { Config, FacadeVector, InstantState, Obstacle, ShadeRect, SunPosition } from '../../model/types';
+import { ringArea, type Vertex } from '../../model/polygon';
 import { toDeg } from '../../model/units';
+import { blockingPrisms, ownBodyParts, prismBoxes, type ScenePrism } from './buildingsGeometry';
 import { panelPointFacade, threeToFacade, type Tuple3 } from './coords';
 import {
   BUILDING_SIDE_MARGIN,
@@ -501,5 +503,74 @@ describe('label size on screen', () => {
     const h = spriteHeightForPx(24, DEFAULT_FOV, 341);
     expect(projectedPx(h, 1, DEFAULT_FOV, 341)).toBeCloseTo(24, 6);
     expect(spriteHeightForPx(24, DEFAULT_FOV, 682)).toBeCloseTo(h / 2, 12);
+  });
+});
+
+describe('own building with the facade in the inner corner of an L', () => {
+  it('the wing in front of the facade is split off and hides the panel rows from the default camera', () => {
+    // Facade frame [u, n]: main block behind the facade (n < 0), a wing 6 m wide reaching 14 m out in front of
+    // it at u = 5…11 m (the side the default camera looks from, u > 0), 20 m high.
+    const ring: Vertex[] = [
+      [-11, -12],
+      [11, -12],
+      [11, 14],
+      [5, 14],
+      [5, 0],
+      [-11, 0],
+    ];
+    const { behind, wings } = ownBodyParts({ ring });
+    expect(wings).toHaveLength(1);
+    const area = (rs: Vertex[][]): number => rs.reduce((a, r) => a + Math.abs(ringArea(r)), 0);
+    expect(area(wings)).toBeCloseTo(6 * 13.95, 6);
+    expect(area(behind) + area(wings)).toBeCloseTo(Math.abs(ringArea(ring)), 6);
+    // A plain block has no wing.
+    expect(
+      ownBodyParts({
+        ring: ring.slice(0, 2).concat([
+          [11, 0],
+          [-11, 0],
+        ]),
+      }).wings,
+    ).toEqual([]);
+
+    const cfg: Config = { ...DEFAULT_CONFIG, building: { ...DEFAULT_CONFIG.building, numFloors: 4 } };
+    const rows = floorPlacements(cfg);
+    const d = sceneDims(
+      panelLayout(cfg),
+      rows,
+      cfg.building.facadeAzimuth,
+      rows[0].railTopZ - rows[0].slabZ,
+      {
+        ring,
+        u0: -11,
+        u1: 5,
+        top: 20,
+      },
+    );
+    const pose = cameraPose('default', d, sun(40, 180), 16 / 9)!;
+    const cam = threeToFacade(
+      { x: pose.position[0], y: pose.position[1], z: pose.position[2] },
+      d.facadeAzimuth,
+      { u: 0, n: 0, z: 0 },
+    );
+    const targets = rowTargets(d).map((p) => ({ x: p.u, y: p.n, z: p.z }));
+    const prisms: ScenePrism[] = wings.map((w, i) => ({
+      id: `w${i}`,
+      kind: 'imported',
+      ring: w,
+      base: 0,
+      top: 20,
+    }));
+    expect(blockingPrisms({ x: cam.u, y: cam.n, z: cam.z }, targets, prisms, prismBoxes(prisms)).size).toBe(
+      1,
+    );
+    // From straight in front the wing hides nothing.
+    const front = cameraPose('front', d, sun(40, 180), 16 / 9)!;
+    const f = threeToFacade(
+      { x: front.position[0], y: front.position[1], z: front.position[2] },
+      d.facadeAzimuth,
+      { u: 0, n: 0, z: 0 },
+    );
+    expect(blockingPrisms({ x: f.u, y: f.n, z: f.z }, targets, prisms, prismBoxes(prisms)).size).toBe(0);
   });
 });

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Button } from '../../components/Button';
 import { SelectField } from '../../components/SelectField';
 import { Toggle } from '../../components/Toggle';
@@ -12,6 +13,8 @@ import { useConfigSection, usePatch } from '../../state/configStore';
 import { useDataStore } from '../../state/dataStore';
 import { useSurfaceRefresh } from '../../hooks/useSurfaceModel';
 import { LoadErrorDetails } from '../LoadErrorDetails';
+import { WaitingAction } from '../location/PlacementPrompt';
+import { usePlacementNeed } from '../location/placementNeed';
 import sections from '../sections.module.css';
 import styles from './SurfaceModelControls.module.css';
 
@@ -38,11 +41,13 @@ const de = {
   unavailable: 'Laserscan nur in der Schweiz und Liechtenstein verfügbar.',
   error: 'Der Laserscan konnte nicht geladen werden.',
   fallbackBuildings:
-    'Es wird ohne Laserscan gerechnet, mit den Umgebungsgebäuden als Körper mit flachem Dach.',
+    'Es wird ohne Laserscan gerechnet: Die Umgebungsgebäude zählen als Gebäude mit flachem Dach.',
   fallbackNone: 'Es wird ohne Laserscan gerechnet.',
   retry: 'Erneut versuchen',
   waiting:
-    'Der Laserscan wartet auf den Lageplan: Der Standort liegt noch im eigenen Gebäude (etwa am Adresspunkt), von dort sähe er nur dieses. Nach «Übernehmen» von Fassade und Balkon im Abschnitt «Gebäude» wird er für diese Stelle geladen; bis dahin zählen die Umgebungsgebäude als Körper mit flachem Dach, ohne das eigene.',
+    'Der Laserscan wartet auf den Lageplan: Der Standort liegt noch im eigenen Gebäude (etwa am Adresspunkt), von dort sähe er nur dieses. Nach «Übernehmen» von Fassade und Balkon im Abschnitt «Gebäude» wird er für diese Stelle geladen; bis dahin zählen die Umgebungsgebäude als Gebäude mit flachem Dach, ohne das eigene.',
+  waitingBuildings:
+    'Der Laserscan wartet auf die Gebäude der Umgebung: Der Standort ist noch der Adresspunkt im Gebäude, von dort sähe er nur dieses. Sind die Gebäude geladen, im Lageplan Fassade und Balkon übernehmen; dann wird er für diese Stelle geladen.',
   refreshStarting: 'Laserscan wird nachgeladen …',
   refreshing: (mb: string, pct: string) => `Laserscan wird nachgeladen … ${mb} (${pct})`,
   refreshHint:
@@ -74,11 +79,13 @@ const messages: Messages<typeof de> = {
     unavailable: 'Laser scan only available in Switzerland and Liechtenstein.',
     error: 'The laser scan could not be loaded.',
     fallbackBuildings:
-      'Calculating without the laser scan, with the surrounding buildings as flat-roofed blocks.',
+      'Calculating without the laser scan: the surrounding buildings count as flat-roofed buildings.',
     fallbackNone: 'Calculating without the laser scan.',
     retry: 'Try again',
     waiting:
-      'The laser scan waits for the site plan: the location still lies inside the own building (e.g. at the address point), from where it would see nothing but that building. Once facade and balcony are applied in the «Building» section it loads for that spot; until then the surrounding buildings count as flat-roofed blocks, without the own one.',
+      'The laser scan waits for the site plan: the location still lies inside the own building (e.g. at the address point), from where it would see nothing but that building. Once facade and balcony are applied in the «Building» section it loads for that spot; until then the surrounding buildings count as flat-roofed buildings, without the own one.',
+    waitingBuildings:
+      'The laser scan waits for the surrounding buildings: the location is still the address point inside the building, from where it would see nothing but that building. Once the buildings are loaded, apply facade and balcony in the site plan; then it loads for that spot.',
     refreshStarting: 'Reloading the laser scan …',
     refreshing: (mb, pct) => `Reloading the laser scan … ${mb} (${pct})`,
     refreshHint: 'Until then, new tilts or floors use the horizon of the nearest computed panel row.',
@@ -143,11 +150,26 @@ function LoadProgress({ progress, bytes, refresh }: { progress: number; bytes: n
  * the shown site's data loads again for new tilts or floors (useSurfaceRefresh), that progress or its error.
  */
 function SurfaceStatus({ hasBuildings }: { hasBuildings: boolean }) {
+  const statusRef = useRef<HTMLDivElement>(null);
+  const retrySurface = useDataStore((s) => s.retrySurface);
+  // «Erneut versuchen» unmounts with its error block: the focus moves to the status (the progress next).
+  const retry = (): void => {
+    retrySurface();
+    statusRef.current?.focus({ preventScroll: true });
+  };
+  return (
+    <div ref={statusRef} tabIndex={-1} className={styles.status}>
+      <SurfaceStatusContent hasBuildings={hasBuildings} retry={retry} />
+    </div>
+  );
+}
+
+function SurfaceStatusContent({ hasBuildings, retry }: { hasBuildings: boolean; retry: () => void }) {
   const t = useMessages(messages);
   const f = useFormat();
   const surface = useDataStore((s) => s.surface);
-  const retry = useDataStore((s) => s.retrySurface);
   const refresh = useSurfaceRefresh();
+  const need = usePlacementNeed();
   const mb = (bytes: number): string => f.unit(bytes / 1e6, 'MB', 1);
 
   if (surface.status === 'loading') {
@@ -180,9 +202,10 @@ function SurfaceStatus({ hasBuildings }: { hasBuildings: boolean }) {
   }
   if (surface.status === 'waiting') {
     return (
-      <p className={styles.note} role="status">
-        {t.waiting}
-      </p>
+      <div className={`${styles.note} ${styles.waiting}`} role="status">
+        <p>{need === 'plan' ? t.waiting : t.waitingBuildings}</p>
+        <WaitingAction />
+      </div>
     );
   }
   if (surface.status === 'ready') {

@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { fakeFetch, syntheticSwisstopo, type SurfaceFn, type SyntheticWorld } from '../test/cogFixture';
 import {
-  DSM_RAY_STEP_M,
+  DSM_NEAR_M,
   circleCoverage,
   clearDsmCaches,
   computeDsmJob,
@@ -213,6 +213,63 @@ describe('marchDsmHorizons', () => {
     expect(horizonAt(own, 268)).toBe(0);
   });
 
+  it('skips the cells whose centre lies in the own zone, also for rays grazing the facade', () => {
+    // Own balconies 3 m above the observer in every cell whose centre is in the balcony zone (n ≤ 2 m, |u| ≤ 7 m),
+    // nothing else. Rays 86–89° off the normal run along the facade just outside the zone (n 2.0–2.35 m) and
+    // cross cells centred inside it: those must not count (they did when the zone was tested per sample point:
+    // at Breitenrain 60.4° from the own eaves).
+    const zone = ownExclusionZone(1.5, 4, [
+      [-7, -12],
+      [7, -12],
+      [7, 0],
+      [-7, 0],
+    ]);
+    const raster = rasterOf(site, 40, (u, n) => (n >= 0.5 && n <= 2 && Math.abs(u) <= 7 ? 8 : 0));
+    const [own] = marchDsmHorizons(raster, geometry(site, 30, zone), { n: 1.9, heights: [5] });
+    expect(Math.max(...own.elevations)).toBe(0);
+  });
+
+  it('sees every cell a ray crosses, also thin objects close to the observer', () => {
+    // Single-cell poles 1.5–12 m away: one ray per bin against a march in 2 mm steps along the same azimuth.
+    let seed = 777;
+    const rnd = (): number => {
+      seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+      return seed / 0x7fffffff;
+    };
+    const raster = rasterOf(site, 20, () => 0);
+    for (let k = 0; k < 60; k++) {
+      const d = 1.5 + rnd() * 10.5;
+      const a = (rnd() - 0.5) * Math.PI * 0.95;
+      const lv = site.frame.toLv95(d * Math.sin(a), -(1 + d * Math.cos(a))); // south facade: east = u, north = −n
+      const i = Math.floor((lv.east - raster.x0) / raster.cell);
+      const j = Math.floor((raster.y1 - lv.north) / raster.cell);
+      raster.data[j * raster.width + i] = GROUND + 4 + rnd() * 6;
+    }
+    const geo = geometry(site, 15, NO_ZONE);
+    const [march] = marchDsmHorizons(raster, geo, { n: 1, heights: [3] }, { subRays: 1 });
+    const fine = (azDeg: number): number => {
+      const az = (azDeg * Math.PI) / 180;
+      let best = 0;
+      for (let t = 0.25; t <= 15; t += 0.002) {
+        // Observer 1 m in front of this south facade: ENU (0, −1).
+        const lv = site.frame.toLv95(t * Math.sin(az), -1 + t * Math.cos(az));
+        const i = Math.floor((lv.east - raster.x0) / raster.cell);
+        const j = Math.floor((raster.y1 - lv.north) / raster.cell);
+        best = Math.max(best, (raster.data[j * raster.width + i] - GROUND - 3) / t);
+      }
+      return deg(Math.atan(best));
+    };
+    let hits = 0;
+    for (let b = 0; b < 720; b++) {
+      const ref = fine(b * 0.5);
+      if (ref > 0) hits++;
+      // The crossing is entered up to 2 mm before the fine march's first sample in it.
+      expect(march.elevations[b]).toBeGreaterThanOrEqual(ref - 1e-9);
+      expect(march.elevations[b]).toBeLessThan(ref + 0.05);
+    }
+    expect(hits).toBeGreaterThan(20);
+  });
+
   it('keeps the bin maximum: between brute forces over cell centres and cell areas, unlike one ray per bin', () => {
     // Poles (one cell) and small tree crowns 30–145 m away, blocks nearer; observer 3 m above the ground.
     let seed = 12345;
@@ -275,8 +332,8 @@ describe('marchDsmHorizons', () => {
     const [single] = marchDsmHorizons(raster, geo, observer, { subRays: 1 });
     // Brute forces over every cell within the radius (observer: 1 m south of the site, 3 m up):
     // - centres: the cell counts in the bin (± 0.25°) of its centre's azimuth, at the centre's distance;
-    // - areas: the cell counts in every bin its corners' azimuth span reaches, at its nearest corner's distance
-    //   (what a ray through any part of the cell could at most see).
+    // - areas: the cell counts in every bin its corners' azimuth span reaches, at the distance of its nearest
+    //   point (what a ray through any part of the cell could at most see).
     const centre = new Array<number>(720).fill(0);
     const area = new Array<number>(720).fill(0);
     const obsE = 0;
@@ -296,11 +353,16 @@ describe('marchDsmHorizons', () => {
           return { d: Math.hypot(e - obsE, n - obsN), az: deg(Math.atan2(e - obsE, n - obsN)) };
         });
         const c = pts[0];
-        if (c.d >= DSM_RAY_STEP_M && c.d <= radius) {
+        if (c.d >= DSM_NEAR_M && c.d <= radius) {
           const bin = Math.round((((c.az % 360) + 360) % 360) / 0.5) % 720;
           centre[bin] = Math.max(centre[bin], atanDeg(rise, c.d));
         }
-        const dMin = Math.min(...pts.slice(1).map((p) => p.d));
+        // Nearest point of the cell (a square in LV95) to the observer.
+        const o = site.frame.toLv95(obsE, obsN);
+        const cx = Math.min(Math.max(o.east, raster.x0 + i * 0.5), raster.x0 + (i + 1) * 0.5);
+        const cy = Math.min(Math.max(o.north, raster.y1 - (j + 1) * 0.5), raster.y1 - j * 0.5);
+        const [ne, nn] = site.frame.toEnu(cx, cy);
+        const dMin = Math.hypot(ne - obsE, nn - obsN);
         if (dMin > radius) continue;
         const rel = pts.slice(1).map((p) => ((p.az - c.az + 540) % 360) - 180);
         const lo = c.az + Math.min(...rel);
@@ -321,10 +383,11 @@ describe('marchDsmHorizons', () => {
     expect(count(march.elevations, centre, 0.5)).toBe(0);
     expect(Math.max(...march.elevations.map((v, i) => centre[i] - v))).toBeLessThan(0.5);
     expect(count(single.elevations, centre, 0.5)).toBeGreaterThanOrEqual(5);
-    // Close to the upper bound: RMS 1.08° against 3.26° with one ray per bin.
+    // Close to the upper bound: RMS 0.26° against 2.68° with one ray per bin (0.25-m samples: 1.08° against
+    // the nearest corners).
     const rms = (xs: number[], ref: number[]): number =>
       Math.sqrt(xs.reduce((a, v, i) => a + (v - ref[i]) ** 2, 0) / xs.length);
-    expect(rms(march.elevations, area)).toBeLessThan(1.5);
+    expect(rms(march.elevations, area)).toBeLessThan(0.5);
     expect(rms(march.elevations, area)).toBeLessThan(rms(single.elevations, area) / 2);
   });
 });

@@ -6,6 +6,8 @@ import { clearGeocodeCaches } from '../model/geocode';
 import { lv95ToWgs84 } from '../model/lv95';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
+import { useAddressPointStore } from '../state/addressPointStore';
+import { useBuildingImportStore } from '../state/buildingImportStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { LocationSection } from './LocationSection';
@@ -216,6 +218,18 @@ describe('LocationSection', () => {
       fireEvent.click(bern);
       expect(location().name).toBe('Bern, BE, CH');
       expect(location().latitude).toBe(46.9481);
+      // A pick by mouse keeps the focus in the search; by touch the input lets go (the keyboard closes).
+      input.focus();
+      fireEvent.change(input, { target: { value: 'Bern' } });
+      const [again] = await findResults();
+      fireEvent.pointerDown(again, { pointerType: 'mouse' });
+      fireEvent.click(again);
+      expect(input).toHaveFocus();
+      fireEvent.change(input, { target: { value: 'Bern' } });
+      const [byTouch] = await findResults();
+      fireEvent.pointerDown(byTouch, { pointerType: 'touch' });
+      fireEvent.click(byTouch);
+      expect(input).not.toHaveFocus();
 
       fireEvent.change(input, { target: { value: 'Xyz' } });
       const none = 'Keine Treffer für «Xyz» – oder die Suche ist nicht erreichbar.';
@@ -268,6 +282,34 @@ describe('LocationSection', () => {
         longitude: 7.449979,
       });
       expect(screen.getByText('Übernommen: Kramgasse 49, 3011 Bern')).toBeInTheDocument();
+      // The address point is remembered (persisted) until the site plan places the balcony: the laser scan
+      // waits whatever becomes of the import. The import's progress shows below the search.
+      expect(useAddressPointStore.getState().point).toEqual({
+        latitude: 46.947847,
+        longitude: 7.449979,
+        importPending: true,
+      });
+      act(() =>
+        useBuildingImportStore.setState({
+          status: 'loading',
+          request: { latitude: 46.947847, longitude: 7.449979, reason: 'address' },
+        }),
+      );
+      expect(
+        screen.getByText(/^Gebäude der Umgebung werden geladen … Danach öffnet sich der Lageplan/),
+      ).toBeInTheDocument();
+      act(() =>
+        useBuildingImportStore.setState({ status: 'error', error: { kind: 'network', message: 'offline' } }),
+      );
+      const alert = screen.getByRole('alert');
+      expect(alert).toHaveTextContent(/Die Gebäude der Umgebung konnten nicht geladen werden/);
+      expect(alert).toHaveTextContent(/Koordinaten & Zeitzone/);
+      act(() => {
+        useUiStore.getState().consumeSurroundingsImport();
+      });
+      fireEvent.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
+      expect(useUiStore.getState().surroundingsImport).toMatchObject({ latitude: 46.947847 });
+      act(() => useBuildingImportStore.setState({ status: 'idle', error: null }));
 
       // Height service → elevation (537.7 m → 538 m).
       await waitFor(() => expect(location().elevation).toBe(538));

@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { useTerrainLoader } from '../hooks/useTerrain';
 import { useWeatherLoader } from '../hooks/useWeather';
+import { resumeAddressImport, settleAddressImport } from '../state/addressPointStore';
 import { useBuildingImportStore } from '../state/buildingImportStore';
 import { useConfigSection } from '../state/configStore';
 import { useUiStore } from '../state/uiStore';
@@ -24,6 +25,7 @@ function useBuildingImportTrigger(): void {
         (m) => m.takeSurroundingsImport(),
         (e: unknown) => {
           if (!useUiStore.getState().consumeSurroundingsImport()) return;
+          settleAddressImport();
           useBuildingImportStore.setState({
             status: 'error',
             progress: null,
@@ -32,6 +34,8 @@ function useBuildingImportTrigger(): void {
         },
       );
     };
+    // A pick whose import had not finished when the page was reloaded or closed: request it again.
+    resumeAddressImport();
     if (useUiStore.getState().surroundingsImport) load();
     return useUiStore.subscribe((s, prev) => {
       if (s.surroundingsImport && s.surroundingsImport !== prev.surroundingsImport) load();

@@ -11,6 +11,7 @@ import { anchorDistance, buildingBearing, OTHER_SITE_DISTANCE } from '../../mode
 import type { Vertex } from '../../model/polygon';
 import type { Building } from '../../model/types';
 import { cmToM } from '../../model/units';
+import { clearAddressPoint, isAddressAnchor, useAddressPointStore } from '../../state/addressPointStore';
 import { requestBuildingFocus, useBuildingImportStore } from '../../state/buildingImportStore';
 import { useConfigSection, useConfigStore } from '../../state/configStore';
 import { useUiStore } from '../../state/uiStore';
@@ -74,7 +75,6 @@ const de = {
   north: 'N',
   location: 'Bisheriger Standort',
   address: 'Adresse',
-  importPoint: 'Importpunkt',
   description: (own: string, facade: string, neighbours: number) =>
     `${own} ${facade} ${neighbours === 1 ? '1 weiteres Gebäude' : `${neighbours} weitere Gebäude`} im Plan.`,
   ownKnown: (name: string) => `Eigenes Gebäude: ${name}.`,
@@ -94,13 +94,14 @@ const de = {
   discard: 'Verwerfen',
   pending: 'Noch nicht übernommen: Standort und Fassadenazimut ändern sich erst mit «Übernehmen».',
   applied: (az: string, dir: string) => `Standort auf die Fassade ${az} ${dir} gesetzt.`,
+  opened: 'Lageplan geöffnet: Fassade und Balkon bestätigen.',
   sun: 'Sonnenrichtung zur gewählten Zeit',
   legend: 'Legende',
   legendOwn: 'Eigenes Gebäude',
   legendFacade: 'wählbare Fassade',
   legendParty: 'Brandmauer',
   legendBalcony: 'Balkon und Panelreihe',
-  legendNeighbour: 'Nachbargebäude',
+  legendNeighbour: 'Umgebungsgebäude',
   legendEdited: 'bearbeitet',
   legendManual: 'von Hand',
   legendRemoved: 'entfernt',
@@ -111,7 +112,7 @@ const de = {
   removed: 'entfernt',
   height: (h: string) => `${h} hoch`,
   base: (b: string) => `Basis ${b}`,
-  where: (d: string, dir: string) => `${d} vom Balkon, ${dir}`,
+  where: (d: string, dir: string) => `${d} entfernt, ${dir}`,
   adjoining: 'angrenzend',
   edit: 'In der Liste bearbeiten',
   mine: 'Das ist mein Gebäude',
@@ -148,7 +149,6 @@ const messages: Messages<typeof de> = {
     north: 'N',
     location: 'Previous location',
     address: 'Address',
-    importPoint: 'Import point',
     description: (own, facade, neighbours) =>
       `${own} ${facade} ${neighbours === 1 ? '1 other building' : `${neighbours} other buildings`} in the plan.`,
     ownKnown: (name) => `Own building: ${name}.`,
@@ -166,13 +166,14 @@ const messages: Messages<typeof de> = {
     discard: 'Discard',
     pending: 'Not applied yet: location and facade azimuth change only with «Apply».',
     applied: (az, dir) => `Location set on the ${az} ${dir} facade.`,
+    opened: 'Site plan opened: confirm facade and balcony.',
     sun: 'Sun direction at the selected time',
     legend: 'Legend',
     legendOwn: 'Own building',
     legendFacade: 'facade to choose',
     legendParty: 'party wall',
     legendBalcony: 'balcony and panel row',
-    legendNeighbour: 'neighbour',
+    legendNeighbour: 'surrounding building',
     legendEdited: 'edited',
     legendManual: 'manual',
     legendRemoved: 'removed',
@@ -183,7 +184,7 @@ const messages: Messages<typeof de> = {
     removed: 'removed',
     height: (h) => `${h} high`,
     base: (b) => `base ${b}`,
-    where: (d, dir) => `${d} from the balcony, ${dir}`,
+    where: (d, dir) => `${d} away, ${dir}`,
     adjoining: 'adjoining',
     edit: 'Edit in the list',
     mine: 'This is my building',
@@ -221,6 +222,8 @@ export function SitePlanPanel() {
   const importedOwnId = useBuildingImportStore((s) => s.summary?.ownId ?? null);
   const lastRequest = useBuildingImportStore((s) => s.request);
   const open = useBuildingImportStore((s) => s.sitePlanOpen);
+  // Re-renders when an address import stores its anchor (isAddressAnchor below reads it).
+  useAddressPointStore((s) => s.anchor);
   const request = useBuildingImportStore((s) => s.sitePlanRequest);
   const setOpen = (v: boolean): void => useBuildingImportStore.setState({ sitePlanOpen: v });
 
@@ -238,6 +241,8 @@ export function SitePlanPanel() {
   const [notice, setNotice] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const guideRef = useRef<HTMLParagraphElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
   const releaseHold = useRef<(() => void) | null>(null);
   const bodyId = useId();
 
@@ -286,12 +291,22 @@ export function SitePlanPanel() {
     if (r.reason === 'address') {
       requestAnimationFrame(() => {
         const el = rootRef.current;
-        if (!el?.scrollIntoView) return;
-        el.scrollIntoView({ block: 'start' });
+        if (!el) return;
+        el.scrollIntoView?.({ block: 'start' });
         releaseHold.current?.();
         releaseHold.current = hasScrollAnchoring() ? null : holdInView(el);
+        // Keyboard and screen-reader users follow the jump: the focus moves to the instructions, unless it
+        // is somewhere else than where the pick came from (the search, the prompts, nothing).
+        const active = document.activeElement;
+        const follow =
+          !active || active === document.body || active.closest('[data-site-plan-source]') !== null;
+        const target = guideRef.current ?? toggleRef.current;
+        if (follow && target) target.focus({ preventScroll: true });
+        else setAnnouncement(t.opened);
       });
     }
+    // t: the texts of the current language (stable per language).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [request, hasSite, placed]);
   useEffect(() => () => releaseHold.current?.(), []);
 
@@ -335,6 +350,7 @@ export function SitePlanPanel() {
       building: { ...c.building, facadeAzimuth: next.facadeAzimuth },
     }));
     setDraftState(null);
+    clearAddressPoint();
     useBuildingImportStore.setState({ sitePlanGuide: false });
     setNotice('');
     setAnnouncement(t.applied(deg(shown.edge.azimuth), dirOf(shown.edge.azimuth)));
@@ -358,16 +374,17 @@ export function SitePlanPanel() {
               : 'neighbour',
   }));
 
-  // The import point is the address point when this session's last import came from an address pick there.
+  // The anchor is marked when it is the picked address (this session's last import came from a pick there, or
+  // the stored buildings were imported around an address: addressPointStore). The centre of «Gebäude laden» is
+  // not marked (it is the location of that moment).
   const fromAddress =
-    lastRequest?.reason === 'address' &&
     anchor !== null &&
-    lastRequest.latitude === anchor.latitude &&
-    lastRequest.longitude === anchor.longitude;
-  const marker =
-    anchor && anchor.radius > 0
-      ? { point: [0, 0] as Vertex, label: fromAddress ? t.address : t.importPoint }
-      : null;
+    anchor.radius > 0 &&
+    ((lastRequest?.reason === 'address' &&
+      lastRequest.latitude === anchor.latitude &&
+      lastRequest.longitude === anchor.longitude) ||
+      isAddressAnchor(anchor));
+  const marker = fromAddress ? { point: [0, 0] as Vertex, label: t.address } : null;
   const shownPoint = shown ? placementPoint(shown) : null;
   const apart = (a: Vertex, b: Vertex | null | undefined): boolean =>
     !b || Math.hypot(a[0] - b[0], a[1] - b[1]) > 1;
@@ -394,6 +411,7 @@ export function SitePlanPanel() {
     <div ref={rootRef} className={styles.root}>
       <h5 className={styles.heading}>
         <button
+          ref={toggleRef}
           type="button"
           className={styles.toggle}
           aria-expanded={open}
@@ -429,7 +447,7 @@ export function SitePlanPanel() {
         {open && !otherSite && (
           <>
             {guide && !current && (
-              <p className={styles.guide} role="note">
+              <p ref={guideRef} className={styles.guide} role="note" tabIndex={-1}>
                 {t.guide}
               </p>
             )}
@@ -463,7 +481,7 @@ export function SitePlanPanel() {
                 building={selected}
                 name={buildingName(selected, selectedIndex, lang)}
                 own={selected.id === own?.id}
-                from={shownPoint ?? origin}
+                from={origin}
                 onEdit={() => requestBuildingFocus(selected.id)}
                 onMine={() => {
                   setPlacement(null, selected.id);

@@ -7,7 +7,8 @@ import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
-import { PrintReport } from './PrintReport';
+import { shareUrl } from '../state/urlSync';
+import { PRINT_LINK_MAX, PrintReport } from './PrintReport';
 
 /** Value of the row with the given term. */
 const row = (term: string): string | null =>
@@ -131,15 +132,15 @@ describe('PrintReport', () => {
     expect(state()).toBe('geladen, Datenstand 2022, 2023');
     set({ status: 'loading' });
     expect(state()).toBe(
-      'wird geladen: Ergebnisse vorläufig; gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+      'wird geladen: Ergebnisse vorläufig; gerechnet mit den Umgebungsgebäuden als Gebäude mit flachem Dach',
     );
     set({ status: 'waiting' });
     expect(state()).toBe(
-      'wartet auf die Bestätigung von Fassade und Balkon im Lageplan; gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+      'wartet auf die Bestätigung von Fassade und Balkon im Lageplan; gerechnet mit den Umgebungsgebäuden als Gebäude mit flachem Dach',
     );
     set({ status: 'error' });
     expect(state()).toBe(
-      'konnte nicht geladen werden; gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+      'konnte nicht geladen werden; gerechnet mit den Umgebungsgebäuden als Gebäude mit flachem Dach',
     );
     set({ status: 'unavailable' });
     expect(state()).toBe('nur in der Schweiz und Liechtenstein verfügbar');
@@ -230,5 +231,37 @@ describe('PrintReport', () => {
     useConfigStore.getState().patch('location', { latitude: 47.3769, longitude: 8.5417 });
     render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
     expect(screen.queryByText('Lage am Gebäude')).toBeNull();
+  });
+
+  it('prints a short share link in full, a long one (stored buildings) shortened with a note', () => {
+    const { container, unmount } = render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+    const url = (): string => container.querySelector('p span:nth-of-type(2)')?.textContent ?? '';
+    expect(url()).toBe(shareUrl(useConfigStore.getState().config));
+    expect(shareUrl(useConfigStore.getState().config).length).toBeLessThanOrEqual(PRINT_LINK_MAX);
+    unmount();
+    // 100 imported buildings with 8 vertices each: a link of several thousand characters.
+    const ring = (k: number): [number, number][] =>
+      Array.from({ length: 8 }, (_, i) => {
+        const a = (i / 8) * 2 * Math.PI;
+        return [(k % 10) * 30 + 5 * Math.cos(a) + k * 0.13, Math.floor(k / 10) * 30 + 5 * Math.sin(a)];
+      });
+    useConfigStore.getState().patch('horizon', {
+      buildingImport: { latitude: 47.1, longitude: 7.45, radius: 300, date: '2026-09-25' },
+      buildings: Array.from({ length: 100 }, (_, k) => ({
+        id: `b${k + 1}`,
+        name: '',
+        footprint: ring(k),
+        base: 0,
+        height: 10 + (k % 7),
+        source: 'swisstopo' as const,
+      })),
+    });
+    const full = shareUrl(useConfigStore.getState().config);
+    expect(full.length).toBeGreaterThan(5000);
+    render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+    const link = screen.getByText(/^Link zu dieser Konfiguration/).parentElement!;
+    expect(link.textContent!.length).toBeLessThan(500);
+    expect(link).toHaveTextContent(`${full.slice(0, 120)}…`);
+    expect(link).toHaveTextContent(/Der ganze Link hat [\d’']+ Zeichen .* über «Teilen» kopieren\./);
   });
 });

@@ -13,7 +13,8 @@ import styles from './BuildingList.module.css';
 
 const de = {
   own: 'Eigenes Gebäude',
-  ownHint: 'Zählt nicht als Hindernis (die Fassade mit den Panels gehört dazu).',
+  ownHint:
+    'Die Fassade mit den Panels gehört dazu; als Hindernis zählen nur Teile vor dem Balkon (etwa ein Flügel).',
   manual: 'von Hand',
   edited: 'bearbeitet',
   removed: 'entfernt',
@@ -25,17 +26,18 @@ const de = {
   restore: (name: string) => `${name} wiederherstellen`,
   name: 'Bezeichnung',
   heightField: 'Höhe über der Basis',
-  heightHint: 'Bis zum höchsten Punkt des Dachs (das Prisma hat ein flaches Dach).',
+  heightHint: 'Bis zum höchsten Punkt des Dachs (gerechnet wird mit flachem Dach).',
   baseField: 'Basis über dem Boden am Standort',
   baseHint: 'Negativ, wenn das Gebäude tiefer steht als das eigene.',
-  editedHint: 'Geändert: Im Laserscan ersetzt dieses Prisma das Gebäude.',
+  editedHint: 'Geändert: Im Laserscan ersetzt dieses Gebäude mit flachem Dach das gemessene.',
   removedHint: 'Entfernt: zählt nicht mehr, auch nicht im Laserscan (z. B. abgerissen).',
 };
 const messages: Messages<typeof de> = {
   de,
   en: {
     own: 'Own building',
-    ownHint: 'Does not count as an obstacle (the facade with the panels belongs to it).',
+    ownHint:
+      'The facade with the panels belongs to it; only parts in front of the balcony count as obstacles (e.g. a wing).',
     manual: 'manual',
     edited: 'edited',
     removed: 'removed',
@@ -47,10 +49,10 @@ const messages: Messages<typeof de> = {
     restore: (name) => `Restore ${name}`,
     name: 'Name',
     heightField: 'Height above the base',
-    heightHint: 'Up to the highest point of the roof (the prism has a flat roof).',
+    heightHint: 'Up to the highest point of the roof (computed with a flat roof).',
     baseField: 'Base above the ground at the site',
     baseHint: 'Negative if the building stands lower than your own.',
-    editedHint: 'Changed: in the laser scan this prism replaces the building.',
+    editedHint: 'Changed: in the laser scan this flat-roofed building replaces the measured one.',
     removedHint: 'Removed: no longer counts, not even in the laser scan (e.g. demolished).',
   },
 };

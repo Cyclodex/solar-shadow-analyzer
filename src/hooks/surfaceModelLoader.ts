@@ -10,6 +10,7 @@ import { floorPlacements, panelLayout } from '../model/geometry';
 import { getStorage, touchCacheEntry, writeCacheEntry } from '../model/storageCache';
 import { dsmMaskPolygons, ownBuildingIds } from '../model/surroundings';
 import { cmToM } from '../model/units';
+import { locationIsUnplacedAddress, useAddressPointStore } from '../state/addressPointStore';
 import { useBuildingImportStore } from '../state/buildingImportStore';
 import { useConfig, useConfigStore } from '../state/configStore';
 import { INITIAL_SURFACE, useDataStore } from '../state/dataStore';
@@ -55,6 +56,12 @@ export const SURFACE_OBSERVER_DEBOUNCE_MS = 250;
 export const SURFACE_SWEEP_DELAY_MS = 300;
 /** Sites kept in the localStorage result cache. */
 export const SURFACE_CACHE_SITES = 3;
+/**
+ * Observers a site's cache entry keeps besides the current and the sweep ones (the most recent): floor height,
+ * floors or panel length change the observers but not the site, and every change used to add its observers to
+ * the entry for good (5 MB, the whole localStorage quota, after 30 changes with 8 floors).
+ */
+export const SURFACE_CACHE_EXTRA_OBSERVERS = 16;
 /** Observers kept in dataStore.surface.horizons besides the current and the sweep ones. */
 const EXTRA_OBSERVERS = 32;
 const CACHE_PREFIX = 'ssa.surface.v1:';
@@ -157,7 +164,7 @@ export function surfacePlan(config: Config): SurfacePlan {
     site,
     current: observerSet([floorPlacements(config)]),
     sweep: observerSet(DEFAULT_SWEEP_TILTS.map(withTilt)),
-    waiting: locationInsideOwnBuilding(config),
+    waiting: locationInsideOwnBuilding(config) || locationIsUnplacedAddress(location),
   };
 }
 
@@ -276,7 +283,10 @@ export function decodeProfile(stored: unknown): HorizonProfile | null {
 const cacheKey = (jobKey: string): string =>
   `${CACHE_PREFIX}${hashString(jobKey)}${hashString(`${jobKey}#`)}`;
 
-/** Cached info and horizons of a job key (refreshing its last use), or null. */
+/** Cache keys whose last-use stamp was refreshed in this session (once is enough for the LRU of 3 sites). */
+const touched = new Set<string>();
+
+/** Cached info and horizons of a job key (refreshing its last use once per session), or null. */
 export function readSurfaceCache(
   jobKey: string,
 ): { info: StoredInfo | null; horizons: SurfaceHorizons } | null {
@@ -293,15 +303,28 @@ export function readSurfaceCache(
       if (p) horizons[k] = p;
     }
     const info = s.info && Array.isArray(s.info.years) ? s.info : null;
-    touchCacheEntry(storage, cacheKey(jobKey), s);
+    // Not on every read: that rewrote the whole entry each time (the effects read it on every change).
+    if (!touched.has(cacheKey(jobKey))) {
+      touched.add(cacheKey(jobKey));
+      touchCacheEntry(storage, cacheKey(jobKey), s);
+    }
     return { info, horizons };
   } catch {
     return null;
   }
 }
 
-/** Merges info (unless null) and horizons into the cached entry of a job key. */
-export function writeSurfaceCache(jobKey: string, info: StoredInfo | null, horizons: SurfaceHorizons): void {
+/**
+ * Merges info (unless null) and horizons into the cached entry of a job key. Of the observers stored before,
+ * those in `keep` (the plan's current and sweep observers) and the SURFACE_CACHE_EXTRA_OBSERVERS most recent
+ * others stay.
+ */
+export function writeSurfaceCache(
+  jobKey: string,
+  info: StoredInfo | null,
+  horizons: SurfaceHorizons,
+  keep: Iterable<string> = [],
+): void {
   const storage = getStorage();
   if (!storage) return;
   let prev: Partial<StoredSite> = {};
@@ -310,7 +333,18 @@ export function writeSurfaceCache(jobKey: string, info: StoredInfo | null, horiz
   } catch {
     // corrupt: replaced
   }
-  const h: StoredSite['h'] = typeof prev.h === 'object' && prev.h !== null ? { ...prev.h } : {};
+  const wanted = new Set(keep);
+  const old = Object.entries(typeof prev.h === 'object' && prev.h !== null ? prev.h : {}).filter(
+    ([k]) => !(k in horizons),
+  );
+  // Entries keep their insertion order: the last of the others are the most recent.
+  const others = old.filter(([k]) => !wanted.has(k)).map(([k]) => k);
+  const kept = new Set([
+    ...wanted,
+    ...others.slice(Math.max(0, others.length - SURFACE_CACHE_EXTRA_OBSERVERS)),
+  ]);
+  const h: StoredSite['h'] = {};
+  for (const [k, v] of old) if (kept.has(k)) h[k] = v;
   for (const [k, p] of Object.entries(horizons)) h[k] = encodeProfile(p);
   writeCacheEntry(storage, CACHE_PREFIX, SURFACE_CACHE_SITES, cacheKey(jobKey), {
     info: info ?? prev.info ?? null,
@@ -343,6 +377,11 @@ function missing(set: ObserverSet, have: SurfaceHorizons): ObserverSet {
     }
   });
   return { groups, keys };
+}
+
+/** Observer keys of the plan: the current tilt and the tilt sweep. */
+function planKeys(plan: SurfacePlan): string[] {
+  return [...plan.current.keys.flat(), ...plan.sweep.keys.flat()];
 }
 
 /** `horizons` without observers beyond the plan's current and sweep ones and EXTRA_OBSERVERS recent others. */
@@ -424,6 +463,8 @@ const rejected = (e: unknown): DsmJobResult => ({
 export function useSurfaceModelLoader(): void {
   const config = useConfig();
   const enabled = config.horizon.surfaceModel.enabled;
+  // The picked address point (not yet placed by the site plan) decides `waiting` as well.
+  const addressPoint = useAddressPointStore((s) => s.point);
   // Primitive keys (the effects read the latest config from the store): unrelated config changes do not
   // restart a computation or a download.
   const keys = useMemo(() => {
@@ -436,7 +477,9 @@ export function useSurfaceModelLoader(): void {
       sweep: plan.sweep.keys.flat().join(','),
       waiting: plan.waiting,
     };
-  }, [enabled, config]);
+    // addressPoint: read by surfacePlan from its store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled, config, addressPoint]);
   const jobKey = keys?.jobKey ?? null;
   const dataKey = keys?.dataKey ?? null;
   const waiting = keys?.waiting ?? false;
@@ -536,7 +579,7 @@ export function useSurfaceModelLoader(): void {
         redownload.current = null;
         const info = infoOf(result.info);
         const fresh = horizonsOf(todo, result.horizons);
-        writeSurfaceCache(plan.jobKey, info, fresh);
+        writeSurfaceCache(plan.jobKey, info, fresh, planKeys(plan));
         publishReady(plan, info, { ...(cached?.horizons ?? {}), ...fresh });
         return;
       }
@@ -628,7 +671,7 @@ export function useSurfaceModelLoader(): void {
       if (result.status === 'ok') {
         const info = infoOf(result.info);
         const fresh = horizonsOf(todo, result.horizons);
-        writeSurfaceCache(plan.jobKey, info, fresh);
+        writeSurfaceCache(plan.jobKey, info, fresh, planKeys(plan));
         if (now.jobKey === plan.jobKey) publishReady(now, info, { ...(cached?.horizons ?? {}), ...fresh });
         setLocal((s) => ({
           wanted: null,
@@ -708,7 +751,7 @@ export function useSurfaceModelLoader(): void {
       if (signal.aborted) return;
       if (result.status === 'ok') {
         const fresh = horizonsOf(todo, result.horizons);
-        writeSurfaceCache(plan.jobKey, infoOf(result.info), fresh);
+        writeSurfaceCache(plan.jobKey, infoOf(result.info), fresh, planKeys(plan));
         merge(fresh);
       } else if (result.status === 'miss' && useSurfaceLocal.getState().refresh?.status !== 'error') {
         // Not in memory (e.g. after a reload): the download runs as a refresh, then this effect again.

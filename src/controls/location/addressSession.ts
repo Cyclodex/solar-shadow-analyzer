@@ -4,6 +4,7 @@ import type { BuildingInfo, GeoErrorKind, SwissAddress } from '../../model/geoco
 import { withGeocode } from '../../model/geocodeLazy';
 import { wgs84ToLv95 } from '../../model/lv95';
 import type { LocationConfig } from '../../model/types';
+import { markAddressPoint } from '../../state/addressPointStore';
 import { useConfigStore } from '../../state/configStore';
 import { useUiStore } from '../../state/uiStore';
 
@@ -82,6 +83,9 @@ export function applyAddress(address: SwissAddress): void {
   });
   const { surfaceModel } = useConfigStore.getState().config.horizon;
   patch('horizon', { surfaceModel: { ...surfaceModel, enabled: true } });
+  // The address point lies inside the building: the laser scan waits until the site plan places the balcony.
+  const { location } = useConfigStore.getState().config;
+  markAddressPoint(location.latitude, location.longitude);
   useUiStore.getState().requestSurroundingsImport(address.latitude, address.longitude);
 
   heightRequest?.abort();

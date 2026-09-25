@@ -21,8 +21,9 @@ export function insideDsmExtent(latitude: number, longitude: number): boolean {
  * Bump when the computation changes: cached horizons of older versions are ignored.
  * 2: the own-building zone no longer comes from the masked-raster memory of another balcony depth, row
  * width or own footprint (horizons cached by version 1 may carry that error).
+ * 3: rays visit every cell they cross (not samples every 0.25 m) and the own zone is tested on the cell read.
  */
-export const DSM_ALGORITHM_VERSION = 2;
+export const DSM_ALGORITHM_VERSION = 3;
 
 /**
  * Window margin around radius, m: observers sit up to balcony depth (≤ 4 m) + half a panel (≤ 1.25 m) in front

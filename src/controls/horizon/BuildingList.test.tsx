@@ -13,6 +13,7 @@ import { useConfigStore } from '../../state/configStore';
 import { useDataStore } from '../../state/dataStore';
 import { useUiStore } from '../../state/uiStore';
 import { resetStores } from '../../test/utils';
+import { HorizonSection } from '../HorizonSection';
 import { BuildingList as BuildingListEntry } from './BuildingList';
 import { BuildingListPanel as BuildingList, LIST_PAGE } from './BuildingListPanel';
 
@@ -128,7 +129,7 @@ describe('BuildingList', () => {
       screen.getByText(/4 Gebäude, davon 1 von Hand · Quelle swisstopo, Stand 25\. September 2026/),
     ).toBeInTheDocument();
     expect(screen.getByText(/Gebäudegrundrisse und -höhen: © swisstopo/)).toBeInTheDocument();
-    expect(screen.getByText(/Prismen mit flachem Dach/)).toBeInTheDocument();
+    expect(screen.getByText(/zählen mit flachem Dach/)).toBeInTheDocument();
   });
 
   it('says the imported buildings are in the laser scan while it is active', () => {
@@ -169,6 +170,18 @@ describe('BuildingList', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'true');
     expect(toggle).toHaveFocus();
     expect(screen.getByRole('textbox', { name: 'Höhe über der Basis' })).toHaveValue('15');
+    expect(useBuildingImportStore.getState().buildingFocus).toBeNull();
+  });
+
+  it('«In der Liste bearbeiten» with «Horizont & Umgebung» closed: the list mounts and handles the request', async () => {
+    setConfig({ buildings: BUILDINGS, buildingImport: { ...SITE, radius: 300, date: '2026-09-25' } });
+    render(<HorizonSection />);
+    expect(screen.queryByRole('list')).toBeNull();
+    act(() => requestBuildingFocus('b2'));
+    expect(useUiStore.getState().openSections.horizon).toBe(true);
+    // The panel is a chunk of its own: it loads, then opens the list at the building and focuses it.
+    await waitFor(() => expect(itemToggle('Gebäude 2')).toHaveFocus());
+    expect(itemToggle('Gebäude 2')).toHaveAttribute('aria-expanded', 'true');
     expect(useBuildingImportStore.getState().buildingFocus).toBeNull();
   });
 
@@ -361,10 +374,17 @@ describe('BuildingList', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Gebäude laden' }));
     const alert = await screen.findByRole('alert');
     expect(alert).toHaveTextContent('Die Gebäude konnten nicht geladen werden.');
+    // Nothing was stored: no «Die bisherigen bleiben».
+    expect(alert).not.toHaveTextContent('bisherigen');
     expect(alert).toHaveTextContent('Keine Verbindung zum Server');
     fetchMock.mockResolvedValueOnce(okResult({ covered: false, coverage: 0, parts: [] }));
     await act(async () => fireEvent.click(within(alert).getByRole('button', { name: 'Erneut versuchen' })));
     expect(await screen.findByText(/nur in der Schweiz und in Liechtenstein/)).toBeInTheDocument();
+    // The retry button went with its block: the focus stays in the import status, not on <body>.
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toContainElement(
+      screen.getByText(/nur in der Schweiz und in Liechtenstein/),
+    );
     fetchMock.mockResolvedValueOnce(okResult({ coverage: 0.77 }));
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Gebäude laden' })));
     expect(

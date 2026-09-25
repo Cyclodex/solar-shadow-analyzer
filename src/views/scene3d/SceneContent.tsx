@@ -145,7 +145,7 @@ export const SceneContent = memo(function SceneContent({
         fade={preset !== 'sun'}
       />
       <group rotation-y={facadeRotationY(facadeAzimuth)}>
-        <Building palette={palette} dims={dims} day={sky.day} />
+        <Building palette={palette} dims={dims} day={sky.day} fade={preset !== 'sun'} />
         <PanelRows
           palette={palette}
           dims={dims}

@@ -19,6 +19,7 @@ import {
   type BuildingImportRequest,
   type BuildingImportSummary,
 } from '../state/buildingImportStore';
+import { clearAddressPoint, rememberAddressAnchor, settleAddressImport } from '../state/addressPointStore';
 import { useConfigStore } from '../state/configStore';
 import { useUiStore, type SurroundingsImportRequest } from '../state/uiStore';
 import { runImport } from './buildingImportClient';
@@ -54,14 +55,23 @@ let runId = 0;
 
 const setState = useBuildingImportStore.setState;
 
-/** Stops a running import; the stored buildings stay as they were. */
-export function abortBuildingImport(): void {
+/** Stops a running import without a trace in the state (its result is dropped). */
+function stopRunningImport(): void {
   if (!controller) return;
   controller.abort();
   controller = null;
   runId++;
   const { summary } = useBuildingImportStore.getState();
   setState({ status: summary ? 'ready' : 'idle', progress: null });
+}
+
+/** Stops a running import («Abbrechen»); the stored buildings stay as they were. */
+export function abortBuildingImport(): void {
+  if (!controller) return;
+  const reason = useBuildingImportStore.getState().request?.reason;
+  stopRunningImport();
+  // The pick's import is over: not requested again after a reload (the laser scan keeps waiting).
+  if (reason === 'address') settleAddressImport();
 }
 
 /** Back to the initial state, aborting a running import (tests). */
@@ -87,6 +97,9 @@ export function requestBuildingImport(request: BuildingImportRequest, deps: Buil
     const [e, n] = anchor ? lonLatToEnu(anchor, req.latitude, req.longitude) : [Infinity, Infinity];
     const near = anchor !== null && Math.hypot(e, n) <= Math.max(anchor.radius, 1);
     if (req.reason === 'manual' || near) {
+      // An import still running for an earlier pick would otherwise replace the edited buildings (and the
+      // anchor) with another site's while this confirmation is open.
+      stopRunningImport();
       setState({ pendingConfirm: req });
       if (req.reason === 'address') {
         useUiStore.getState().setSectionOpen('horizon', true);
@@ -106,7 +119,9 @@ export function confirmBuildingImport(deps: BuildingImportDeps = {}): void {
 
 /** Drops the import waiting for confirmation (the stored buildings stay). */
 export function dismissBuildingImport(): void {
+  const req = useBuildingImportStore.getState().pendingConfirm;
   setState({ pendingConfirm: null });
+  if (req?.reason === 'address') settleAddressImport();
 }
 
 /** Repeats the last import (after an error). */
@@ -181,11 +196,14 @@ export async function startBuildingImport(
       if (res.error.kind === 'aborted') return; // abortBuildingImport already reset the status
       setState({ status: 'error', error: res.error, progress: null });
       finishAddress(req);
+      if (req.reason === 'address') settleAddressImport();
       return;
     }
     if (!res.covered) {
       setState({ status: 'unavailable', progress: null, summary: null });
       finishAddress(req);
+      // No buildings, no laser scan there: nothing to place, the address point is the location.
+      if (req.reason === 'address') clearAddressPoint();
       return;
     }
 
@@ -251,6 +269,10 @@ export async function startBuildingImport(
       selectMs: res.selectMs,
     };
     setState({ status: 'ready', progress: null, summary, error: null });
+    if (req.reason === 'address') {
+      settleAddressImport();
+      rememberAddressAnchor(req.latitude, req.longitude);
+    }
     requestSitePlan(req.reason);
   } catch (e) {
     // Defensive: a bug here must not escape to the UI.
@@ -260,6 +282,7 @@ export async function startBuildingImport(
         progress: null,
         error: { kind: 'decode', message: e instanceof Error ? e.message : String(e) },
       });
+      if (req.reason === 'address') settleAddressImport();
     }
   } finally {
     if (controller === ctrl) controller = null;

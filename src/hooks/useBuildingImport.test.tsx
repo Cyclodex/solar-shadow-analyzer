@@ -353,6 +353,41 @@ describe('building import', () => {
     expect(e).toBeCloseTo(5000, 0);
   });
 
+  it('a pick that asks before discarding edits stops an import still running for an earlier pick', async () => {
+    const removed: Building = {
+      id: 'b1',
+      name: '',
+      footprint: [
+        [0, 20],
+        [10, 20],
+        [10, 30],
+      ],
+      base: 0,
+      height: 30,
+      source: 'swisstopo',
+      removed: true,
+    };
+    const anchor = { ...SITE, radius: 300, date: '2026-01-01' };
+    setSite({ buildings: [removed], buildingImport: anchor });
+    // Pick A, 1.2 km away (another site: imported at once, still loading) …
+    const slow = deferredFetch(ok());
+    requestBuildingImport({ ...enuToLonLat(SITE, 1200, 0), reason: 'address' }, deps(slow.fn));
+    await waitFor(() => expect(slow.fn).toHaveBeenCalledTimes(1));
+    expect(state().status).toBe('loading');
+    // … then pick B, 50 m from the edited site: waits for «Neu laden» / «Behalten».
+    requestBuildingImport({ ...enuToLonLat(SITE, 50, 0), reason: 'address' }, deps(slow.fn));
+    expect(state().pendingConfirm).toMatchObject({ reason: 'address' });
+    expect(state().status).not.toBe('loading');
+    // A's tiles arrive late: nothing of A is stored, the edits and the anchor stay.
+    slow.release();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(config().horizon.buildings).toEqual([removed]);
+    expect(config().horizon.buildingImport).toEqual(anchor);
+    dismissBuildingImport();
+    expect(config().horizon.buildings[0].removed).toBe(true);
+    expect(config().horizon.buildingImport).toEqual(anchor);
+  });
+
   it('useBuildingImportLoader consumes the address search request once (StrictMode)', async () => {
     fetchMock.mockImplementation(async () => ok());
     const wrapper = ({ children }: { children: ReactNode }) => <StrictMode>{children}</StrictMode>;

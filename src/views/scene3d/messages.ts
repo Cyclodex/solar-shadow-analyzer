@@ -51,7 +51,7 @@ const de = {
   legendHorizon: (distance: string) =>
     `Gelände und manuelle Punkte als Silhouette in ${distance} Entfernung.`,
   legendBuildings:
-    'Gebäude von swisstopo und von Hand erfasste als Prismen mit flachem Dach (bearbeitete gelblich, von Hand erfasste grünlich, entfernte ausgeblendet). Verdecken sie die Panels, werden sie durchscheinend. Das eigene Gebäude zeigt die Fassade mit den Balkonen.',
+    'Gebäude von swisstopo und von Hand erfasste als Gebäude mit flachem Dach (bearbeitete gelblich, von Hand erfasste grünlich, entfernte ausgeblendet). Verdecken sie die Panels, werden sie durchscheinend, ebenso Flügel des eigenen Gebäudes vor der Fassade. Das eigene Gebäude zeigt die Fassade mit den Balkonen.',
   shadeNow: 'Jetzt laut Modell',
   sunlit: 'besonnt',
   shaded: (pct: string) => `${pct} der Fläche verschattet`,
@@ -112,7 +112,7 @@ export const sceneMessages: Messages<SceneMessages> = {
     legendPath: (date) => `${date}, with hour marks (local time); faded where the sun is behind the facade.`,
     legendHorizon: (distance) => `Terrain and manual points as a silhouette ${distance} away.`,
     legendBuildings:
-      'Buildings from swisstopo and those entered by hand as flat-roofed prisms (edited ones yellowish, manual ones greenish, removed ones hidden). Where they hide the panels they turn translucent. Your own building shows the facade with the balconies.',
+      'Buildings from swisstopo and those entered by hand as flat-roofed buildings (edited ones yellowish, manual ones greenish, removed ones hidden). Where they hide the panels they turn translucent, and so do wings of your own building in front of the facade. Your own building shows the facade with the balconies.',
     shadeNow: 'Now, according to the model',
     sunlit: 'sunlit',
     shaded: (pct) => `${pct} of the area shaded`,

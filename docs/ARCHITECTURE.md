@@ -310,7 +310,16 @@ vom 25.09.2026.
   einen Ursprung (≤ 1 cm bis 300 m, ≤ 3 cm bis 500 m) für den Strahlengang im Raster.
 - **Höhen nie mischen:** Laserscan-Höhen sind absolut (LHN95); der Boden am Beobachter kommt aus swissALTI3D oder
   dem Höhendienst am Standort; Horizontwinkel = atan2(z_dsm − (Boden + Beobachterhöhe), d). Terrarium behält seine
-  eigene Bodenhöhe (liegt in Bern 2.6–8.6 m über LHN95). Horizonte werden je Azimut per Maximum kombiniert.
+  eigene Bodenhöhe. Sie liegt am Standortpixel örtlich über LHN95 (Höhendienst): Breitenrainstrasse 10 564.1 gegen
+  558.9 m (+5.2 m), Kramgasse 49 547.3 gegen 537.0 m (+10.3 m), während Hügel 0.5–0.6 km nördlich der Kramgasse zum
+  DTM passen. Der Beobachter des Geländehorizonts steht dort also rund 10 m zu hoch: Gegen ein DTM-Profil
+  (`profile.json`, Erdkrümmung mit k = 0.13, 4 m über Boden) liegt der Geländehorizont der Kramgasse bei 340°, 0° und
+  20° mit 1.14° / 1.36° / 1.49° um 0.8–1.2° unter 2.29° / 2.16° / 2.67° (Merkmale 0.51–0.62 km entfernt). Im
+  kombinierten Horizont fällt das dort weg (der Laserscan liegt in diesen Richtungen für alle Stockwerke bei
+  mindestens 19.8°); in dicht bebauten Orten mit offener Sicht aus dem obersten Geschoss kann der Geländehorizont
+  für Merkmale in 0.5–1 km so etwa 1° zu tief liegen. Der Boden des Geländehorizonts wird nicht auf den Höhendienst
+  gesetzt: Ob die Terrarium-Pixel im Nahbereich (100–300 m) ebenso erhöht sind, ist nicht gemessen; wären sie es,
+  erzeugte ein tieferer Beobachter dort einen falschen Horizont. Horizonte werden je Azimut per Maximum kombiniert.
 
 ### Config-Vertrag
 
@@ -370,7 +379,8 @@ Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200
   Worker lädt die Kacheln vollständig, nicht nur die gespeicherten Gebäude) zu Boden.
 - **Eigenes Gebäude im Laserscan** (`OWN_BUILDING_EXCLUSION`, `ownExclusionZone`, `isOwnBuildingCell`): Zellen mit
   n < 0.5 m (hinter der Fassadenebene) und die eigene Balkonzone 0 ≤ n ≤ Balkontiefe + 0.5 m innerhalb der Ausdehnung
-  des eigenen Gebäudes entlang der Fassade zählen nicht. Die Ausdehnung kommt aus dem eigenen Grundriss (Teil der
+  des eigenen Gebäudes entlang der Fassade zählen nicht; massgebend ist die Mitte der Zelle, die ein Strahl liest
+  (nicht der Punkt auf dem Strahl). Die Ausdehnung kommt aus dem eigenen Grundriss (Teil der
   Vektorkacheln, der den Punkt 0.5 m hinter dem Fassadenursprung enthält), sonst ± (Reihenbreite / 2 + 2 m).
   Annahme: Das darüberliegende Stockwerk wirkt über die Verschattung durch dessen Panelreihe, nicht über
   Balkonplatten; Balkone der Nachbarn ausserhalb dieser Ausdehnung sind echte Hindernisse. Bei den Prismen ist jeder
@@ -385,10 +395,12 @@ Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200
   Status `'unavailable'`, Hinweis «nur in der Schweiz und Liechtenstein verfügbar») ebenfalls die Prismen.
 - **Standort im eigenen Gebäude:** Liegt der Standort in einem Gebäude des Imports, das der Laserscan enthält (nicht
   entfernt, nicht bearbeitet), oder auf dessen Umriss mit der Fassade nach innen
-  (`buildingHorizon.ts locationInsideOwnBuilding`), wartet der Laserscan (Status `'waiting'`, kein Download, keine
-  Rechnung): Sein Horizont wäre das Gebäude selbst. Es gelten die Prismen ohne das eigene Gebäude, die Jahreswerte
-  sind nicht vorläufig (wie nach einem Fehler); der Status nennt den Lageplan. Ein Download wartet ausserdem, solange
-  ein Gebäude-Import angefragt ist oder läuft (dessen Gebäude entscheiden das). Siehe
+  (`buildingHorizon.ts locationInsideOwnBuilding`), oder ist er noch der gewählte Adresspunkt (`addressPointStore`,
+  was auch aus dem Gebäude-Import wurde: gescheitert, abgebrochen, beim Neuladen unterbrochen), wartet der Laserscan
+  (Status `'waiting'`, kein Download, keine Rechnung): Sein Horizont wäre das Gebäude selbst. Es gelten die Prismen
+  ohne das eigene Gebäude; die Jahreswerte sind vorläufig mit «Standort noch nicht im Lageplan bestätigt» und «Zum
+  Lageplan» bzw., ohne Gebäude, «Gebäude laden» / «Erneut versuchen» (`PlacementPrompt.tsx`). Ein Download wartet
+  ausserdem, solange ein Gebäude-Import angefragt ist oder läuft (dessen Gebäude entscheiden das). Siehe
   [Integration](#integration-adresse-laserscan-und-gebäude-zusammen).
 - **Offene Annahmen:** Bäume gelten ganzjährig als undurchsichtig (Befliegungen meist ohne Laub, Bern März 2023);
   Prismen mit flachem Dach überschätzen Schrägdächer (RMS 5.7–10.2° gegen den Laserscan an einem Ort); importierte
@@ -576,14 +588,26 @@ Antworten.
   Ohne Grundriss des eigenen Gebäudes in der Config bestimmt der Teil der Vektorkacheln die Ausdehnung, falls sie
   geladen sind (Bäume aus), sonst ± (Reihenbreite / 2 + 2 m); dann zählen Traufen des eigenen Hauses jenseits davon
   entlang der Fassade als Hindernis.
-- **Strahlengang:** je Beobachtergruppe (gleiches n, Höhen der Stockwerke) 2'880 Strahlen (0.125°) in 0.25-m-Schritten
-  bis zum Radius, nächste Zelle, Abstand = Strahllänge; Richtungen in ENU, über `lv95LocalFrame` ins Raster; die
-  Proben im eigenen Bereich (n < 0.5 m, Balkonzone) werden als Intervall je Strahl übersprungen. Jeder Azimut der
-  Ausgabe (0.5°) nimmt das Maximum der 5 Strahlen über ± 0.25°; Werte unter 0° werden 0 (Himmelssichtfaktor zählt
-  negative Werte ohnehin als 0). Test gegen Brute Force (Pfähle, Baumkronen, Blöcke bis 150 m): nie über dem
-  Maximum, das ein Strahl durch irgendeinen Teil der Zellen sehen könnte, und an 0 von 720 Azimuten mehr als 0.5°
-  unter dem Maximum über die Zellmitten des Azimuts; ein Strahl je Azimut liegt dort an 9 Azimuten darunter (bis
-  15.9°). RMS zur oberen Grenze 1.08° (ein Strahl: 3.26°).
+- **Strahlengang:** je Beobachtergruppe (gleiches n, Höhen der Stockwerke) 2'880 Strahlen (0.125°) bis zum Radius
+  durch jede Zelle, die sie kreuzen (Amanatides–Woo), jede im Abstand, in dem der Strahl sie betritt (der steilste
+  Blick auf die Zelle entlang des Strahls; mindestens `DSM_NEAR_M` = 0.25 m); Richtungen in ENU, über
+  `lv95LocalFrame` ins Raster. Zellen, deren Mitte im eigenen Bereich liegt (n < 0.5 m, Balkonzone), zählen nicht
+  (`isOwnBuildingCell`). Jeder Azimut der Ausgabe (0.5°) nimmt das Maximum der 5 Strahlen über ± 0.25°; Werte unter
+  0° werden 0 (Himmelssichtfaktor zählt negative Werte ohnehin als 0). **Bis Version 2** ging jeder Strahl in
+  0.25-m-Schritten und las die nächste Zelle; der eigene Bereich wurde am Probenpunkt geprüft. Die Schritte
+  übersprangen Zellen, die ein Strahl nahe am Beobachter nur anschneidet (einzelne Pfähle, lichte Kronen), sodass der
+  Horizont tiefer Stockwerke zu tief und der Ertrag zu hoch lag; und Strahlen fast parallel zur Fassade (86–88°
+  neben der Normalen) lasen knapp ausserhalb der Balkonzone Zellen der eigenen Traufe, deren Mitte darin liegt
+  (Breitenrain 1. OG: 60.4° statt 53.8°). Gemessen auf dem Raster der Breitenrainstrasse 10 (Fassade 154°, 4
+  Stockwerke, Wetter 2025): Jahresertrag 2'922.8 → 2'886.1 kWh (1. OG 407.9 → 391.3 kWh, −4.1 %); ein Marsch in
+  1-cm-Schritten mit derselben Regel ergibt 2'887.5 kWh. Kramgasse 49: 880.2 → 877.0 kWh (1-cm-Marsch 877.1).
+  `DSM_ALGORITHM_VERSION` 3 verwirft ältere Cache-Einträge. Tests (`dsm.test.ts`): gegen Brute Force (Pfähle,
+  Baumkronen, Blöcke bis 150 m) nie über dem Maximum, das ein Strahl durch irgendeinen Teil der Zellen sehen könnte
+  (nächster Punkt jeder Zelle), und an 0 von 720 Azimuten mehr als 0.5° unter dem Maximum über die Zellmitten des
+  Azimuts; ein Strahl je Azimut liegt dort an 9 Azimuten darunter (bis 15.9°); RMS zur oberen Grenze 0.26° (ein
+  Strahl: 2.68°). Einzelne Pfähle 1.5–12 m vor dem Beobachter: an allen 720 Azimuten zwischen einem Marsch in
+  2-mm-Schritten und 0.05° darüber. Balkonplatten in jeder Zelle der Balkonzone: 0° an allen Azimuten (Version 2:
+  85.2°).
 - **Loader** (`useSurfaceModelLoader`): Standort, Fassade, Balkon, Reihenbreite, Bäume, Radius, Masken und eigener
   Grundriss ergeben den Auftrag (`surfacePlan`, `jobKey`); was geladen werden muss, nur Standort, Radius, Bäume und
   ob es Masken gibt (`dataKey`, `dsmDataKey`). Rechnen und Laden sind getrennt: Ein neuer Auftrag wartet 800 ms
@@ -605,15 +629,21 @@ Antworten.
   endgültig gilt. Nach einem Fehler oder ausserhalb CH/FL lädt erst «Erneut versuchen» bzw. ein neuer Standort.
   Ergebnis-Cache `ssa.surface.v1:*`: je Auftrag ein Eintrag (Datenstand, Bytes, Abdeckung; Horizonte in 0.01° als
   Uint16, die Nullhälfte hinter der Fassade weggelassen, ≈ 1 kB je Beobachter), 3 Standorte; ein Standort
-  ausserhalb CH/FL wird ebenfalls gemerkt.
+  ausserhalb CH/FL wird ebenfalls gemerkt. Ein Eintrag behält von den früher gespeicherten Beobachtern nur die des
+  Plans (aktuelle Neigung und Sweep) und die `SURFACE_CACHE_EXTRA_OBSERVERS` = 16 jüngsten übrigen: Stockwerkhöhe,
+  Stockwerke oder Panellänge ändern die Beobachter, nicht den Auftrag, und jede Änderung fügte vorher ihre
+  Beobachter für immer hinzu (Review: nach 30 Änderungen mit 8 Stockwerken 4.8 Mio. Zeichen, bis das Kontingent
+  des localStorage voll war und danach auch `ssa.config` nicht mehr gespeichert wurde). Ein Lesen frischt den
+  Zeitstempel eines Eintrags nur einmal je Sitzung auf (vorher schrieb jedes Lesen den ganzen Eintrag neu).
 - **Fundament, additiv:** `dataStore.surface.coverage` (0–1, null solange unbekannt).
-- **Validierung** (`npm run validate:dsm`, 25.09.2026): Breitenrainstrasse 10, Beobachter 1 m vor der Fassade
-  (Normale 153.4° im LV95-Gitter), 8 m / 14 m über Boden: 32.52° / 17.92° auf der Normalen (Prototyp 32.54° /
-  17.97°, von Hand 32.68° / 17.97°), 2 m: 52.20° (Prototyp 52.1°). Ohne Bäume 2 m: 43.66° (Strassenbäume weg; das
-  Haus gegenüber, 18.65 m entfernt, 19.88 m hoch, gibt von Hand 43.8°), 8/14 m unverändert; mit den beiden Teilen
-  gegenüber als entfernt: 14.39° / 7.15°.
+- **Validierung** (`npm run validate:dsm`, 25.09.2026, Version 3): Breitenrainstrasse 10, Beobachter 1 m vor der
+  Fassade (Normale 153.4° im LV95-Gitter), 8 m / 14 m über Boden: 32.73° / 18.03° auf der Normalen (Prototyp
+  32.54° / 17.97°, von Hand 32.68° / 17.97°; Version 2: 32.52° / 17.92°), 2 m: 52.23° (Prototyp 52.1°). Ohne Bäume
+  2 m: 43.90° (Version 2: 43.66°; Strassenbäume weg; das Haus gegenüber, 18.65 m entfernt, 19.88 m hoch, gibt von
+  Hand 43.8°), 8/14 m unverändert; mit den beiden Teilen gegenüber als entfernt (Version 2): 14.39° / 7.15°.
 - **Gemessen:** Node (Proxy der Sandbox): 4 Dateien, 9 Kacheln, 15 Anfragen (STAC, Höhe, 4 Kopfzeilen, 9 Bereiche),
-  5.01 MB, 2.0–5.2 s, davon Dekodieren 180–204 ms und Strahlen 51–63 ms je Gruppe mit 2–3 Höhen; ohne Bäume
+  5.01 MB, 2.0–5.2 s, davon Dekodieren 180–204 ms und Strahlen 51–63 ms je Gruppe mit 2–3 Höhen (Version 3: 32–49
+  ms, `validate:dsm`; auf dem Raster der Breitenrainstrasse 13–25 ms mit 2–4 Höhen gegen 18–27 ms); ohne Bäume
   zusätzlich 0.85 MB in 12 Anfragen, Masken 156–196 ms. Chromium (Dev-Server, Worker, derselbe Proxy, 4 Stockwerke):
   15 Anfragen, 5.01 MB, bereit nach 41–50 s, dominiert vom Proxy (≈ 1 Mbit/s je Verbindung, STAC 4.8 s,
   einzelne Anfragen mit `net::ERR_TOO_MANY_RETRIES`, von den Wiederholungen aufgefangen); die 76 Beobachter des
@@ -707,8 +737,10 @@ Antworten.
   `non-scaling-stroke`), Marken in Pixeln: eigenes Gebäude (Akzent), Nachbarn, bearbeitete (Warnfarbe), von Hand
   erfasste (Ok-Farbe, gestrichelt), entfernte (nur gestrichelter Umriss), wählbare Fassaden (blau), Brandmauern
   (gepunktet), Balkon als Punkt auf der Fassadenlinie mit Pfeil der Aussennormale und der Panelreihe (Reihenbreite, um
-  die Balkontiefe vor der Wand), Importanker («Adresse», wenn der letzte Import dieser Sitzung von einer Adresswahl
-  dort kam, sonst «Importpunkt»), der bisherige Standort gestrichelt, auf Wunsch die Sonnenrichtung zur gewählten Zeit
+  die Balkontiefe vor der Wand), die Adresse als Raute mit «Adresse», wenn der Anker der Punkt einer Adresswahl ist
+  (dieser Sitzung oder gespeichert in `addressPointStore`, auch nach dem Neuladen; der Mittelpunkt von «Gebäude
+  laden» wird nicht markiert, vorher hiess er «Importpunkt»; die Beschriftung steht links der Raute, wo sie unter die
+  Zoom-Knöpfe oder über den Rand liefe), der bisherige Standort gestrichelt, auf Wunsch die Sonnenrichtung zur gewählten Zeit
   (`useSun`, nur Strahl und Beschriftung folgen der Zeit). Legende unter dem Plan.
 - **Eigenes Gebäude im Plan** (`sitePlanOwnBuilding`, nie ein entferntes): das mit «Das ist mein Gebäude» oder
   «Eigenes Gebäude» gewählte, sonst der Teil, der den Punkt 0.5 m hinter dem Fassadenursprung enthält (wie
@@ -728,22 +760,33 @@ Antworten.
   einer wählbaren Kante liegt und der Azimut höchstens 0.5° von ihrer Normale abweicht; nach dem Runden ist das immer
   erfüllt (Test: Abweichung unter 0.07 m). Sonst schlägt der Plan die Kante mit dem Azimut am nächsten beim
   eingestellten vor (5°-Stufen, dann die nähere, dann die längere), den Balkon auf der Projektion des Standorts
-  (ausserhalb der mittleren 90 %: die Mitte). Eine Brandmauer antippen erklärt, warum sie nicht wählbar ist.
+  (ausserhalb der mittleren 90 %: die Mitte). Eine Brandmauer antippen erklärt, warum sie nicht wählbar ist; liegt der
+  Tipp mehr als 6 px neben ihr in einem anderen Gebäude, wählt er dieses (die Nachbarn eines schmalen Reihenhauses
+  lagen sonst im 22-px-Bereich seiner Brandmauern).
 - **Öffnen nach einem Import:** `requestSitePlan('address')` öffnet auch den Abschnitt «Gebäude»; der Lageplan holt
   die Anfrage beim Einhängen ab (`sitePlanOpen`, `sitePlanGuide` in `buildingImportStore`, nicht gespeichert), zeigt
   die Anleitung und springt ohne Animation an seinen Anfang (eine weiche Bewegung endete auf dem Handy rund 250 px zu
   früh, weil Ergebnisse darüber noch wachsen; nach dem Sprung hält die Scroll-Verankerung des Browsers ihn fest,
-  ohne sie `holdInView`, siehe [Integration](#integration-adresse-laserscan-und-gebäude-zusammen)). Nach «Gebäude
-  laden» öffnet er sich nur, wenn der Standort noch auf keiner Fassade liegt, und erst wenn der Abschnitt aufgeht.
+  ohne sie `holdInView`, siehe [Integration](#integration-adresse-laserscan-und-gebäude-zusammen)). Der Fokus geht
+  an die Anleitung (`tabIndex={-1}`, Screenreader lesen sie), wenn er in der Suche, auf einem Knopf «Zum Lageplan»
+  (Elemente mit `data-site-plan-source`) oder nirgends war; sonst meldet eine Live-Region «Lageplan geöffnet …» (wer
+  gerade woanders tippt, verliert nichts). Nach «Gebäude laden» öffnet er sich nur, wenn der Standort noch auf keiner
+  Fassade liegt, und erst wenn der Abschnitt aufgeht.
 - **Touch, Maus, Tastatur:** `touch-action: pan-y`: senkrechtes Wischen scrollt die Seite; ein Tipp handelt erst mit
-  dem `click`; seitwärts mehr als 8 px verschiebt den Plan (auf dem Balkon: zieht ihn); zwei Finger zoomen und
-  verschieben. Das Mausrad scrollt die Seite und zeigt den Hinweis «Zum Zoomen Strg (Mac: ⌘) …», Strg/⌘ + Rad (auch
+  dem `click`; seitwärts mehr als 8 px verschiebt den Plan; zwei Finger zoomen und verschieben. Der Balkon hat ein
+  HTML-Ziel von 44 px (`data-handle-touch`), dessen `touch-action` der Fassade folgt: `pan-y` für eine Fassade, die
+  auf dem Bildschirm eher waagrecht liegt, `pan-x` für eine eher senkrechte. So bleibt der Seite nur das Wischen quer
+  zur Fassade, und mehr als 8 px entlang der Fassade ziehen den Balkon (vorher nur seitwärts: an einer senkrechten
+  Fassade scrollte die Seite; gemessen am Handy mit echten Touch-Ereignissen, 62° ONO: 10.6 → 20.6 m, 0 px Bildlauf). Das Mausrad scrollt die Seite und zeigt den Hinweis «Zum Zoomen Strg (Mac: ⌘) …», Strg/⌘ + Rad (auch
   das Trackpad-Pinch) zoomt am Zeiger. Knöpfe Vergrössern, Verkleinern, Zentrieren (44 px auf Touch). Der Plan ist
   eine fokussierbare Gruppe mit Textbeschreibung: Pfeile verschieben, Plus/Minus zoomen, 0 zentriert. Breite der
   Ansicht 8–1500 m, anfangs 2.2 × das eigene Gebäude, mindestens 50 m.
-- **Nachbar antippen:** Karte mit Name, Markierungen, Höhe, Basis, Abstand und Richtung vom Balkon; «In der Liste
+- **Nachbar antippen:** Karte mit Name, Markierungen, Höhe, Basis, Abstand und Richtung vom Standort (wie die Liste:
+  «11 m entfernt, W»; vorher vom gezeigten Balkon, vor «Übernehmen» also anders als in der Liste); «In der Liste
   bearbeiten» (`requestBuildingFocus`: öffnet «Horizont & Umgebung», die Liste an dieser Stelle, klappt das Gebäude
-  auf und setzt den Fokus darauf), «Das ist mein Gebäude», «Schliessen».
+  auf und setzt den Fokus darauf; auch wenn der Abschnitt zu war und die Liste erst mit ihm einhängt, vorher galt die
+  beim Einhängen wartende Anfrage als erledigt), «Das ist mein Gebäude», «Schliessen». Legende und Liste sagen
+  «Umgebungsgebäude»; deren Umriss hat im hellen Design 4.1:1 gegen den Boden (vorher 2.9:1), im dunklen 4.6:1.
 - **3D** (`views/scene3d/Buildings3D.tsx`, Geometrie `buildingsGeometry.ts`): alle nicht entfernten Gebäude ausser
   dem eigenen (`ownBuildingIds`) bis 1 km vom Fassadenursprung (keine eines anderen Orts, Teil 3) als Prismen relativ
   zum Fassadenursprung (Weltursprung der Szene), unabhängig vom
@@ -761,13 +804,22 @@ Antworten.
   ersetzt dieser Grundriss den schematischen Quader (`ownBody`: um den Ursprung auf die Fassadenlinie gedreht und
   geschoben, mindestens so hoch wie der Quader; Fenster über den ebenen Teil der Fassade um den Ursprung, im Raster
   der Balkontüren), sodass angrenzende Nachbarn anstossen statt hineinzuragen. Sonst (noch nicht bestätigt) bleibt der
-  Quader. Rahmung, Kameravorlagen und Schattenpassung bleiben beim schematischen Gebäude. Ausserhalb des Bildschirms
+  Quader. Rahmung, Kameravorlagen und Schattenpassung bleiben beim schematischen Gebäude. `ownBodyParts` teilt den
+  Grundriss an der Fassadenlinie (`clipRingAbove` bei n = 0.05 m): Der Teil dahinter ist immer deckend, Flügel davor
+  (die Fassade in der Innenecke eines L) werden wie die Nachbarn durchscheinend, solange sie eine Panelreihe vor der
+  Kamera verdecken (`OwnWing` in `Building.tsx`, derselbe Sichttest, nicht in «Aus Sonnenrichtung»; ihr Schatten
+  bleibt). Vorher zeigte die Standardkamera an der Breitenrainstrasse 10, Fassade 244° WSW, nur die Wand dieses
+  Flügels (Review: 4 Farben im auf 64 × 48 verkleinerten Bild, nach dem Neuladen 2); jetzt 56 und 54 (Desktop), 73
+  und 77 (Handy), die Panelreihen sind zu sehen. Ausserhalb des Bildschirms
   friert die Szene wie bisher ein (`useKeptWhileHidden`, die Prismen gehören zu `SceneData`).
 - **Druckbericht** (`export/PrintReport.tsx`): Koordinaten mit 6 Nachkommastellen; mit importierten Gebäuden des Orts
   «Lage am Gebäude» (Balkon auf der Fassade …, im Lageplan gesetzt, Koordinaten auf 0.000001° (höchstens 0.07 m) /
   nicht im Lageplan bestätigt); Gruppe «Umgebung»: Umgebungsgebäude (Anzahl ohne entfernte; von Hand, bearbeitet,
   entfernt), Gebäude-Import (Stand, Umkreis), Laserscan (ein mit Bäumen oder nur Gebäude, Umkreis / aus), Datenquellen
-  «© swisstopo». Angaben der Adresssuche (A) und des Laserscan-Status (B) ergänzt die Integration.
+  «© swisstopo». Angaben der Adresssuche (A) und des Laserscan-Status (B) ergänzt die Integration. Der Teilen-Link
+  steht bis `PRINT_LINK_MAX` = 500 Zeichen ganz im Druck, länger (gespeicherte Gebäude: Breitenrain 11'244 Zeichen)
+  nur mit den ersten 120 Zeichen und «…» und dem Hinweis, ihn in der App über «Teilen» zu kopieren (vorher füllte
+  er über zwei A4-Seiten; PDF der Breitenrain jetzt 8 statt 10 Seiten).
 - **Tests:** `sitePlanModel.test.ts` (eigenes Gebäude, Platzierung und Runden, Vorschlag, Raster, Ansicht),
   `SitePlan.test.tsx` (Öffnen nach dem Import, Tastatur, Klick, Brandmauer, Nachbar, «Das ist mein Gebäude», Touch:
   Bildlauf, seitliches Ziehen, zwei Finger, Maus-Verschieben, Zoom-Knöpfe, Strg + Rad, Englisch),
@@ -874,7 +926,9 @@ Balkon → Laserscan → Horizont-Diagramm → Jahreswerte → 3D → Druckberic
   vor der Balkonzone, vor «Übernehmen» nichts), danach
   «Gelände» und «Laserscan»; importierte Gebäude stecken dann im Laserscan (Rechenregeln), «Gebäude» erscheint nur
   für bearbeitete und von Hand erfasste: mit einem Gebäude von Hand Kramgasse 3.2° / 44.7° / 25.4°, Breitenrain
-  3.5° / 60.4° / 25.4° (Gelände / Laserscan / Gebäude, Höchstwerte vor der Fassade vom 1. OG).
+  3.5° / 60.4° / 25.4° (Gelände / Laserscan / Gebäude, Höchstwerte vor der Fassade vom 1. OG, Laserscan Version 2).
+  Die 60.4° der Breitenrain kamen aus Zellen der eigenen Traufe bei streifendem Blick (Version 3, siehe B
+  «Strahlengang»: 53.8° bei 183°, im Browser auf Desktop und Handy gemessen; Kramgasse 44.9°).
 - **Lageplan nach dem Sprung** (E2E «site plan on an iPhone», unter `BASE_PATH` 1 von 16 bis 3 von 24 Läufen rot):
   Der Tipp auf die Nordkante traf den Rand des Lageplans. Ursache: Die Karte «Neigungsvergleich» (weiter oben)
   zeigte für den neuen Standort 60–240 ms ihren Platzhalter (548 → 317 → 548 px); die Scroll-Verankerung von
@@ -903,6 +957,60 @@ Balkon → Laserscan → Horizont-Diagramm → Jahreswerte → 3D → Druckberic
   `modulepreload`, je Datei gzip -9): main 030c38d 606.4 kB (201.2 kB gzip), Merge 50f33c1 684.1 kB (231.4 kB,
   +15.0 %), jetzt 655.4 kB (222.9 kB, +10.8 %; als eine Datei gepackt 219.7 kB, +9.2 %: die gemeinsamen Module
   liegen jetzt in 10 statt 1 Datei). CSS 75.7 / 79.0 / 77.8 kB. Precache 1'700 / 1'970 / 1'981 KiB.
+
+### Integration: Durchsicht
+
+Befunde der Durchsicht nach der Integration (Rechnung, Bedienung, Robustheit), jeweils mit Test; geprüft mit echten
+Daten (Breitenrainstrasse 10, Desktop 1280 × 900 und Handy 390 × 844).
+
+- **Laserscan, Strahlengang und eigener Bereich:** siehe B «Strahlengang» (Version 3: Zelldurchgänge statt
+  0.25-m-Schritte, der eigene Bereich an der gelesenen Zelle).
+- **Adresspunkt ohne Gebäude:** Scheiterte der Import nach einer Adresswahl (Netz, «Abbrechen», Neuladen oder
+  Schliessen während des Imports), galt der Adresspunkt nicht als «im Gebäude» (`locationInsideOwnBuilding` braucht
+  gespeicherte Gebäude): Der Laserscan lud 5 MB für den Adresspunkt, sein Horizont war das eigene Gebäude (88.7°) und
+  die Jahreswerte galten als endgültig. Jetzt merkt `state/addressPointStore.ts` den Punkt (localStorage
+  `ssa.addressPoint`, nicht in Config und Teilen-Link), solange der Standort genau dieser Punkt ist; jeder andere
+  Standort (Lageplan, Koordinaten, Suche, Vorlage, Teilen-Link) löscht ihn. Solange wartet der Laserscan
+  (`surfacePlan.waiting`). War der Import beim Neuladen noch nicht fertig (`importPending`), fragt `<DataLoader/>` ihn
+  erneut an (`resumeAddressImport`); nach einem Fehler oder «Abbrechen» nicht (erst «Erneut versuchen» bzw. «Gebäude
+  laden»). Gemessen (Vektorkacheln im Browser abgebrochen): nach dem Import-Fehler Laserscan `'waiting'`, 0 Anfragen an
+  den Laserscan, auch nach dem Neuladen; «Erneut versuchen» mit freigegebenen Kacheln lädt 119 Gebäude und öffnet
+  den Lageplan. Neuladen 1.5 s nach der Wahl: der Import läuft nach dem Neuladen wieder, danach Lageplan, 0 Anfragen
+  an den Laserscan. Grenze: Ein Teilen-Link aus diesem Zustand enthält den Punkt nicht (der Empfänger rechnet am
+  Adresspunkt, falls auch sein Import scheitert).
+- **Wo der Nutzer ist** (`controls/location/PlacementPrompt.tsx`, `placementNeed.ts`): unter der Suche der Import
+  («Gebäude der Umgebung werden geladen … Danach öffnet sich der Lageplan …», höflich angesagt), danach «Standort noch
+  nicht bestätigt …» mit «Zum Lageplan», oder der Fehler (`role="alert"`, «Erneut versuchen», Hinweis auf die
+  Koordinaten); dieselbe Aktion im Laserscan-Status und neben den Jahreswerten, die solange vorläufig sind
+  («vorläufig – Standort noch nicht im Lageplan bestätigt», gedämpft wie beim Gelände). Vorher standen Fortschritt
+  und Fehler nur im geschlossenen «Horizont & Umgebung» (nicht im DOM), und die Jahreswerte vor «Übernehmen» (Review:
+  Kramgasse 82 kWh, Amortisation 126 Jahre) sahen endgültig aus. Öffnet sich der Lageplan nach der Wahl, geht der
+  Fokus an seine Anleitung (siehe C Teil 2; vorher blieb er in der weggescrollten Suche). Eine Wahl per Touch nimmt
+  der Suche den Fokus (die Bildschirmtastatur bliebe sonst über dem Lageplan offen).
+- **Einstieg:** Der Standort in der Kopfzeile ist ein Knopf («47.100° N, 7.450° O: Adresse oder Ort suchen»; der Name beginnt mit dem sichtbaren Text), der «Standort»
+  öffnet und die Suche fokussiert (`app/openLocationSearch.ts`); auf dem Handy lag die Suche (Review) bei y = 6'999 px in einem
+  zugeklappten Abschnitt.
+- **Veraltetes Import-Ergebnis:** Wartete eine Adresswahl in der Nähe bearbeiteter Gebäude auf «Neu laden» /
+  «Behalten», lief ein Import einer früheren Wahl weiter und ersetzte bei seinem Ende Gebäude und Anker durch die
+  eines anderen Orts (Review im Browser: Anker 1'215 m vom Standort, 0 bearbeitete). Jetzt bricht diese Rückfrage
+  einen laufenden Import ab (Test).
+- **Fokus nach «Erneut versuchen» und «Abbrechen»:** Laserscan-Status und Gebäude-Import sind fokussierbare Gruppen
+  (`tabIndex={-1}`), die den Fokus übernehmen, wenn ihr Knopf mit seinem Block verschwindet (vorher `<body>`).
+- **Texte:** ein Begriff «Gebäude mit flachem Dach» (statt «Körper» / «Prismen»); das eigene Gebäude «als Hindernis
+  zählen nur Teile vor dem Balkon»; «Die bisherigen bleiben» nur, wenn Gebäude gespeichert sind.
+- **Laserscan-Cache:** begrenzt (siehe B «Loader», `SURFACE_CACHE_EXTRA_OBSERVERS`).
+- **Geländehorizont:** Terrarium-Boden am Standort gemessen und dokumentiert (Konventionen), nicht geändert.
+- **Tests:** `dsm.test.ts` (Zellmitte im eigenen Bereich, 2-mm-Marsch, Brute Force), `useSurfaceModel.test.tsx`
+  (Adresspunkt ohne Gebäude, Grenze des Cache-Eintrags, Lesen ohne Schreiben), `addressPointStore.test.ts`,
+  `useBuildingImport.test.tsx` (veraltetes Ergebnis), `BuildingList.test.tsx` (Anfrage beim Einhängen, Fokus nach
+  «Erneut versuchen»), `SitePlan.test.tsx` (Fokus nach dem Sprung, senkrechte Fassade per Touch, Brandmauer und
+  Nachbar), `sceneLayout.test.ts` (L-Flügel verdeckt die Panels vor der Standardkamera), `SurfaceModelControls`,
+  `KpiBar`, `LocationSection`, `Header`, `PrintReport` (Link); `e2e/buildings.spec.ts`: eigenes Gebäude als L mit
+  der Fassade in der Innenecke, Standardkamera (Farben im auf 64 × 64 verkleinerten Bild: 326 mit durchscheinendem
+  Flügel, 77 mit deckendem; Schwelle 200).
+- **Laden:** Anfangs geladenes JavaScript (Einstieg und `modulepreload`, je Datei mit Pythons gzip 9 gemessen)
+  663.0 kB (225.3 kB gzip) gegen 655.4 kB (222.4 kB) davor: Adresspunkt und Hinweise liegen im Einstieg und ziehen
+  den Zustand des Gebäude-Imports, den Spinner und die Symbole aus nachgeladenen Chunks nach.
 
 ## i18n
 
@@ -990,6 +1098,8 @@ und Hilfstechnologien wirken sofort.
   geht der Fokus an den Regler des Diagramms). Dieser Tooltip bleibt im sichtbaren Teil des Diagramms über der
   Steuerleiste, notfalls über dem angetippten Punkt; den `click` des Tipps, der ihn geöffnet hat, erhält ein
   Element mit `data-chart-action` unter dem Finger nie (`usePlotPointer` fängt ihn ab).
+- **Lageplan** (`SitePlanMap`): seitwärts verschieben, zwei Finger zoomen; der Balkon lässt der Seite nur das Wischen
+  quer zu seiner Fassade (siehe [C, Teil 2](#c-gebäude-lageplan-3d-ansicht-und-druck-teil-2)).
 - `HorizonSparkline` entfernt bei `pointercancel` das Fadenkreuz. In der 3D-Ansicht scrollt senkrechtes Wischen
   mit einem Finger die Seite, waagrechtes dreht, zwei Finger zoomen.
 
@@ -1036,7 +1146,9 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
   Stunden gedämpft mit demselben Hinweis, und ihr CSV-Export wartet. Diagramme,
   Wirtschaftlichkeit, Monatstabelle, Export und die Optimum-Marke der Steuerleiste warten auf endgültige Eingaben
   (`useAnnualInputsPending`, `useResultsReady`). Ein schneller oder gecachter Geländehorizont geht so ohne
-  vorläufigen Zwischenstand vom Platzhalter zum Ergebnis.
+  vorläufigen Zwischenstand vom Platzhalter zum Ergebnis. Wartet der Laserscan auf den Standort (Adresspunkt im
+  Gebäude, Status `'waiting'`), sind die Jahreskennzahlen ebenfalls vorläufig, mit «Standort noch nicht im Lageplan
+  bestätigt» und der Aktion dazu (siehe [Integration: Durchsicht](#integration-durchsicht)).
 - **Neigungs-Sweep im Hintergrund:** 19 Jahressimulationen, immer in Scheiben von etwa 8 ms (`SWEEP_SLICE_MS`)
   zwischen den Frames, auch das erste Ergebnis eines Standorts (bis dahin `null`). Andere Änderungen an Gebäude,
   Panels, System und Horizont übernimmt er nach `SWEEP_SETTLE_MS` = 250 ms Ruhe, bis dahin gilt das vorige

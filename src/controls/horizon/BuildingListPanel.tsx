@@ -41,7 +41,7 @@ const de = {
   removedCount: (n: number) => `${n} entfernt`,
   inScan:
     'Der Laserscan enthält die importierten Gebäude bereits; zusätzlich zählen nur bearbeitete und von Hand erfasste.',
-  prisms: 'Gebäude zählen als Prismen mit flachem Dach bis zum höchsten Punkt.',
+  prisms: 'Die Gebäude zählen mit flachem Dach auf der Höhe ihres höchsten Punkts.',
   showList: (n: number) => `Liste (${n})`,
   showAll: (n: number) => `Alle ${n} anzeigen`,
   showFewer: 'Weniger anzeigen',
@@ -71,7 +71,7 @@ const messages: Messages<typeof de> = {
     removedCount: (n) => `${n} removed`,
     inScan:
       'The laser scan already contains the imported buildings; only edited and manually entered ones are added.',
-    prisms: 'Buildings count as flat-roofed prisms up to their highest point.',
+    prisms: 'Buildings count with a flat roof at the height of their highest point.',
     showList: (n) => `List (${n})`,
     showAll: (n) => `Show all ${n}`,
     showFewer: 'Show fewer',
@@ -153,9 +153,10 @@ export function BuildingListPanel() {
   const visible = showAll ? rows : rows.slice(0, LIST_PAGE);
 
   // «In der Liste bearbeiten» in the site plan: open the list at that building (state adjusted while
-  // rendering, once per request), then focus it and clear the request (effect).
+  // rendering, once per request), then focus it and clear the request (effect). A request made while the
+  // section was closed is pending when this panel mounts: it is handled too (nothing is «seen» at first).
   const focusRequest = useBuildingImportStore((s) => s.buildingFocus);
-  const [seenFocus, setSeenFocus] = useState(focusRequest);
+  const [seenFocus, setSeenFocus] = useState<typeof focusRequest>(null);
   const [focusTarget, setFocusTarget] = useState<{ id: number; buildingId: string } | null>(null);
   if (focusRequest !== seenFocus) {
     setSeenFocus(focusRequest);
@@ -175,7 +176,9 @@ export function BuildingListPanel() {
     if (!focusTarget) return;
     const items = rootRef.current?.querySelectorAll<HTMLElement>('li[data-building]') ?? [];
     const item = [...items].find((el) => el.dataset.building === focusTarget.buildingId);
-    item?.querySelector<HTMLButtonElement>('button[aria-expanded]')?.focus();
+    const button = item?.querySelector<HTMLButtonElement>('button[aria-expanded]');
+    button?.focus({ preventScroll: true });
+    item?.scrollIntoView?.({ block: 'center' });
   }, [focusTarget]);
 
   const setBuildings = (next: Building[]): void =>

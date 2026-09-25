@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { resetBuildingImport } from '../../hooks/useBuildingImport';
 import { DEFAULT_CONFIG } from '../../model/defaults';
@@ -130,6 +130,30 @@ describe('SitePlan', () => {
     expect(map()).toBeInTheDocument();
   });
 
+  it('after an address pick the focus follows the jump to the instructions (not from another field)', async () => {
+    setSite();
+    render(
+      <>
+        <div data-site-plan-source="">
+          <input aria-label="Suche" />
+        </div>
+        <input aria-label="Anderes Feld" />
+        <SitePlan />
+      </>,
+    );
+    screen.getByRole('textbox', { name: 'Suche' }).focus();
+    act(() => requestSitePlan('address'));
+    await waitFor(() => expect(screen.getByRole('note')).toHaveFocus());
+    // Typing elsewhere meanwhile: the focus stays, the opening is announced.
+    act(() => useBuildingImportStore.setState({ sitePlanOpen: false, sitePlanGuide: false }));
+    screen.getByRole('textbox', { name: 'Anderes Feld' }).focus();
+    act(() => requestSitePlan('address'));
+    await waitFor(() =>
+      expect(screen.getByText('Lageplan geöffnet: Fassade und Balkon bestätigen.')).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('textbox', { name: 'Anderes Feld' })).toHaveFocus();
+  });
+
   it('after «Gebäude laden» it opens only when the balcony is not on a facade yet', () => {
     setSite(1, 0); // on the south wall …
     useConfigStore.getState().patch('building', { facadeAzimuth: 180 });
@@ -204,7 +228,8 @@ describe('SitePlan', () => {
     fireEvent.click(svg(), screenOf([0, -32]));
     const card = screen.getByRole('group', { name: 'Gebäude 4' });
     expect(card).toHaveTextContent(/20\sm hoch/);
-    expect(card).toHaveTextContent(/25\sm vom Balkon, S/);
+    // From the location (the address point, like the building list): 31 m, not from the suggested balcony.
+    expect(card).toHaveTextContent(/31\sm entfernt, S/);
     fireEvent.click(within(card).getByRole('button', { name: 'In der Liste bearbeiten' }));
     expect(useBuildingImportStore.getState().buildingFocus?.buildingId).toBe('b4');
     expect(useUiStore.getState().openSections.horizon).toBe(true);
@@ -320,6 +345,50 @@ describe('SitePlan', () => {
     fireEvent.pointerUp(svg(), { ...touch, clientX: cx + 2 * scale, clientY: cy + 3 });
     fireEvent.click(svg(), { clientX: cx + 2 * scale, clientY: cy + 3 }); // no click effect after a drag
     expect(along()).toHaveValue('7');
+  });
+
+  it('touch: along a facade running up and down, a vertical drag on the balcony moves it', () => {
+    // Without the eastern neighbour b3 the east wall (running north–south) is a facade.
+    setSite(0, 6, { buildings: BUILDINGS.filter((x) => x.id !== 'b3') });
+    render(<SitePlan />);
+    openPlan();
+    fireEvent.click(svg(), edgeMid(1)); // east wall: balcony at its middle
+    const along = () => screen.getByRole('textbox', { name: /Position entlang der Fassade/ });
+    expect(along()).toHaveValue('6');
+    const target = map().querySelector<HTMLElement>('[data-handle-touch]')!;
+    // The page keeps only the sideways pan on this handle; vertical drags are the plan's.
+    expect(target.style.touchAction).toBe('pan-x');
+    const handle = svg().querySelector('[data-handle]')!;
+    const cx = Number(handle.getAttribute('cx'));
+    const cy = Number(handle.getAttribute('cy'));
+    const scale = screenOf([1, 0]).clientX - screenOf([0, 0]).clientX;
+    const touch = { pointerId: 4, pointerType: 'touch', button: 0 } as const;
+    fireEvent.pointerDown(target, { ...touch, clientX: cx, clientY: cy });
+    fireEvent.pointerMove(target, { ...touch, clientX: cx + 1, clientY: cy - 5 });
+    expect(along()).toHaveValue('6');
+    // 2 m north (up on screen): seen from outside (looking west) the left corner is the south one: 2 m farther.
+    fireEvent.pointerMove(target, { ...touch, clientX: cx + 2, clientY: cy - 2 * scale });
+    fireEvent.pointerUp(target, { ...touch, clientX: cx + 2, clientY: cy - 2 * scale });
+    expect(along()).toHaveValue('8');
+  });
+
+  it('touch: a tap inside a row-house neighbour near the party wall selects the neighbour', () => {
+    setSite();
+    render(<SitePlan />);
+    openPlan();
+    fireEvent.pointerDown(svg(), { pointerId: 5, pointerType: 'touch', button: 0, clientX: 0, clientY: 0 });
+    fireEvent.pointerUp(svg(), { pointerId: 5, pointerType: 'touch', button: 0, clientX: 0, clientY: 0 });
+    const scale = screenOf([1, 0]).clientX - screenOf([0, 0]).clientX;
+    // 1.5 m inside b3 (east of the party wall at e = 5): more than 6 px away, within the finger's 22 px.
+    const inside = screenOf([6.5, 6]);
+    expect(1.5 * scale).toBeGreaterThan(6);
+    expect(1.5 * scale).toBeLessThan(22);
+    fireEvent.click(svg(), inside);
+    expect(screen.getByRole('group', { name: 'Gebäude 3' })).toBeInTheDocument();
+    expect(screen.queryByText(/Brandmauer: grenzt an ein anderes Gebäude/)).toBeNull();
+    // On the wall itself it still explains the party wall.
+    fireEvent.click(svg(), screenOf([5, 6]));
+    expect(screen.getByText(/Brandmauer: grenzt an ein anderes Gebäude/)).toBeInTheDocument();
   });
 
   it('zoom: buttons and Ctrl + wheel; a plain wheel leaves the plan and shows how to zoom', () => {

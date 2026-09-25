@@ -1,5 +1,5 @@
 import { ShapeUtils, Vector2 } from 'three';
-import { OTHER_SITE_DISTANCE } from '../../model/buildings';
+import { clipRingAbove, OTHER_SITE_DISTANCE } from '../../model/buildings';
 import { facadeTransform, type GeoPoint } from '../../model/enu';
 import { pointInRing, ringArea, ringBounds, type ReadonlyVertex, type Vertex } from '../../model/polygon';
 import { ownBuildingIds, OWN_BUILDING_EXCLUSION } from '../../model/surroundings';
@@ -154,6 +154,22 @@ export function ownBody(ringFacade: readonly ReadonlyVertex[], top: number): Own
     if (us[k] <= 0 && us[k + 1] >= 0) return { ring, u0: us[k], u1: us[k + 1], top };
   }
   return null;
+}
+
+/** Wings of the own building start this far in front of the facade line (m): no slivers along it. */
+const WING_MIN_N = 0.05;
+
+/**
+ * The own body split at the facade line: the part behind it (n ≤ WING_MIN_N) and the wings in front of it
+ * (an L or U around the facade: n > WING_MIN_N). Seen from in front, only wings can stand between the camera and
+ * the panel rows; the scene fades them like the neighbours then. Rings in the facade frame [u, n].
+ */
+export function ownBodyParts(own: Pick<OwnBody, 'ring'>): { behind: Vertex[][]; wings: Vertex[][] } {
+  const wings = clipRingAbove(own.ring, WING_MIN_N);
+  if (wings.length === 0) return { behind: [own.ring.map(([u, n]): Vertex => [u, n])], wings: [] };
+  const mirrored = own.ring.map(([u, n]): Vertex => [u, -n]);
+  const behind = clipRingAbove(mirrored, -WING_MIN_N).map((r) => r.map(([u, n]): Vertex => [u, -n]));
+  return { behind, wings };
 }
 
 // ── Merged mesh ──────────────────────────────

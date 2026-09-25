@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SurfaceRefresh } from '../../hooks/useSurfaceModel';
+import { markAddressPoint, settleAddressImport } from '../../state/addressPointStore';
+import { useBuildingImportStore } from '../../state/buildingImportStore';
 import { useConfigStore } from '../../state/configStore';
 import { useDataStore } from '../../state/dataStore';
 import { useUiStore } from '../../state/uiStore';
@@ -111,13 +113,53 @@ describe('SurfaceModelControls', () => {
     );
   });
 
-  it('inside the own building (address point): waits for the site plan', () => {
+  it('inside the own building (address point): waits for the site plan, which «Zum Lageplan» opens', () => {
     enable();
-    act(() => useDataStore.getState().setSurface({ status: 'waiting' }));
+    act(() => {
+      useConfigStore.getState().patch('horizon', {
+        buildings: [
+          {
+            id: 'b1',
+            name: '',
+            footprint: [
+              [-6, -6],
+              [6, -6],
+              [6, 6],
+              [-6, 6],
+            ],
+            base: 0,
+            height: 15,
+            source: 'swisstopo',
+          },
+        ],
+        buildingImport: { latitude: 47.1, longitude: 7.45, radius: 300, date: '2026-09-25' },
+      });
+      useDataStore.getState().setSurface({ status: 'waiting' });
+    });
     render(<SurfaceModelControls />);
-    expect(screen.getByRole('status')).toHaveTextContent(
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(
       /^Der Laserscan wartet auf den Lageplan: .* Nach «Übernehmen» von Fassade und Balkon im Abschnitt «Gebäude» wird er für diese Stelle geladen/,
     );
+    fireEvent.click(within(status).getByRole('button', { name: 'Zum Lageplan' }));
+    expect(useBuildingImportStore.getState().sitePlanRequest?.reason).toBe('address');
+    expect(useUiStore.getState().openSections.building).toBe(true);
+  });
+
+  it('at an address point without buildings (import failed): waits for them, «Erneut versuchen» asks again', () => {
+    enable();
+    const { latitude, longitude } = useConfigStore.getState().config.location;
+    act(() => {
+      markAddressPoint(latitude, longitude);
+      settleAddressImport();
+      useBuildingImportStore.setState({ status: 'error', error: { kind: 'network', message: 'x' } });
+      useDataStore.getState().setSurface({ status: 'waiting' });
+    });
+    render(<SurfaceModelControls />);
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(/^Der Laserscan wartet auf die Gebäude der Umgebung: /);
+    fireEvent.click(within(status).getByRole('button', { name: 'Erneut versuchen' }));
+    expect(useUiStore.getState().surroundingsImport).toMatchObject({ latitude, longitude });
   });
 
   it('an error explains the fallback and retries', () => {
@@ -135,6 +177,11 @@ describe('SurfaceModelControls', () => {
     expect(alert).toHaveTextContent('Der Server hat mit Fehler 503 geantwortet.');
     fireEvent.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
     expect(useDataStore.getState().surfaceAttempt).toBe(1);
+    // The button goes with its error block: the focus stays in the status, not on <body>.
+    act(() => useDataStore.getState().setSurface({ status: 'loading', error: null }));
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement).toContainElement(screen.getByRole('progressbar'));
   });
 
   it('a reload of the data for new tilts or floors shows its own progress, then an error with retry', () => {

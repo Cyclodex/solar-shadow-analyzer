@@ -53,6 +53,27 @@
   white-space: nowrap;
 }
 
+/* The location opens «Standort» with the address search. */
+.locationLink {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-decoration: underline dotted;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+.locationLink:hover {
+  color: var(--accent);
+}
+
 .summaryItem::before {
   content: '·';
   content: '·' / '';

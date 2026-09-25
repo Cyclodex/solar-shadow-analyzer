@@ -12,6 +12,7 @@ import { useDataStore } from '../state/dataStore';
 import { AddressBuilding } from './location/AddressBuilding';
 import { applyAddress } from './location/addressSession';
 import { MyLocationButton } from './location/MyLocationButton';
+import { AddressPlacementStatus } from './location/PlacementPrompt';
 import { PlaceSearch } from './location/PlaceSearch';
 import { PresetSelect } from './location/PresetSelect';
 import { TimeZoneField } from './location/TimeZoneField';
@@ -96,6 +97,7 @@ export function LocationSection() {
       <div className={sections.group}>
         <h4 className={sections.subheading}>{t.find}</h4>
         <PlaceSearch onSelectPlace={(loc) => patch('location', loc)} onSelectAddress={applyAddress} />
+        <AddressPlacementStatus />
         <MyLocationButton
           onLocate={(loc) => patch('location', loc)}
           onAddress={applyAddress}

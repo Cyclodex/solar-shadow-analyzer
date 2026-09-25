@@ -7,6 +7,7 @@ import { DEFAULT_CONFIG } from '../model/defaults';
 import { surfaceObserverKey, surfaceSiteKey } from '../model/dsmHorizon';
 import { enuToLonLat } from '../model/enu';
 import { floorPlacements } from '../model/geometry';
+import { markAddressPoint, settleAddressImport, useAddressPointStore } from '../state/addressPointStore';
 import { INITIAL_BUILDING_IMPORT, useBuildingImportStore } from '../state/buildingImportStore';
 import { useConfig, useConfigStore } from '../state/configStore';
 import { useUiStore } from '../state/uiStore';
@@ -17,6 +18,7 @@ import {
   decodeProfile,
   encodeProfile,
   observerSet,
+  SURFACE_CACHE_EXTRA_OBSERVERS,
   readSurfaceCache,
   surfacePlan,
   useSurfaceModelLoader,
@@ -278,6 +280,37 @@ describe('result cache', () => {
     for (const k of ['b', 'c', 'd']) writeSurfaceCache(k, null, {});
     expect(readSurfaceCache('a')).toBeNull(); // 3 sites kept
     expect(readSurfaceCache('d')).not.toBeNull();
+  });
+
+  it('keeps a site entry bounded: the wanted observers and the most recent others', () => {
+    // 30 floor-height changes at one site, 8 observers each (the job key stays the same).
+    const keysOf = (step: number): string[] =>
+      Array.from({ length: 8 }, (_, f) => `1.90:${(3 + f * 3 + step * 0.07).toFixed(2)}`);
+    for (let step = 0; step < 30; step++) {
+      const keys = keysOf(step);
+      writeSurfaceCache(
+        'site',
+        { years: [2023], bytes: 1, coverage: 1 },
+        Object.fromEntries(keys.map((k) => [k, flat(20)])),
+        keys,
+      );
+    }
+    const { horizons } = readSurfaceCache('site')!;
+    expect(Object.keys(horizons)).toHaveLength(8 + SURFACE_CACHE_EXTRA_OBSERVERS);
+    // The current ones and the most recent before them.
+    for (const k of [...keysOf(29), ...keysOf(28), ...keysOf(27)]) expect(horizons[k]).toEqual(flat(20));
+    expect(horizons[keysOf(26)[7]]).toBeUndefined();
+    // Wanted observers stored long ago stay.
+    writeSurfaceCache('site', null, { '1.90:99.00': flat(1) }, [...keysOf(0).slice(0, 1)]);
+    expect(Object.keys(readSurfaceCache('site')!.horizons)).toHaveLength(1 + SURFACE_CACHE_EXTRA_OBSERVERS);
+  });
+
+  it('a read refreshes the entry once per session, not on every read', () => {
+    writeSurfaceCache('once', { years: [2023], bytes: 1, coverage: 1 }, { '1.00:4.00': flat(3) });
+    const setItem = vi.spyOn(Storage.prototype, 'setItem');
+    for (let i = 0; i < 5; i++) readSurfaceCache('once');
+    expect(setItem).toHaveBeenCalledTimes(1);
+    setItem.mockRestore();
   });
 });
 
@@ -601,6 +634,28 @@ describe('useSurfaceModelLoader', () => {
     await waitFor(() => expect(surface().status).toBe('ready'));
     expect(downloads()).toHaveLength(2);
     expect(downloads()[1].request.site.facadeAzimuth).toBe(180);
+  });
+
+  it('waits at an unplaced address point whatever became of the building import (failed, none stored)', async () => {
+    const point = { latitude: 47.1, longitude: 7.45 };
+    enable({ ...enabled, location: { ...enabled.location, ...point } });
+    // The pick marked its point; its import failed: no buildings, so nothing says «inside the building».
+    act(() => {
+      markAddressPoint(point.latitude, point.longitude);
+      settleAddressImport();
+      useBuildingImportStore.setState({
+        status: 'error',
+        error: { kind: 'network', message: 'offline' },
+      });
+    });
+    renderHook(() => useSurfaceModelLoader());
+    await new Promise((r) => setTimeout(r, 100));
+    expect(surface()).toEqual({ ...INITIAL_SURFACE, status: 'waiting' });
+    expect(worker.jobs).toHaveLength(0);
+    // Any other location (here: coordinates typed in) clears the point and the scan loads.
+    act(() => useConfigStore.getState().patch('location', { latitude: 47.10001 }));
+    expect(useAddressPointStore.getState().point).toBeNull();
+    await waitFor(() => expect(surface().status).toBe('ready'));
   });
 
   it('a site change waits, shows loading and drops the old horizons; a new site or disabling aborts', async () => {

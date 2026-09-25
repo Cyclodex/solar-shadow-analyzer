@@ -87,6 +87,7 @@
 }
 
 .frame {
+  position: relative;
   display: block;
   overflow: hidden;
   border: 1px solid var(--border-strong);
@@ -123,9 +124,10 @@
   vector-effect: non-scaling-stroke;
 }
 
+/* Outline at least 3:1 against the ground in both themes (light 4.1:1, dark 4.6:1). */
 .neighbour {
-  fill: var(--surface-3);
-  stroke: var(--border-strong);
+  fill: color-mix(in srgb, var(--border-strong) 20%, var(--surface-3));
+  stroke: color-mix(in srgb, var(--text-muted) 40%, var(--border-strong));
 }
 
 .own {
@@ -214,6 +216,18 @@
 .handleHit {
   fill: transparent;
   cursor: grab;
+}
+
+/* HTML touch target over the balcony handle (touch-action set inline by the facade's direction; SVG children
+   do not take touch-action in every browser). */
+.handleTouch {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
 }
 
 .marker path {
@@ -339,8 +353,8 @@
 }
 
 .swNeighbour {
-  background: var(--surface-3);
-  box-shadow: inset 0 0 0 1px var(--border-strong);
+  background: color-mix(in srgb, var(--border-strong) 20%, var(--surface-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-muted) 40%, var(--border-strong));
 }
 
 .swEdited {
