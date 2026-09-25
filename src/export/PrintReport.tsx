@@ -11,6 +11,7 @@ import {
 } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useSelectedUtc } from '../hooks/useModel';
+import { anchorDistance, OTHER_SITE_DISTANCE } from '../model/buildings';
 import { SWISSTOPO_ATTRIBUTION } from '../model/buildingSources';
 import { lonLatToEnu } from '../model/enu';
 import type { Config, ShadingModel } from '../model/types';
@@ -161,15 +162,18 @@ const messages: Messages<typeof de> = {
 
 /**
  * Where the location sits on the own building (as the site plan finds it): the facade azimuth of the
- * edge it lies on, null when it is not on a facade, undefined without surrounding buildings.
+ * edge it lies on, null when it is not on a facade, undefined when there is nothing to place it on (no
+ * surrounding buildings, only ones entered by hand, or those of another site more than 2 km away).
  */
 function placementAzimuth(config: Config): number | null | undefined {
   const { buildings, buildingImport } = config.horizon;
   if (!buildingImport || buildings.length === 0) return undefined;
+  if (anchorDistance(buildingImport, config.location) > OTHER_SITE_DISTANCE) return undefined;
   const { facadeAzimuth } = config.building;
   const origin = lonLatToEnu(buildingImport, config.location.latitude, config.location.longitude);
   const own = sitePlanOwnBuilding(buildings, origin, facadeAzimuth);
-  const placed = own ? currentPlacement(ownFacadeEdges(own, buildings), origin, facadeAzimuth) : null;
+  if (!own) return buildings.some((b) => b.source === 'swisstopo' && !b.removed) ? null : undefined;
+  const placed = currentPlacement(ownFacadeEdges(own, buildings), origin, facadeAzimuth);
   return placed ? facadeAzimuth : null;
 }
 

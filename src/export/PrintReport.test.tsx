@@ -91,4 +91,39 @@ describe('PrintReport', () => {
     expect(row('Laser scan (swissSURFACE3D)')).toBe('off');
     expect(row('Data sources')).toBe('© swisstopo');
   });
+
+  it('no position row with only buildings entered by hand, or with the buildings of another site', () => {
+    // Outside CH/FL: one building entered by hand 20 m in front of the facade (the nearest within 25 m).
+    const manual: Building = {
+      id: 'b1',
+      name: '',
+      footprint: [
+        [-7.5, -30],
+        [7.5, -30],
+        [7.5, -20],
+        [-7.5, -20],
+      ],
+      base: 0,
+      height: 12,
+      source: 'manual',
+    };
+    useConfigStore.getState().patch('location', { latitude: 48.137, longitude: 11.575 }); // München
+    useConfigStore.getState().patch('building', { facadeAzimuth: 180 });
+    useConfigStore.getState().patch('horizon', {
+      buildingImport: { latitude: 48.137, longitude: 11.575, radius: 0, date: '' },
+      buildings: [manual],
+    });
+    const { unmount } = render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+    expect(screen.queryByText('Lage am Gebäude')).toBeNull();
+    expect(row('Umgebungsgebäude')).toBe('1 (1 von Hand)');
+    unmount();
+    // Imported in Bern, the location then moved to Zürich.
+    useConfigStore.getState().patch('horizon', {
+      buildingImport: { latitude: 46.958474, longitude: 7.45363, radius: 300, date: '2026-09-25' },
+      buildings: [{ ...manual, source: 'swisstopo' }],
+    });
+    useConfigStore.getState().patch('location', { latitude: 47.3769, longitude: 8.5417 });
+    render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+    expect(screen.queryByText('Lage am Gebäude')).toBeNull();
+  });
 });

@@ -217,6 +217,107 @@ export function facadePrisms(buildings: readonly Building[], transform: FacadeTr
   });
 }
 
+/** Coordinates closer than this (m) along the clip line count as the same point (tie of two crossings). */
+const CLIP_TIE_EPS = 1e-9;
+
+/** Sutherland–Hodgman against one line: one ring, pieces joined along the line (fallback of clipRingAbove). */
+function clipRingAboveSingle(ring: readonly ReadonlyVertex[], c: number): Vertex[] {
+  const out: Vertex[] = [];
+  for (let i = 0; i < ring.length; i++) {
+    const a = ring[(i + ring.length - 1) % ring.length];
+    const b = ring[i];
+    const aIn = a[1] > c;
+    const bIn = b[1] > c;
+    if (aIn !== bIn) out.push([a[0] + ((c - a[1]) / (b[1] - a[1])) * (b[0] - a[0]), c]);
+    if (bIn) out.push([b[0], b[1]]);
+  }
+  return dropDuplicateVertices(out);
+}
+
+/**
+ * The part of a ring above the line y = c (second coordinate > c; vertices on the line count as below), as
+ * separate counter-clockwise rings: a concave ring may fall apart into several pieces, and joining them along
+ * the line (Sutherland–Hodgman) would add walls across the gaps between them. The crossings with the line,
+ * sorted along it, bound the parts of the line inside the ring (from a downward to the next upward crossing of
+ * a counter-clockwise ring); each piece follows the ring above the line and jumps along the line from a
+ * downward crossing to its partner. Keyhole rings (bridged courtyards) stay keyhole rings. Pieces below
+ * 1e-9 m² are dropped. Falls back to one Sutherland–Hodgman ring if the crossings are inconsistent
+ * (a self-intersecting ring).
+ */
+export function clipRingAbove(ring: readonly ReadonlyVertex[], c: number): Vertex[][] {
+  const r = ensureCcw(dropDuplicateVertices(ring));
+  const m = r.length;
+  if (m < 3) return [];
+  // Walk order: the vertices above the line and the crossings (+1 upward = entering, −1 downward = leaving).
+  const pts: Vertex[] = [];
+  const kind: number[] = [];
+  let above = 0;
+  for (let i = 0; i < m; i++) {
+    const a = r[i];
+    const b = r[(i + 1) % m];
+    const aIn = a[1] > c;
+    const bIn = b[1] > c;
+    if (aIn) {
+      pts.push([a[0], a[1]]);
+      kind.push(0);
+      above++;
+    }
+    if (aIn !== bIn) {
+      pts.push([a[0] + ((c - a[1]) / (b[1] - a[1])) * (b[0] - a[0]), c]);
+      kind.push(bIn ? 1 : -1);
+    }
+  }
+  const crossings: number[] = [];
+  for (let i = 0; i < pts.length; i++) if (kind[i] !== 0) crossings.push(i);
+  if (crossings.length === 0) return above === m ? [r] : [];
+  const fallback = (): Vertex[][] => {
+    const single = clipRingAboveSingle(r, c);
+    return single.length >= 3 ? [single] : [];
+  };
+  // Along the line: leaving (−1) at even positions, entering (+1) at odd ones. Ties (a keyhole bridge or a
+  // vertex touching the line) are ordered to fit that pattern.
+  crossings.sort((p, q) => pts[p][0] - pts[q][0]);
+  for (let k = 0; k < crossings.length; k++) {
+    const want = k % 2 === 0 ? -1 : 1;
+    if (kind[crossings[k]] === want) continue;
+    const x = pts[crossings[k]][0];
+    let j = k + 1;
+    while (j < crossings.length && pts[crossings[j]][0] - x <= CLIP_TIE_EPS && kind[crossings[j]] !== want)
+      j++;
+    if (j >= crossings.length || pts[crossings[j]][0] - x > CLIP_TIE_EPS) return fallback();
+    [crossings[k], crossings[j]] = [crossings[j], crossings[k]];
+  }
+  const partner = new Int32Array(pts.length).fill(-1);
+  for (let k = 0; k < crossings.length; k += 2) partner[crossings[k]] = crossings[k + 1];
+  const used = new Uint8Array(pts.length);
+  const out: Vertex[][] = [];
+  const limit = 2 * pts.length + 4;
+  for (const start of crossings) {
+    if (kind[start] !== 1 || used[start]) continue;
+    const piece: Vertex[] = [];
+    let cur = start;
+    let steps = 0;
+    do {
+      used[cur] = 1;
+      piece.push(pts[cur]);
+      let j = (cur + 1) % pts.length;
+      while (kind[j] === 0) {
+        piece.push(pts[j]);
+        j = (j + 1) % pts.length;
+        if (++steps > limit) return fallback();
+      }
+      if (kind[j] !== -1) return fallback();
+      used[j] = 1;
+      piece.push(pts[j]);
+      cur = partner[j];
+      if (cur < 0 || (cur !== start && used[cur]) || ++steps > limit) return fallback();
+    } while (cur !== start);
+    const clean = dropDuplicateVertices(piece);
+    if (clean.length >= 3 && Math.abs(ringArea(clean)) > 1e-9) out.push(clean);
+  }
+  return out;
+}
+
 // ── Frame conversions ────────────────────────
 
 /** Footprint of a building in the facade frame of `transform` ([u, n] m). */
@@ -258,10 +359,11 @@ export const DEFAULT_MANUAL_RECT: FacadeRect = { width: 15, depth: 10, distance:
 export const DEFAULT_MANUAL_HEIGHT = 12;
 
 /**
- * ENU footprint (anchor of `transform`) of a facade-frame rectangle: counter-clockwise, on the 0.1 m grid,
- * coordinates clamped to LIMITS.neighbour.coord.
+ * ENU footprint (anchor of `transform`) of a facade-frame rectangle: counter-clockwise, on the 0.1 m grid.
+ * Null when a corner lies outside LIMITS.neighbour.coord (more than 2 km from the anchor: the location has
+ * moved to another site since the import); clamping would collapse the rectangle.
  */
-export function rectFootprint(rect: FacadeRect, transform: FacadeTransform): [number, number][] {
+export function rectFootprint(rect: FacadeRect, transform: FacadeTransform): [number, number][] | null {
   const w = Math.max(0, rect.width) / 2;
   const d = Math.max(0, rect.depth) / 2;
   const cu = rect.offset;
@@ -282,8 +384,9 @@ export function rectFootprint(rect: FacadeRect, transform: FacadeTransform): [nu
     const u = cu + x * c - y * s;
     const n = cn + x * s + y * c;
     const [e, no] = transform.toAnchor([u, n]);
-    return [clamp(dm(e), L.min, L.max), clamp(dm(no), L.min, L.max)];
+    return [dm(e), dm(no)];
   });
+  if (enu.some(([e, n]) => !(e >= L.min && e <= L.max && n >= L.min && n <= L.max))) return null;
   return ensureCcw(dropDuplicateVertices(enu));
 }
 
@@ -381,6 +484,19 @@ export function manualAnchor(current: BuildingImport | null, location: GeoPoint)
   if (current) return current;
   const r6 = (v: number): number => Math.round(v * 1e6) / 1e6;
   return { latitude: r6(location.latitude), longitude: r6(location.longitude), radius: 0, date: '' };
+}
+
+/**
+ * The stored buildings belong to another site when the location is farther than this from their anchor (m):
+ * footprints lie within ±2000 m of it (LIMITS.neighbour.coord), so none can be added at the location either.
+ * The location moved without a new import (coordinates, presets, place search, a failed import).
+ */
+export const OTHER_SITE_DISTANCE = LIMITS.neighbour.coord.max;
+
+/** Horizontal distance of the location from the buildings' anchor (m). */
+export function anchorDistance(anchor: GeoPoint, location: GeoPoint): number {
+  const [e, n] = lonLatToEnu(anchor, location.latitude, location.longitude);
+  return Math.hypot(e, n);
 }
 
 /** Facade transform of a config's anchor, location and facade azimuth (null without an anchor). */

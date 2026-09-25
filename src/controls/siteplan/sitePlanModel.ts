@@ -1,12 +1,23 @@
 import {
+  ADJOINING_DISTANCE,
+  buildingBearing,
   edgePoint,
   facadeEdges,
   findOwnBuilding,
+  OWN_MAX_DISTANCE,
   projectOntoEdge,
+  ringsDistance,
+  type BuildingBearing,
   type FacadeEdge,
 } from '../../model/buildings';
 import { enuToLonLat, facadeToEnu, type GeoPoint } from '../../model/enu';
-import { pointInRing, ringBounds, type ReadonlyVertex, type Vertex } from '../../model/polygon';
+import {
+  pointInRing,
+  ringBounds,
+  segmentDistance,
+  type ReadonlyVertex,
+  type Vertex,
+} from '../../model/polygon';
 import { OWN_BUILDING_EXCLUSION } from '../../model/surroundings';
 import type { Building } from '../../model/types';
 import { angleDiff, clamp, normalizeDeg } from '../../model/units';
@@ -18,9 +29,18 @@ import { angleDiff, clamp, normalizeDeg } from '../../model/units';
 // width in metres, anchor ENU: x = east, y = north).
 // ─────────────────────────────────────────────
 
+/** Where the balcony centre may sit on an edge: metres from edge.a, on the ALONG_STEP grid. */
+export interface AlongRange {
+  min: number;
+  max: number;
+}
+
+/** A facade candidate of the site plan: with the range that keeps the probe inside the own footprint. */
+export type PlanEdge = FacadeEdge & { range?: AlongRange };
+
 /** The balcony on a facade: an edge of the own footprint and the distance of the balcony centre from its start. */
 export interface Placement {
-  edge: FacadeEdge;
+  edge: PlanEdge;
   /** Metres from edge.a (the left end seen from outside, facing the facade) to the panel-row centre. */
   along: number;
 }
@@ -35,10 +55,17 @@ export const PLACEMENT_TOLERANCE_DEG = 0.5 + 1e-6;
 /** Positions along a facade are set on this grid (m). */
 export const ALONG_STEP = 0.1;
 /**
- * The balcony centre stays this far from the facade's ends (m): the probe 0.5 m behind it (ownBuildingIds, the
- * own building of the prisms and of this plan) then lies inside the own footprint, not on a side wall.
+ * The balcony centre stays at least this far from the facade's ends (m), and farther where needed so that the
+ * probe 0.5 m behind it (ownBuildingIds, the own building of the prisms and of this plan) lies inside the own
+ * footprint with PROBE_MARGIN to spare: at a corner of 45° or more 0.5 m is enough, at an acute one it is not
+ * (probeAlongRange).
  */
 export const ALONG_INSET = 0.5;
+/**
+ * The probe keeps this distance from the footprint's outline (m): «Übernehmen» rounds the location to 1e-6°
+ * (≤ 0.07 m) and the facade azimuth to whole degrees.
+ */
+export const PROBE_MARGIN = 0.1;
 
 /** Grid steps per metre (divide by it: 3 / 10 is exactly 0.3, unlike 3 · 0.1). */
 const PER_M = Math.round(1 / ALONG_STEP);
@@ -52,9 +79,12 @@ export function probePoint(origin: ReadonlyVertex, facadeAzimuth: number): Verte
 
 /**
  * The building the site plan treats as the own building (not removed): `chosenId` (the user picked it in the
- * plan), else the one containing the probe behind the facade origin (the configured facade), else
- * `importedId` (the import's own building), else the one containing the location, else the nearest within
- * 25 m (model/buildings.ts findOwnBuilding). Null when none qualifies.
+ * plan), else the one containing the probe behind the facade origin (the configured facade; the rule of the
+ * prisms, surroundings.ts ownBuildingIds, whatever its source), else `importedId` (the import's own building),
+ * else the imported one containing the location, else the nearest imported one within 25 m (model/buildings.ts
+ * findOwnBuilding). Only imported (swisstopo) buildings are picked or guessed: a building entered by hand is
+ * an obstacle (by default 20 m in front of the facade), not a wall to put the balcony on. Null when none
+ * qualifies.
  */
 export function sitePlanOwnBuilding(
   buildings: readonly Building[],
@@ -63,14 +93,15 @@ export function sitePlanOwnBuilding(
   importedId: string | null = null,
   chosenId: string | null = null,
 ): Building | null {
-  const candidates = buildings.filter((b) => !b.removed && b.footprint.length >= 3);
+  const standing = buildings.filter((b) => !b.removed && b.footprint.length >= 3);
+  const candidates = standing.filter((b) => b.source === 'swisstopo');
   const byId = (id: string | null): Building | null =>
     (id !== null && candidates.find((b) => b.id === id)) || null;
   const chosen = byId(chosenId);
   if (chosen) return chosen;
   if (!origin) return byId(importedId);
   const [px, py] = probePoint(origin, facadeAzimuth);
-  const behind = candidates.find((b) => pointInRing(b.footprint, px, py));
+  const behind = standing.find((b) => pointInRing(b.footprint, px, py));
   if (behind) return behind;
   const imported = byId(importedId);
   if (imported) return imported;
@@ -81,10 +112,88 @@ export function sitePlanOwnBuilding(
   return i >= 0 ? candidates[i] : null;
 }
 
-/** Facade candidates of the own building; party walls come from the other (not removed) buildings. */
-export function ownFacadeEdges(own: Building, buildings: readonly Building[]): FacadeEdge[] {
+/** «Eigenes Gebäude» offers the imported buildings within this distance of the location (m) … */
+export const OWN_CHOICE_RADIUS = OWN_MAX_DISTANCE;
+/** … nearest first, at most this many (plus the current own building). */
+export const OWN_CHOICE_MAX = 20;
+
+/** A building offered as the own building, with where it lies as seen from the location. */
+export interface OwnChoice {
+  building: Building;
+  bearing: BuildingBearing | null;
+}
+
+/**
+ * The buildings to offer as the own building (keyboard and screen-reader alternative to tapping one in the
+ * plan): imported, not removed, within OWN_CHOICE_RADIUS of the location or adjoining the current own building,
+ * nearest first (at most OWN_CHOICE_MAX), always including the current own building.
+ */
+export function ownBuildingChoices(
+  buildings: readonly Building[],
+  origin: ReadonlyVertex | null,
+  own: Building | null,
+): OwnChoice[] {
+  const rows = buildings
+    .filter((b) => b.source === 'swisstopo' && !b.removed && b.footprint.length >= 3)
+    .map((b) => ({ building: b, bearing: origin ? buildingBearing(b.footprint, origin) : null }))
+    .filter(
+      ({ building: b, bearing }) =>
+        b.id === own?.id ||
+        (bearing !== null && bearing.distance <= OWN_CHOICE_RADIUS) ||
+        (own !== null && ringsDistance(own.footprint, b.footprint) <= ADJOINING_DISTANCE),
+    )
+    .sort((p, q) => (p.bearing?.distance ?? 0) - (q.bearing?.distance ?? 0));
+  const kept = rows.slice(0, OWN_CHOICE_MAX);
+  const current = rows.find((r) => r.building.id === own?.id);
+  if (current && !kept.includes(current)) kept.push(current);
+  return kept;
+}
+
+/**
+ * Facade candidates of the own building; party walls come from the other (not removed) buildings. Selectable
+ * edges carry the range of balcony positions whose probe lies inside the own footprint (probeAlongRange).
+ */
+export function ownFacadeEdges(own: Building, buildings: readonly Building[]): PlanEdge[] {
   const others = buildings.filter((b) => b.id !== own.id && !b.removed).map((b) => b.footprint);
-  return facadeEdges(own.footprint, others);
+  return facadeEdges(own.footprint, others).map((e) =>
+    e.selectable ? { ...e, range: probeAlongRange(e, own.footprint) } : e,
+  );
+}
+
+/** The probe behind the balcony at `along` m from edge.a (inward normal of a counter-clockwise ring). */
+function edgeProbe(edge: FacadeEdge, along: number): Vertex {
+  const [x, y] = edgePoint(edge, edge.length > 0 ? along / edge.length : 0);
+  const dx = (edge.b[0] - edge.a[0]) / edge.length;
+  const dy = (edge.b[1] - edge.a[1]) / edge.length;
+  // facadeEdges' rings are counter-clockwise: the inside is on the left (−dy, dx).
+  const d = -OWN_BUILDING_EXCLUSION.probeN;
+  return [x - dy * d, y + dx * d];
+}
+
+/**
+ * Balcony positions on a facade whose probe (0.5 m behind, ownBuildingIds) lies inside `footprint` with
+ * PROBE_MARGIN to spare: the ALONG_INSET range shrunk from both ends in ALONG_STEP steps (at a corner of
+ * 21.8°, 1.6 m instead of 0.5 m). The middle of the edge when no position qualifies (a sliver).
+ */
+export function probeAlongRange(edge: FacadeEdge, footprint: readonly ReadonlyVertex[]): AlongRange {
+  const base = insetRange(edge.length);
+  const ok = (along: number): boolean => {
+    const [x, y] = edgeProbe(edge, along);
+    if (!pointInRing(footprint, x, y)) return false;
+    for (let i = 0, j = footprint.length - 1; i < footprint.length; j = i++) {
+      if (segmentDistance(x, y, footprint[j], footprint[i]) < PROBE_MARGIN) return false;
+    }
+    return true;
+  };
+  let lo = Math.round(base.min * PER_M);
+  let hi = Math.round(base.max * PER_M);
+  while (lo <= hi && !ok(lo / PER_M)) lo++;
+  while (hi >= lo && !ok(hi / PER_M)) hi--;
+  if (lo > hi) {
+    const mid = snapAlong(edge.length / 2);
+    return { min: mid, max: mid };
+  }
+  return { min: lo / PER_M, max: hi / PER_M };
 }
 
 /**
@@ -144,23 +253,31 @@ export function suggestedPlacement(
   return { edge: best.edge, along: clampAlong(best.edge, along) };
 }
 
-/** Range of `along` on an edge: ALONG_INSET from both ends, on the grid (the middle of a very short edge). */
-export function alongRange(edge: Pick<FacadeEdge, 'length'>): { min: number; max: number } {
-  const inset = Math.min(ALONG_INSET, edge.length / 2);
+/** ALONG_INSET from both ends of an edge `length` m long, on the grid (the middle of a very short edge). */
+function insetRange(length: number): AlongRange {
+  const inset = Math.min(ALONG_INSET, length / 2);
   const min = Math.ceil(inset * PER_M - 1e-9) / PER_M;
-  const max = Math.floor((edge.length - inset) * PER_M + 1e-9) / PER_M;
-  const mid = snapAlong(edge.length / 2);
+  const max = Math.floor((length - inset) * PER_M + 1e-9) / PER_M;
+  const mid = snapAlong(length / 2);
   return max >= min ? { min, max } : { min: mid, max: mid };
 }
 
+/**
+ * Range of `along` on an edge: its `range` (ownFacadeEdges: the probe stays inside the own footprint), else
+ * ALONG_INSET from both ends, on the grid (the middle of a very short edge).
+ */
+export function alongRange(edge: Pick<PlanEdge, 'length' | 'range'>): AlongRange {
+  return edge.range ?? insetRange(edge.length);
+}
+
 /** `along` on the grid, within alongRange. */
-export function clampAlong(edge: Pick<FacadeEdge, 'length'>, along: number): number {
+export function clampAlong(edge: Pick<PlanEdge, 'length' | 'range'>, along: number): number {
   const { min, max } = alongRange(edge);
   return clamp(snapAlong(along), min, max);
 }
 
 /** A placement at the point of an edge nearest to `point` (anchor ENU), on the grid. */
-export function placementAt(edge: FacadeEdge, point: ReadonlyVertex): Placement {
+export function placementAt(edge: PlanEdge, point: ReadonlyVertex): Placement {
   const { t } = projectOntoEdge(edge, point);
   return { edge, along: clampAlong(edge, t * edge.length) };
 }

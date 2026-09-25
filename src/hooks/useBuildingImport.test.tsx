@@ -5,7 +5,7 @@ import type { BuildingFetchResult, BuildingPart, FetchBuildingsOptions } from '.
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { enuToLonLat, lonLatToEnu } from '../model/enu';
 import { pointInRing } from '../model/polygon';
-import { sanitizeConfig } from '../model/share';
+import { encodeConfig, sanitizeConfig } from '../model/share';
 import type { Building, Config } from '../model/types';
 import { useBuildingImportStore } from '../state/buildingImportStore';
 import { useConfigStore } from '../state/configStore';
@@ -232,12 +232,50 @@ describe('building import', () => {
     const kept = h.buildings.filter((b) => b.source === 'manual');
     expect(kept).toHaveLength(1);
     expect(kept[0].name).toBe('Neubau');
-    expect(kept[0].id).toBe('b1'); // manual first, ids renumbered b<index + 1>
+    // Imported first, then the manual ones; ids renumbered b<index + 1>.
+    expect(kept[0].id).toBe(`b${h.buildings.length}`);
+    expect(h.buildings.slice(0, -1).every((b) => b.source === 'swisstopo')).toBe(true);
     // Same world position: old anchor (−30, 10) + (50, 0) = (20, 10) of the site.
     expect(kept[0].footprint[0][0]).toBeCloseTo(20, 1);
     expect(kept[0].footprint[0][1]).toBeCloseTo(10, 1);
     expect(h.buildings.filter((b) => b.name === '' && b.height === 9)).toHaveLength(0);
-    expect(state().summary).toMatchObject({ keptManual: 1, droppedManual: 0, ownId: 'b2' });
+    expect(state().summary).toMatchObject({ keptManual: 1, droppedManual: 0, ownId: 'b1' });
+  });
+
+  it('deleting a building entered by hand keeps the share link compact (imported ones first)', async () => {
+    const manual = (id: string, e: number): Building => ({
+      id,
+      name: '',
+      footprint: [
+        [e, 40],
+        [e + 8, 40],
+        [e + 8, 48],
+        [e, 48],
+      ],
+      base: 0,
+      height: 9,
+      source: 'manual',
+    });
+    setSite({
+      buildings: [manual('b1', 50), manual('b2', 70)],
+      buildingImport: { ...SITE, radius: 0, date: '' },
+    });
+    await startBuildingImport({ ...SITE, reason: 'manual' }, deps(vi.fn(async () => ok())));
+    const before = config();
+    expect(before.horizon.buildings.filter((b) => b.source === 'swisstopo').length).toBeGreaterThan(5);
+    const firstManual = before.horizon.buildings.find((b) => b.source === 'manual')!;
+    const after = sanitizeConfig({
+      ...before,
+      horizon: {
+        ...before.horizon,
+        buildings: before.horizon.buildings.filter((b) => b.id !== firstManual.id),
+      },
+    });
+    // No imported id shifts (each stays b<index + 1>, the compact form); only the manual one after it does.
+    after.horizon.buildings
+      .filter((b) => b.source === 'swisstopo')
+      .forEach((b, i) => expect(b.id).toBe(`b${i + 1}`));
+    expect(encodeConfig(after).length).toBeLessThan(encodeConfig(before).length);
   });
 
   it('asks before discarding changes to imported buildings («Gebäude laden»)', async () => {
@@ -286,11 +324,17 @@ describe('building import', () => {
     setSite({ buildings: [removed], buildingImport: { ...SITE, radius: 300, date: '2026-01-01' } });
     const fetchBuildings = vi.fn(async () => ok());
     const near = enuToLonLat(SITE, 40, 0);
+    expect(config().horizon.surfaceModel.enabled).toBe(false);
     requestBuildingImport({ ...near, reason: 'address' }, deps(fetchBuildings));
     expect(state().pendingConfirm).toMatchObject({ reason: 'address' });
     expect(useUiStore.getState().openSections.horizon).toBe(true);
     expect(state().sitePlanRequest?.reason).toBe('address');
     expect(fetchBuildings).not.toHaveBeenCalled();
+    // The address pick turns the laser scan on at once; keeping the changes leaves it on.
+    expect(config().horizon.surfaceModel.enabled).toBe(true);
+    dismissBuildingImport();
+    expect(config().horizon.surfaceModel.enabled).toBe(true);
+    expect(config().horizon.buildings[0].removed).toBe(true);
     const far = enuToLonLat(SITE, 5000, 0);
     requestBuildingImport({ ...far, reason: 'address' }, deps(fetchBuildings));
     await waitFor(() => expect(state().status).toBe('ready'));

@@ -241,6 +241,38 @@ describe('BuildingList', () => {
     expect(document.activeElement).toBe(itemToggle('Gebäude 1'));
   });
 
+  it('another site (location over 2 km from the anchor): says so, and adding by hand explains instead of failing', () => {
+    // Imported at Breitenrainstrasse 10 in Bern, then the location set to Zürich by the coordinate fields.
+    setConfig({ buildings: BUILDINGS, buildingImport: { ...SITE, radius: 300, date: '2026-09-25' } });
+    useConfigStore.getState().patch('location', { latitude: 47.3769, longitude: 8.5417 });
+    render(<BuildingList />);
+    expect(screen.getByTestId('other-site')).toHaveTextContent(
+      /gehören zu einem anderen Ort: Sie liegen 9\d\.\d km vom Standort entfernt\. Für diesen Standort «Neu laden» wählen\./,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Gebäude hinzufügen' }));
+    const form = screen.getByRole('group', { name: 'Gebäude von Hand erfassen' });
+    fireEvent.click(within(form).getByRole('button', { name: 'Hinzufügen' }));
+    // Nothing written (a clamped rectangle collapsed to one vertex and vanished before), no «added».
+    expect(horizon().buildings).toHaveLength(BUILDINGS.length);
+    expect(within(form).getByRole('alert')).toHaveTextContent(/nicht hinzufügen.*Zuerst «Neu laden» wählen/);
+    expect(screen.getByRole('status')).toHaveTextContent('');
+  });
+
+  it('adding by hand with nothing stored moves an anchor that is too far away to the location', () => {
+    setConfig({ buildings: [], buildingImport: { ...SITE, radius: 300, date: '2026-09-25' } });
+    const zurich = { latitude: 47.3769, longitude: 8.5417 };
+    useConfigStore.getState().patch('location', zurich);
+    render(<BuildingList />);
+    expect(screen.queryByTestId('other-site')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Gebäude hinzufügen' }));
+    const form = screen.getByRole('group', { name: 'Gebäude von Hand erfassen' });
+    fireEvent.click(within(form).getByRole('button', { name: 'Hinzufügen' }));
+    expect(horizon().buildingImport).toEqual({ ...zurich, radius: 0, date: '' });
+    expect(horizon().buildings).toHaveLength(1);
+    expect(ringArea(horizon().buildings[0].footprint)).toBeCloseTo(150, 6);
+    expect(screen.getByRole('status')).toHaveTextContent('Gebäude 1 hinzugefügt.');
+  });
+
   it('manual entry is unavailable at the building cap', () => {
     const many = Array.from({ length: MAX_BUILDINGS }, (_, i) =>
       b(`b${i + 1}`, square(20 * (i % 20), 20 + 20 * Math.floor(i / 20), 3)),

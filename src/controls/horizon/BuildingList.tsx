@@ -4,7 +4,13 @@ import { DownloadIcon } from '../../components/icons';
 import { requestBuildingImport } from '../../hooks/useBuildingImport';
 import { useDsmActive } from '../../hooks/useSurfaceModel';
 import { useFormat, useLang, useMessages, type Messages } from '../../i18n';
-import { manualAnchor, rectFootprint, type FacadeRect } from '../../model/buildings';
+import {
+  anchorDistance,
+  manualAnchor,
+  OTHER_SITE_DISTANCE,
+  rectFootprint,
+  type FacadeRect,
+} from '../../model/buildings';
 import { SWISSTOPO_ATTRIBUTION } from '../../model/buildingSources';
 import { facadeTransform } from '../../model/enu';
 import { MAX_BUILDINGS, MAX_TOTAL_BUILDING_VERTICES } from '../../model/share';
@@ -45,6 +51,10 @@ const de = {
   add: 'Gebäude hinzufügen',
   max: (n: number) => `Maximal ${n} Gebäude.`,
   added: (name: string) => `${name} hinzugefügt.`,
+  otherSite: (distance: string, action: string) =>
+    `Die gespeicherten Gebäude gehören zu einem anderen Ort: Sie liegen ${distance} vom Standort entfernt. Für diesen Standort «${action}» wählen.`,
+  tooFar: (action: string) =>
+    `Das Gebäude lässt sich hier nicht hinzufügen: Die gespeicherten Gebäude gehören zu einem Ort über 2 km vom Standort. Zuerst «${action}» wählen.`,
   removed: (name: string) => `${name} entfernt.`,
   restored: (name: string) => `${name} wiederhergestellt.`,
   attribution: (a: string) => `Gebäudegrundrisse und -höhen: ${a}`,
@@ -71,6 +81,10 @@ const messages: Messages<typeof de> = {
     add: 'Add building',
     max: (n) => `At most ${n} buildings.`,
     added: (name) => `${name} added.`,
+    otherSite: (distance, action) =>
+      `The stored buildings belong to another site: they are ${distance} from the location. Choose «${action}» for this location.`,
+    tooFar: (action) =>
+      `The building cannot be added here: the stored buildings belong to a site more than 2 km from the location. Choose «${action}» first.`,
     removed: (name) => `${name} removed.`,
     restored: (name) => `${name} restored.`,
     attribution: (a) => `Building footprints and heights: ${a}`,
@@ -103,6 +117,7 @@ export function BuildingList() {
   const [showAll, setShowAll] = useState(false);
   const [openIds, setOpenIds] = useState<ReadonlySet<string>>(() => new Set());
   const [adding, setAdding] = useState(false);
+  const [addError, setAddError] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const pendingFocus = useRef<string | null>(null);
   const addRef = useRef<HTMLButtonElement>(null);
@@ -115,6 +130,10 @@ export function BuildingList() {
   const removedCount = buildings.length - shown;
   const vertices = buildings.reduce((s, b) => s + b.footprint.length, 0);
   const full = buildings.length >= MAX_BUILDINGS || vertices + 4 > MAX_TOTAL_BUILDING_VERTICES;
+  // The location moved more than 2 km from the buildings' anchor without a new import.
+  const siteDistance = buildingImport ? anchorDistance(buildingImport, location) : 0;
+  const otherSite = buildings.length > 0 && siteDistance > OTHER_SITE_DISTANCE;
+  const loadLabel = imported.length > 0 ? t.reload : t.load;
 
   // Own building first, then by distance from the balcony (a removed building keeps its place: restorable).
   const rows = useMemo(() => {
@@ -197,8 +216,21 @@ export function BuildingList() {
 
   const add = (rect: FacadeRect, height: number, base: number): void => {
     if (full) return;
-    const anchor = manualAnchor(buildingImport, location);
-    const footprint = rectFootprint(rect, facadeTransform(anchor, location, building.facadeAzimuth));
+    const at = (a: typeof buildingImport) => {
+      const anchor = manualAnchor(a, location);
+      return {
+        anchor,
+        footprint: rectFootprint(rect, facadeTransform(anchor, location, building.facadeAzimuth)),
+      };
+    };
+    let { anchor, footprint } = at(buildingImport);
+    // Nothing stored: an anchor too far away for the rectangle makes way for the location.
+    if (!footprint && buildings.length === 0) ({ anchor, footprint } = at(null));
+    if (!footprint) {
+      setAddError(t.tooFar(loadLabel));
+      return;
+    }
+    setAddError('');
     const id = newBuildingId(buildings);
     const b: Building = { id, name: '', footprint, base, height, source: 'manual' };
     setConfig((c) => ({
@@ -241,6 +273,11 @@ export function BuildingList() {
         !importing && <p className={styles.empty}>{t.empty}</p>
       )}
       {buildings.length > 0 && <ModelHint scan={t.inScan} prisms={t.prisms} imported={imported.length > 0} />}
+      {otherSite && (
+        <p className={styles.warn} data-testid="other-site">
+          {t.otherSite(f.unit(Math.round(siteDistance / 100) / 10, 'km', 1), loadLabel)}
+        </p>
+      )}
 
       <BuildingImportStatus />
 
@@ -298,7 +335,7 @@ export function BuildingList() {
           aria-disabled={importing || undefined}
           className={importing ? styles.unavailable : undefined}
         >
-          {imported.length > 0 ? t.reload : t.load}
+          {loadLabel}
         </Button>
         {/* aria-disabled instead of disabled: stays focusable (focus target after removing a building). */}
         <Button
@@ -309,7 +346,11 @@ export function BuildingList() {
           aria-disabled={full || undefined}
           aria-describedby={full ? maxId : undefined}
           className={full ? styles.unavailable : undefined}
-          onClick={() => !full && setAdding((a) => !a)}
+          onClick={() => {
+            if (full) return;
+            setAdding((a) => !a);
+            setAddError('');
+          }}
         >
           {t.add}
         </Button>
@@ -323,8 +364,10 @@ export function BuildingList() {
       {adding && (
         <AddBuildingForm
           onAdd={add}
+          error={addError}
           onCancel={() => {
             setAdding(false);
+            setAddError('');
             addRef.current?.focus();
           }}
         />

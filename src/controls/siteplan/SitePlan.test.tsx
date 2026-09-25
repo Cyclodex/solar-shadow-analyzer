@@ -206,6 +206,70 @@ describe('SitePlan', () => {
     expect(screen.getByRole('group', { name: 'Neubau' })).toHaveTextContent('von Hand');
   });
 
+  it('keyboard only: «Eigenes Gebäude» chooses another part, then its facade (no tap needed)', () => {
+    setSite();
+    render(<SitePlan />);
+    openPlan();
+    const ownSelect = screen.getByRole('combobox', { name: 'Eigenes Gebäude' });
+    expect(ownSelect).toHaveAccessibleDescription(/bis 25 m vom Standort/);
+    // Imported parts near the address point (0, 6); b4 is 31 m away, b5 was entered by hand.
+    expect(
+      within(ownSelect)
+        .getAllByRole('option')
+        .map((o) => text(o)),
+    ).toEqual(['Gebäude 1 · am Standort', 'Gebäude 2 · 5 m W', 'Gebäude 3 · 5 m O']);
+    expect(ownSelect).toHaveValue('b1');
+    fireEvent.change(ownSelect, { target: { value: 'b2' } });
+    expect(map()).toHaveAccessibleDescription(/Eigenes Gebäude: Gebäude 2\./);
+    const facade = screen.getByRole('combobox', { name: 'Fassade mit dem Balkon' });
+    const options = within(facade).getAllByRole('option');
+    expect(options.map((o) => text(o))).toEqual([
+      '0° N · 10.0 m lang',
+      '180° S · 10.0 m lang',
+      '270° W · 12.0 m lang',
+    ]);
+    fireEvent.change(facade, { target: { value: options[2].getAttribute('value') } });
+    fireEvent.click(screen.getByRole('button', { name: 'Übernehmen' }));
+    const { location, building } = config();
+    expect(building.facadeAzimuth).toBe(270);
+    const [e, n] = lonLatToEnu(ANCHOR, location.latitude, location.longitude);
+    expect(Math.hypot(e - -15, n - 6)).toBeLessThan(0.07); // the middle of b2's west wall
+    expect(screen.getByRole('combobox', { name: 'Eigenes Gebäude' })).toHaveValue('b2');
+  });
+
+  it('only buildings entered by hand: a neutral note, no own building to choose, nothing to apply', () => {
+    setSite(0, 0, { buildings: [BUILDINGS[4]] });
+    render(<SitePlan />);
+    expect(screen.getByText(/Nur von Hand erfasste Gebäude/)).toBeInTheDocument();
+    expect(screen.queryByText(/liegt noch nicht auf einer Fassade/)).toBeNull();
+    openPlan();
+    expect(screen.queryByRole('combobox', { name: 'Eigenes Gebäude' })).toBeNull();
+    expect(screen.queryByRole('combobox', { name: 'Fassade mit dem Balkon' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Übernehmen' })).toBeNull();
+    fireEvent.click(svg(), screenOf([25, -5]));
+    const card = screen.getByRole('group', { name: 'Neubau' });
+    expect(within(card).queryByRole('button', { name: 'Das ist mein Gebäude' })).toBeNull();
+  });
+
+  it('another site (location over 2 km from the anchor): says so and offers to load there', () => {
+    const edited = BUILDINGS.map((x) => (x.id === 'b4' ? { ...x, edited: true } : x));
+    setSite(0, 6, { buildings: edited });
+    useConfigStore.getState().patch('location', { latitude: 47.3769, longitude: 8.5417 });
+    render(<SitePlan />);
+    expect(
+      screen.getByText(/gehören zu einem anderen Ort: Sie liegen 9\d\.\d km vom Standort entfernt/),
+    ).toBeInTheDocument();
+    openPlan();
+    expect(screen.queryByRole('group', { name: 'Lageplan, Norden oben' })).toBeNull();
+    // The edited building makes the import ask first: that question is in «Horizont & Umgebung».
+    fireEvent.click(screen.getByRole('button', { name: 'Gebäude um den Standort laden' }));
+    expect(useBuildingImportStore.getState().pendingConfirm).toMatchObject({
+      reason: 'manual',
+      latitude: 47.3769,
+    });
+    expect(useUiStore.getState().openSections.horizon).toBe(true);
+  });
+
   it('«Das ist mein Gebäude» makes another building the own one', () => {
     setSite();
     render(<SitePlan />);

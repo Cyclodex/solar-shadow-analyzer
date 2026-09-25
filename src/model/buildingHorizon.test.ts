@@ -6,6 +6,7 @@ import { enuToLonLat, facadeToEnu } from './enu';
 import { floorPlacements } from './geometry';
 import { FLOOR_HORIZON_STEP_DEG, obstacleHorizon } from './horizon';
 import { sanitizeConfig } from './share';
+import { cmToM } from './units';
 
 const anchor = { latitude: 46.958474, longitude: 7.45363 };
 const GAMMA = 153.4;
@@ -121,6 +122,84 @@ describe('prismFloorHorizons', () => {
     expect(prismFloorHorizons(edited, floorPlacements(edited), true)).not.toBeNull();
     const manual = config([{ ...near, source: 'manual' }]);
     expect(prismFloorHorizons(manual, floorPlacements(manual), true)).not.toBeNull();
+  });
+
+  it('own building: a wing of the same part in front of the facade shades, like a separate part', () => {
+    // Facade azimuth 0° (north) at x = 10 on the north wall (y = 0) of an L-shaped part: body y −10…0, a wing
+    // x 20…30 reaching 15 m north. The same shape as two parts (body and wing) gave 49.5° at 45° and 57.3° at
+    // 70° before, one part nothing (the whole part was «own»).
+    const L: [number, number][] = [
+      [0, -10],
+      [30, -10],
+      [30, 15],
+      [20, 15],
+      [20, 0],
+      [0, 0],
+    ];
+    const at = (e: number, n: number, buildings: Building[], over: Partial<Config['building']> = {}) => {
+      clearPrismHorizonMemo();
+      const c: Config = {
+        ...config(buildings, { facadeAzimuth: 0, ...over }),
+        location: { ...DEFAULT_CONFIG.location, ...enuToLonLat(anchor, e, n) },
+      };
+      return { c, h: prismFloorHorizons(c, floorPlacements(c), false) };
+    };
+    const one = at(10, 0, [building('b1', L, { height: 20 })]);
+    const zone = cmToM(one.c.building.balconyDepth) + 0.5;
+    // Reference: the wing in front of the balcony zone as an obstacle box (facade frame u = −e + 10).
+    const wing: Obstacle = {
+      ...obstacle(),
+      offsetAlong: -15,
+      width: 10,
+      distance: zone,
+      depth: 15 - zone,
+      height: 20,
+    };
+    const placements = floorPlacements(one.c);
+    placements.forEach((p, k) => {
+      const ref = obstacleHorizon([wing], p.center, 0, FLOOR_HORIZON_STEP_DEG);
+      let worst = 0;
+      ref.elevations.forEach((e, i) => (worst = Math.max(worst, Math.abs(e - one.h![k]!.elevations[i]))));
+      expect(worst).toBeLessThan(1e-9);
+    });
+    // The two-part version agrees except where rays graze the facade (the balcony zone of the wing).
+    const main: [number, number][] = [
+      [0, -10],
+      [30, -10],
+      [30, 0],
+      [0, 0],
+    ];
+    const wingPart: [number, number][] = [
+      [20, 0],
+      [30, 0],
+      [30, 15],
+      [20, 15],
+    ];
+    const two = at(10, 0, [building('b1', main, { height: 20 }), building('b2', wingPart, { height: 20 })]);
+    for (const az of [45, 70, 80]) {
+      const i = Math.round(az / FLOOR_HORIZON_STEP_DEG);
+      expect(one.h![0]!.elevations[i]).toBeGreaterThan(40);
+      expect(one.h![0]!.elevations[i]).toBeCloseTo(two.h![0]!.elevations[i], 9);
+    }
+    // Facing south from the south wall (y = −10), nothing of the part is in front: no horizon.
+    expect(at(10, -10, [building('b1', L, { height: 20 })], { facadeAzimuth: 180 }).h).toBeNull();
+  });
+
+  it('own building: nothing counts while the location is not on its wall (address point inside)', () => {
+    const L: [number, number][] = [
+      [0, -10],
+      [30, -10],
+      [30, 15],
+      [20, 15],
+      [20, 0],
+      [0, 0],
+    ];
+    clearPrismHorizonMemo();
+    const c: Config = {
+      ...config([building('b1', L, { height: 20 })], { facadeAzimuth: 0 }),
+      location: { ...DEFAULT_CONFIG.location, ...enuToLonLat(anchor, 10, -5) },
+    };
+    expect(prismFloorHorizons(c, floorPlacements(c), false)).toBeNull();
   });
 
   it('base raises the top (top = base + height); null without an anchor or when nothing rises above', () => {

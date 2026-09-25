@@ -1,17 +1,19 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button } from '../../components/Button';
-import { CheckIcon } from '../../components/icons';
+import { CheckIcon, DownloadIcon } from '../../components/icons';
 import { NumberField } from '../../components/NumberField';
 import { SelectField } from '../../components/SelectField';
 import { Toggle } from '../../components/Toggle';
 import { useLayout } from '../../hooks/useModel';
 import { compassPoint, useFormat, useLang, useMessages, type Messages } from '../../i18n';
-import { buildingBearing } from '../../model/buildings';
+import { requestBuildingImport } from '../../hooks/useBuildingImport';
+import { anchorDistance, buildingBearing, OTHER_SITE_DISTANCE } from '../../model/buildings';
 import type { Vertex } from '../../model/polygon';
 import type { Building } from '../../model/types';
 import { cmToM } from '../../model/units';
 import { requestBuildingFocus, useBuildingImportStore } from '../../state/buildingImportStore';
 import { useConfigSection, useConfigStore } from '../../state/configStore';
+import { useUiStore } from '../../state/uiStore';
 import { useTimeStore } from '../../state/timeStore';
 import sections from '../sections.module.css';
 import { buildingName, useSiteGeometry } from './buildingData';
@@ -21,6 +23,7 @@ import {
   alongRange,
   clampAlong,
   currentPlacement,
+  ownBuildingChoices,
   ownFacadeEdges,
   placementConfig,
   placementPoint,
@@ -47,7 +50,18 @@ const de = {
   notPlaced:
     'Der Standort liegt noch nicht auf einer Fassade des eigenen Gebäudes: im Lageplan die Fassade mit dem Balkon wählen.',
   noOwn:
-    'Kein eigenes Gebäude erkannt: im Lageplan das eigene Gebäude antippen und «Das ist mein Gebäude» wählen.',
+    'Kein eigenes Gebäude erkannt: im Lageplan unter «Eigenes Gebäude» wählen oder das Gebäude antippen und «Das ist mein Gebäude» wählen.',
+  manualOnly:
+    'Nur von Hand erfasste Gebäude: Fassade und Balkon lassen sich auf Gebäuden wählen, die von swisstopo geladen wurden.',
+  otherSite: (distance: string) =>
+    `Die gespeicherten Gebäude gehören zu einem anderen Ort: Sie liegen ${distance} vom Standort entfernt.`,
+  loadHere: 'Gebäude um den Standort laden',
+  loading: 'Gebäude werden geladen …',
+  ownBuilding: 'Eigenes Gebäude',
+  ownChoose: 'Gebäude wählen',
+  ownOption: (name: string, where: string) => `${name} · ${where}`,
+  ownHint: 'Importierte Gebäude bis 25 m vom Standort und die angrenzenden.',
+  atLocation: 'am Standort',
   guide:
     'Fassade und Balkon bestätigen: im Plan die Fassade mit dem Balkon antippen oder anklicken (blau), dann die Stelle des Balkons darauf; der Punkt lässt sich entlang der Fassade ziehen. Gepunktete Kanten sind Brandmauern. Zum Schluss «Übernehmen».',
   map: 'Lageplan, Norden oben',
@@ -109,7 +123,19 @@ const messages: Messages<typeof de> = {
     placed: (az, dir) => `Balcony on the ${az} ${dir} facade of your building.`,
     notPlaced:
       'The location is not on a facade of your building yet: choose the facade with the balcony in the site plan.',
-    noOwn: 'No own building found: tap your building in the site plan and choose «This is my building».',
+    noOwn:
+      'No own building found: choose it under «Own building» in the site plan, or tap it and choose «This is my building».',
+    manualOnly:
+      'Only buildings entered by hand: facade and balcony can be chosen on buildings loaded from swisstopo.',
+    otherSite: (distance) =>
+      `The stored buildings belong to another site: they are ${distance} from the location.`,
+    loadHere: 'Load the buildings around the location',
+    loading: 'Loading buildings …',
+    ownBuilding: 'Own building',
+    ownChoose: 'Choose a building',
+    ownOption: (name, where) => `${name} · ${where}`,
+    ownHint: 'Imported buildings up to 25 m from the location and the adjoining ones.',
+    atLocation: 'at the location',
     guide:
       'Confirm facade and balcony: tap or click the facade with the balcony in the plan (blue), then the spot of the balcony on it; the point can be dragged along the facade. Dotted edges are party walls. Finally «Apply».',
     map: 'Site plan, north up',
@@ -213,10 +239,17 @@ export function SitePlan() {
   const rootRef = useRef<HTMLDivElement>(null);
   const bodyId = useId();
 
-  const own = useMemo(
-    () => sitePlanOwnBuilding(buildings, origin, facadeAzimuth, importedOwnId, draft?.ownId ?? null),
-    [buildings, origin, facadeAzimuth, importedOwnId, draft?.ownId],
+  const autoOwn = useMemo(
+    () => sitePlanOwnBuilding(buildings, origin, facadeAzimuth, importedOwnId),
+    [buildings, origin, facadeAzimuth, importedOwnId],
   );
+  const chosenId = draft?.ownId ?? null;
+  const own = useMemo(
+    () =>
+      chosenId ? sitePlanOwnBuilding(buildings, origin, facadeAzimuth, importedOwnId, chosenId) : autoOwn,
+    [buildings, origin, facadeAzimuth, importedOwnId, chosenId, autoOwn],
+  );
+  const choices = useMemo(() => ownBuildingChoices(buildings, origin, own), [buildings, origin, own]);
   const edges = useMemo(() => (own ? ownFacadeEdges(own, buildings) : []), [own, buildings]);
   // The configured placement only counts for the automatically found own building.
   const current = useMemo(
@@ -230,6 +263,11 @@ export function SitePlan() {
   const shown = draft?.placement ?? current ?? suggestion;
   const pending = shown !== null && !samePlacement(shown, current);
   const hasSite = anchor !== null && buildings.some((b) => !b.removed);
+  // The location moved more than 2 km from the buildings' anchor without a new import.
+  const siteDistance = anchor ? anchorDistance(anchor, location) : 0;
+  const otherSite = hasSite && siteDistance > OTHER_SITE_DISTANCE;
+  const importedAny = buildings.some((b) => b.source === 'swisstopo' && !b.removed);
+  const importing = useBuildingImportStore((s) => s.status === 'loading');
 
   // Open by itself after an import (address pick: the section was opened too, scroll there).
   const placed = current !== null;
@@ -254,11 +292,24 @@ export function SitePlan() {
   const dirOf = (az: number): string => compassPoint(Math.round(az) % 360, lang);
   const m = (v: number, digits = 1): string => f.unit(v, 'm', digits);
 
-  const status = !own
-    ? t.noOwn
-    : current
-      ? t.placed(deg(current.edge.azimuth), dirOf(current.edge.azimuth))
-      : t.notPlaced;
+  const status = otherSite
+    ? t.otherSite(f.unit(Math.round(siteDistance / 100) / 10, 'km', 1))
+    : !own
+      ? importedAny
+        ? t.noOwn
+        : t.manualOnly
+      : current
+        ? t.placed(deg(current.edge.azimuth), dirOf(current.edge.azimuth))
+        : t.notPlaced;
+
+  // «Gebäude um den Standort laden» (another site): a pending confirmation (changes to imported buildings
+  // would be lost) is asked in the building list, so that section opens.
+  const loadHere = (): void => {
+    if (importing) return;
+    requestBuildingImport({ latitude: location.latitude, longitude: location.longitude, reason: 'manual' });
+    if (useBuildingImportStore.getState().pendingConfirm)
+      useUiStore.getState().setSectionOpen('horizon', true);
+  };
 
   const setPlacement = (placement: Placement | null, ownId = draft?.ownId ?? null): void => {
     setDraftState({ buildings, ownId, placement });
@@ -315,7 +366,7 @@ export function SitePlan() {
 
   const ownIndex = own ? buildings.indexOf(own) : -1;
   const description = t.description(
-    own ? t.ownKnown(buildingName(own, ownIndex, lang)) : t.noOwn,
+    own ? t.ownKnown(buildingName(own, ownIndex, lang)) : importedAny ? t.noOwn : t.manualOnly,
     shown ? t.facadeShown(deg(shown.edge.azimuth), dirOf(shown.edge.azimuth), m(shown.along)) : t.facadeNone,
     buildings.filter((b) => b.id !== own?.id && !b.removed).length,
   );
@@ -343,9 +394,29 @@ export function SitePlan() {
           {t.title}
         </button>
       </h5>
-      {!(open && guide && !current) && <p className={current ? sections.hint : styles.status}>{status}</p>}
+      {!(open && guide && !current && !otherSite) && (
+        <p className={current ? sections.hint : styles.status}>{status}</p>
+      )}
       <div id={bodyId} className={styles.body} hidden={!open}>
-        {open && (
+        {open && otherSite && (
+          <div className={styles.actions}>
+            <Button
+              size="sm"
+              icon={<DownloadIcon />}
+              onClick={loadHere}
+              aria-disabled={importing || undefined}
+              className={importing ? styles.unavailable : undefined}
+            >
+              {t.loadHere}
+            </Button>
+            {importing && (
+              <span className={sections.hint} role="status">
+                {t.loading}
+              </span>
+            )}
+          </div>
+        )}
+        {open && !otherSite && (
           <>
             {guide && !current && (
               <p className={styles.guide} role="note">
@@ -391,6 +462,26 @@ export function SitePlan() {
                 onClose={() => setSelectedId(null)}
               />
             )}
+            {choices.length > 0 && (
+              <SelectField
+                label={t.ownBuilding}
+                value={own?.id ?? ''}
+                options={choices.map(({ building: b, bearing }) => ({
+                  value: b.id,
+                  label: t.ownOption(
+                    buildingName(b, buildings.indexOf(b), lang),
+                    !bearing || bearing.distance < ADJOINING_M
+                      ? t.atLocation
+                      : `${m(Math.round(bearing.distance), 0)} ${compassPoint(bearing.azimuth, lang)}`,
+                  ),
+                }))}
+                placeholder={t.ownChoose}
+                hint={t.ownHint}
+                onChange={(id) => {
+                  if (id !== own?.id) setPlacement(null, id === autoOwn?.id ? null : id);
+                }}
+              />
+            )}
             {own && selectable.length === 0 && <p className={styles.notice}>{t.noFacade}</p>}
             {selectable.length > 0 && (
               <SelectField
@@ -417,23 +508,25 @@ export function SitePlan() {
                 hint={t.alongHint}
               />
             )}
-            <div className={styles.actions}>
-              <Button
-                variant="primary"
-                size="sm"
-                icon={<CheckIcon />}
-                onClick={apply}
-                aria-disabled={!pending || undefined}
-                className={pending ? undefined : styles.unavailable}
-              >
-                {t.apply}
-              </Button>
-              {draft && (
-                <Button size="sm" variant="ghost" onClick={() => setDraftState(null)}>
-                  {t.discard}
+            {(own || draft) && (
+              <div className={styles.actions}>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  icon={<CheckIcon />}
+                  onClick={apply}
+                  aria-disabled={!pending || undefined}
+                  className={pending ? undefined : styles.unavailable}
+                >
+                  {t.apply}
                 </Button>
-              )}
-            </div>
+                {draft && (
+                  <Button size="sm" variant="ghost" onClick={() => setDraftState(null)}>
+                    {t.discard}
+                  </Button>
+                )}
+              </div>
+            )}
             {pending && <p className={sections.hint}>{t.pending}</p>}
             <Toggle label={t.sun} checked={showSun} onChange={setShowSun} />
             {showSun && <SunCaption site={location} />}
@@ -527,7 +620,7 @@ function SelectedBuilding({
         <Button size="sm" onClick={onEdit}>
           {t.edit}
         </Button>
-        {!own && !building.removed && (
+        {!own && !building.removed && building.source === 'swisstopo' && (
           <Button size="sm" onClick={onMine}>
             {t.mine}
           </Button>

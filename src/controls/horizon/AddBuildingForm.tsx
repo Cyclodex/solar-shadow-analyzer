@@ -53,10 +53,12 @@ const messages: Messages<typeof de> = {
 export interface AddBuildingFormProps {
   onAdd: (rect: FacadeRect, height: number, base: number) => void;
   onCancel: () => void;
+  /** Why the last «Hinzufügen» did not add the building (empty: none). */
+  error?: string;
 }
 
 /** Form for a manual building: a rectangle in the facade frame, its height and base. */
-export function AddBuildingForm({ onAdd, onCancel }: AddBuildingFormProps) {
+export function AddBuildingForm({ onAdd, onCancel, error = '' }: AddBuildingFormProps) {
   const t = useMessages(messages);
   const [rect, setRect] = useState<FacadeRect>(DEFAULT_MANUAL_RECT);
   const [height, setHeight] = useState(DEFAULT_MANUAL_HEIGHT);
@@ -135,6 +137,11 @@ export function AddBuildingForm({ onAdd, onCancel }: AddBuildingFormProps) {
         sliderMax={30}
         unit="m"
       />
+      {error && (
+        <p className={styles.warn} role="alert">
+          {error}
+        </p>
+      )}
       <div className={styles.actions}>
         <Button variant="primary" size="sm" icon={<PlusIcon />} onClick={() => onAdd(rect, height, base)}>
           {t.add}

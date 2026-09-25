@@ -14,11 +14,15 @@ import {
   FIT_MIN_SPAN,
   MAX_SPAN,
   MIN_SPAN,
+  ownBuildingChoices,
   ownFacadeEdges,
+  OWN_CHOICE_MAX,
   placementAt,
   placementConfig,
   placementPoint,
+  probeAlongRange,
   probePoint,
+  PROBE_MARGIN,
   samePlacement,
   scaleBarLength,
   sitePlanOwnBuilding,
@@ -68,6 +72,19 @@ describe('sitePlanOwnBuilding', () => {
     expect(sitePlanOwnBuilding(ROW, [0, -70], 0)).toBeNull();
   });
 
+  it('picks or guesses only imported buildings; one entered by hand only with the probe inside (as the model)', () => {
+    // Outside Switzerland: only a building entered by hand, 20 m in front of a south facade at the location.
+    const manual = [b('b1', rect(-7.5, -30, 7.5, -20), { source: 'manual' })];
+    expect(sitePlanOwnBuilding(manual, [0, 0], 180)).toBeNull();
+    expect(sitePlanOwnBuilding(manual, [0, 0], 180, null, 'b1')).toBeNull(); // not even when chosen
+    expect(sitePlanOwnBuilding(manual, [0, -19.7], 180)).toBeNull(); // 0.3 m from it, probe outside
+    // With the probe behind the facade origin inside it, the prisms treat it as the own building: so does the plan.
+    expect(sitePlanOwnBuilding(manual, [0, -20], 0)?.id).toBe('b1');
+    // Next to imported buildings the nearest imported one is guessed, not the nearer manual one.
+    const mixed = [...manual, b('b2', rect(-5, 10, 5, 20))];
+    expect(sitePlanOwnBuilding(mixed, [0, -8], 0)?.id).toBe('b2'); // 12 m from the manual one, 18 m from b2
+  });
+
   it('never picks a removed building', () => {
     const removed = ROW.map((x) => (x.id === 'b1' ? { ...x, removed: true } : x));
     expect(sitePlanOwnBuilding(removed, [0, 6], 180, 'b1', 'b1')?.id).not.toBe('b1');
@@ -77,6 +94,32 @@ describe('sitePlanOwnBuilding', () => {
     const [e, n] = probePoint([10, 20], 90);
     expect(e).toBeCloseTo(9.5, 12);
     expect(n).toBeCloseTo(20, 12);
+  });
+});
+
+describe('ownBuildingChoices', () => {
+  it('imported buildings within 25 m of the location or adjoining the own one, nearest first', () => {
+    const withManual = [...ROW, b('b5', rect(-2, -12, 2, -9), { source: 'manual' })];
+    const at = (origin: Vertex | null, ownId: string | null) =>
+      ownBuildingChoices(withManual, origin, withManual.find((x) => x.id === ownId) ?? null).map(
+        (c) => c.building.id,
+      );
+    // From the street (0, −8): b1 8 m, b2 and b3 9.4 m, b4 17 m; b5 (by hand) never.
+    expect(at([0, -8], 'b1')).toEqual(['b1', 'b2', 'b3', 'b4']);
+    // Far away: the current own building and the parts adjoining it.
+    expect(at([0, 200], 'b1')).toEqual(['b1', 'b2', 'b3']);
+    expect(at(null, null)).toEqual([]);
+    const choices = ownBuildingChoices(ROW, [0, -8], ROW[0]);
+    expect(choices[0].bearing?.distance).toBeCloseTo(8, 9);
+    expect(choices[3].bearing?.azimuth).toBeCloseTo(180, 0);
+  });
+
+  it('at most OWN_CHOICE_MAX, always with the current own building', () => {
+    const many = Array.from({ length: 30 }, (_, k) => b(`b${k + 1}`, rect(k * 0.7, 0, k * 0.7 + 0.5, 5)));
+    const own = many[29];
+    const ids = ownBuildingChoices(many, [0, -1], own).map((c) => c.building.id);
+    expect(ids).toHaveLength(OWN_CHOICE_MAX + 1);
+    expect(ids).toContain('b30');
   });
 });
 
@@ -129,6 +172,39 @@ describe('placements', () => {
     expect(alongRange(odd)).toEqual({ min: 0.5, max: 6.8 });
     // Exact grid values (no 0.30000000000000004).
     expect(clampAlong(south, 0.3 + 3 * 0.1)).toBe(0.6);
+  });
+
+  it('acute corners: the range keeps the probe inside the own footprint, so the model finds it', () => {
+    // Wedge with a 21.8° corner at (20, 0): its north facade runs from (20, 0) to (0, 0).
+    const wedge = b('b1', [
+      [0, 0],
+      [0, -8],
+      [20, 0],
+    ]);
+    const facade = ownFacadeEdges(wedge, [wedge]).find((e) => e.azimuth === 0)!;
+    expect(facade.range).toBeDefined();
+    const range = alongRange(facade);
+    // 0.5 m from the right-angled corner; at the acute one (0.1 + 0.5 cos α) / sin α = 1.52 m, on the grid.
+    expect(range.min).toBe(1.6);
+    expect(range.max).toBe(19.5);
+    expect(probeAlongRange(facade, wedge.footprint)).toEqual(range);
+    const anchor = { ...ANCHOR, radius: 300, date: '2026-09-25' };
+    const owns = (along: number): string[] => {
+      const next = placementConfig(ANCHOR, { edge: facade, along });
+      return ownBuildingIds([wedge], anchor, next, next.facadeAzimuth);
+    };
+    // Without the range (0.5 m from both ends) the probe fell outside next to the acute corner.
+    expect(owns(0.5)).toEqual([]);
+    for (let along = range.min; along <= range.max + 1e-9; along += 0.1) expect(owns(along)).toEqual(['b1']);
+    expect(clampAlong(facade, 0)).toBe(1.6);
+    expect(placementAt(facade, [19.9, 0]).along).toBe(1.6);
+    expect(PROBE_MARGIN).toBeGreaterThan(0.07); // the rounding of «Übernehmen»
+  });
+
+  it('a sliver without any position whose probe fits: the middle of the edge', () => {
+    const sliver = b('b1', rect(0, 0, 10, 0.4));
+    const south = ownFacadeEdges(sliver, [sliver]).find((e) => e.azimuth === 180)!;
+    expect(alongRange(south)).toEqual({ min: 5, max: 5 });
   });
 
   it('placementAt projects a point onto the edge; samePlacement compares edge and position', () => {

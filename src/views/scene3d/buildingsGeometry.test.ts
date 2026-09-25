@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { PerspectiveCamera, Vector3 } from 'three';
 import { enuToLonLat, facadeTransform } from '../../model/enu';
 import type { Vertex } from '../../model/polygon';
 import type { Building } from '../../model/types';
@@ -10,11 +11,14 @@ import {
   prismBoxes,
   prismMesh,
   rangeIndex,
+  SCENE_BUILDING_RANGE,
   sceneBuildings,
   segmentHitsPrism,
   SHADOW_FIT_BUILDING_HALF,
   type ScenePrism,
 } from './buildingsGeometry';
+import type { Tuple3 } from './coords';
+import { fitShadowCamera, sunDirection } from './sceneLayout';
 
 const ANCHOR = { latitude: 46.958474, longitude: 7.45363 };
 
@@ -69,6 +73,64 @@ describe('sceneBuildings', () => {
     expect(s.own).toBeNull();
     expect(s.prisms.map((p) => p.id)).toEqual(['b2', 'b4', 'b5']); // b1 still excluded (own)
     expect(sceneBuildings(buildings, null, location, 180)).toEqual({ prisms: [], own: null });
+  });
+});
+
+describe('sceneBuildings: range and other sites', () => {
+  const own = b('b1', rect(-5, 0, 5, 12), { height: 21 });
+  const location = enuToLonLat(ANCHOR, 1, 0);
+
+  /** Light-space depth of a point in a fitted shadow camera, and the camera's far plane. */
+  function depthOf(prisms: readonly ScenePrism[], point: Tuple3): { depth: number; far: number } {
+    const fitPoints: Tuple3[] = [
+      [-5, 0, 0],
+      [5, 0, 0],
+      [-5, 12, 3],
+      [5, 12, 3],
+    ];
+    const shadow = buildingShadowPoints(prisms);
+    // Low evening sun from the west (azimuth 270°, 8° high): the farthest caster lies towards it.
+    const dir = sunDirection({ altitude: 8, azimuth: 270, declination: 0, equationOfTime: 0 });
+    const target: Tuple3 = [0, 5, 0];
+    const fit = fitShadowCamera([...fitPoints, ...shadow.fit], shadow.depth, target, dir, 2048);
+    const cam = new PerspectiveCamera();
+    cam.position.set(...fit.position);
+    cam.lookAt(new Vector3(...target));
+    cam.updateMatrixWorld(true);
+    return { depth: -new Vector3(...point).applyMatrix4(cam.matrixWorldInverse).z, far: fit.far };
+  }
+
+  it('leaves out buildings beyond SCENE_BUILDING_RANGE (they would push the panels out of the shadow camera)', () => {
+    const near = b('n', rect(-900, -5, -890, 5), { height: 25 }); // 891 m west of the location
+    const far = b('f', rect(-1500, -5, -1490, 5), { height: 25 }); // 1491 m
+    const s = sceneBuildings([own, near, far], ANCHOR, location, 180);
+    expect(SCENE_BUILDING_RANGE).toBe(1000);
+    expect(s.prisms.map((p) => p.id)).toEqual(['n']);
+    // A caster 5 km towards the sun (as left over from another site) moves the light beyond the depth range:
+    // the panels at the origin fall behind the far plane and nothing casts a shadow.
+    const stale: ScenePrism = {
+      id: 'x',
+      kind: 'imported',
+      ring: rect(-5010, -5, -5000, 5),
+      base: 0,
+      top: 20,
+    };
+    const lost = depthOf([...s.prisms, stale], [0, 3, 0]);
+    expect(lost.depth).toBeGreaterThan(lost.far);
+    const kept = depthOf(s.prisms, [0, 3, 0]);
+    expect(kept.depth).toBeLessThan(kept.far);
+  });
+
+  it('none when the location is more than 2 km from the anchor (the buildings belong to another site)', () => {
+    const zurich = { latitude: 47.3769, longitude: 8.5417 };
+    expect(sceneBuildings([own, b('b2', rect(-5, -30, 5, -20))], ANCHOR, zurich, 180)).toEqual({
+      prisms: [],
+      own: null,
+    });
+    // 1.9 km away the same site: a building next to the new location is drawn.
+    const moved = enuToLonLat(ANCHOR, 1900, 0);
+    const next = b('b3', rect(1890, -30, 1910, -20));
+    expect(sceneBuildings([own, next], ANCHOR, moved, 180).prisms.map((p) => p.id)).toEqual(['b3']);
   });
 });
 

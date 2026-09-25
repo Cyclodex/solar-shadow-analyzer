@@ -11,6 +11,7 @@ import {
   PRUNE_MAX_HEIGHTS,
   STATION_SPACING,
   buildingBearing,
+  clipRingAbove,
   edgePoint,
   facadeDirectionAzimuth,
   facadeEdges,
@@ -39,7 +40,7 @@ import {
 import { enuToLonLat, facadeToEnu, facadeTransform, lonLatToEnu } from './enu';
 import { obstacleHorizon } from './horizon';
 import { MAX_BUILDING_VERTICES } from './share';
-import { pointInRing, ringArea, type Vertex } from './polygon';
+import { bridgeHoles, pointInRing, ringArea, type Vertex } from './polygon';
 import { normalizeDeg, toDeg, toRad } from './units';
 
 /** Deterministic pseudo-random numbers (LCG), 0 ≤ x < 1. */
@@ -361,6 +362,103 @@ describe('prismHorizonTangents (edge sweep)', () => {
   });
 });
 
+describe('clipRingAbove', () => {
+  const area = (rings: Vertex[][]): number => rings.reduce((a, r) => a + ringArea(r), 0);
+  const inside = (rings: Vertex[][], x: number, y: number): boolean =>
+    rings.filter((r) => pointInRing(r, x, y)).length % 2 === 1;
+
+  it('square: the part above the line, counter-clockwise; all above or all below', () => {
+    const sq: Vertex[] = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [0, 10],
+    ];
+    const [piece, ...rest] = clipRingAbove(sq, 4);
+    expect(rest).toHaveLength(0);
+    expect(ringArea(piece)).toBeCloseTo(60, 12);
+    expect(clipRingAbove([...sq].reverse(), 4).map(ringArea)).toEqual([60]); // clockwise input
+    expect(clipRingAbove(sq, -1).map(ringArea)).toEqual([100]);
+    expect(clipRingAbove(sq, 10)).toEqual([]); // vertices on the line count as below
+    expect(clipRingAbove(sq, 12)).toEqual([]);
+  });
+
+  it('a U falls apart into separate pieces (no wall across the gap)', () => {
+    // U open to the north: legs x 0…3 and 7…10 up to y = 10, base y 0…2.
+    const u: Vertex[] = [
+      [0, 0],
+      [10, 0],
+      [10, 10],
+      [7, 10],
+      [7, 2],
+      [3, 2],
+      [3, 10],
+      [0, 10],
+    ];
+    const pieces = clipRingAbove(u, 5);
+    expect(pieces).toHaveLength(2);
+    expect(pieces.map(ringArea).sort()).toEqual([15, 15]);
+    expect(inside(pieces, 5, 7)).toBe(false); // the gap stays open
+    expect(inside(pieces, 1, 7)).toBe(true);
+    expect(inside(pieces, 9, 7)).toBe(true);
+  });
+
+  it('keyhole ring: a line through the bridge or the courtyard', () => {
+    const outer: Vertex[] = [
+      [0, 0],
+      [20, 0],
+      [20, 20],
+      [0, 20],
+    ];
+    const hole: Vertex[] = [
+      [6, 6],
+      [6, 14],
+      [14, 14],
+      [14, 6],
+    ];
+    const keyhole = bridgeHoles(outer, [hole]);
+    for (const c of [3, 10, 17]) {
+      const pieces = clipRingAbove(keyhole, c);
+      // Area above the line: outer part minus the courtyard part.
+      const expected = 20 * (20 - c) - 8 * Math.max(0, Math.min(14, 20) - Math.max(6, c));
+      expect(area(pieces)).toBeCloseTo(expected, 9);
+      expect(inside(pieces, 10, (Math.max(c, 6) + 14) / 2)).toBe(false); // the courtyard
+      expect(inside(pieces, 2, (c + 20) / 2)).toBe(true);
+    }
+  });
+
+  it('random star polygons: pieces cover exactly the part above the line (area and point samples)', () => {
+    const rand = rng(11);
+    for (let k = 0; k < 60; k++) {
+      const m = 5 + Math.floor(rand() * 20);
+      const ring: Vertex[] = Array.from({ length: m }, (_, j) => {
+        const a = (2 * Math.PI * j) / m;
+        const r = 3 + 10 * rand();
+        return [r * Math.cos(a), r * Math.sin(a)];
+      });
+      const c = -8 + 16 * rand();
+      const pieces = clipRingAbove(ring, c);
+      const mirrored = ring.map(([x, y]): Vertex => [x, -y]);
+      const below = clipRingAbove(mirrored, -c); // the part below the line, mirrored
+      expect(area(pieces) + area(below)).toBeCloseTo(Math.abs(ringArea(ring)), 9);
+      for (const p of pieces) {
+        expect(ringArea(p)).toBeGreaterThan(0);
+        // Every stretch along the line lies inside the ring (no wall across a gap between pieces).
+        p.forEach((a, i) => {
+          const b = p[(i + 1) % p.length];
+          if (a[1] !== c || b[1] !== c) return;
+          expect(pointInRing(ring, (a[0] + b[0]) / 2, c + 1e-7)).toBe(true);
+        });
+      }
+      for (let s = 0; s < 200; s++) {
+        const x = -14 + 28 * rand();
+        const y = -14 + 28 * rand();
+        expect(inside(pieces, x, y)).toBe(y > c && pointInRing(ring, x, y));
+      }
+    }
+  });
+});
+
 describe('frame conversions', () => {
   const anchor = { latitude: 46.947849, longitude: 7.449978 };
   const location = enuToLonLat(anchor, 12.3, -4.5);
@@ -385,14 +483,14 @@ describe('frame conversions', () => {
   it('rectFootprint: rectangle in front of the facade, 0.1 m grid, CCW; rotation clockwise from above', () => {
     const gamma = 0; // facade faces north: u points west, n north
     const t = facadeTransform(anchor, anchor, gamma);
-    const fp = rectFootprint({ width: 10, depth: 4, distance: 6, offset: 3, rotation: 0 }, t);
+    const fp = rectFootprint({ width: 10, depth: 4, distance: 6, offset: 3, rotation: 0 }, t)!;
     expect(ringArea(fp)).toBeCloseTo(40, 6);
     // u = 3 (west) → east −3; n from 6 to 10 (north).
     const xs = fp.map((p) => p[0]).sort((a, b) => a - b);
     const ys = fp.map((p) => p[1]).sort((a, b) => a - b);
     expect([xs[0], xs[3], ys[0], ys[3]]).toEqual([-8, 2, 6, 10]);
     // Rotated by 30° clockwise: the width axis (u, west = 270°) now points to 300°.
-    const rot = rectFootprint({ width: 10, depth: 4, distance: 6, offset: 0, rotation: 30 }, t);
+    const rot = rectFootprint({ width: 10, depth: 4, distance: 6, offset: 0, rotation: 30 }, t)!;
     const edges = rot.map((p, i) => {
       const q = rot[(i + 1) % rot.length];
       return {
@@ -412,10 +510,21 @@ describe('frame conversions', () => {
 
   it('rectFootprint follows the facade azimuth and location', () => {
     const t = facadeTransform(anchor, location, 202);
-    const fp = rectFootprint({ width: 2, depth: 2, distance: 9, offset: 0, rotation: 0 }, t);
+    const fp = rectFootprint({ width: 2, depth: 2, distance: 9, offset: 0, rotation: 0 }, t)!;
     const [cu, cn] = t.toFacade(ringCentroid(fp));
     expect(cu).toBeCloseTo(0, 1);
     expect(cn).toBeCloseTo(10, 1);
+  });
+
+  it('rectFootprint: null instead of a collapsed ring more than 2 km from the anchor', () => {
+    const rect = { width: 15, depth: 10, distance: 20, offset: 0, rotation: 0 };
+    // The location 94 km away (Zürich, anchor in Bern): clamping made it one vertex [2000, 2000] before.
+    const zurich = { latitude: 47.3769, longitude: 8.5417 };
+    expect(rectFootprint(rect, facadeTransform(anchor, zurich, 180))).toBeNull();
+    // Reaching over the limit by a few metres: null as well; inside it: a full rectangle.
+    const edge = enuToLonLat(anchor, 1990, 0);
+    expect(rectFootprint(rect, facadeTransform(anchor, edge, 90))).toBeNull();
+    expect(rectFootprint(rect, facadeTransform(anchor, edge, 270))).toHaveLength(4);
   });
 
   it('reanchorFootprint keeps the world position; null beyond ±2000 m', () => {

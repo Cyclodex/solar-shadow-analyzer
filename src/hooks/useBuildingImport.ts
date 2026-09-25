@@ -84,7 +84,8 @@ export function resetBuildingImport(): void {
  * Asks for an import around (latitude, longitude). When the imported buildings carry changes (removed or
  * edited) that the import would discard, it waits for confirmBuildingImport (pendingConfirm) instead: always
  * for «Gebäude laden», after an address pick only when the address lies within the previous import's radius
- * (the same neighbourhood; farther away the old buildings belong to another site and are replaced).
+ * (the same neighbourhood; farther away the old buildings belong to another site and are replaced). An
+ * address pick turns the laser scan on right away then, whatever the answer («Behalten» keeps the buildings).
  */
 export function requestBuildingImport(request: BuildingImportRequest, deps: BuildingImportDeps = {}): void {
   const req = { ...request, latitude: round6(request.latitude), longitude: round6(request.longitude) };
@@ -97,7 +98,7 @@ export function requestBuildingImport(request: BuildingImportRequest, deps: Buil
       setState({ pendingConfirm: req });
       if (req.reason === 'address') {
         useUiStore.getState().setSectionOpen('horizon', true);
-        requestSitePlan('address');
+        finishAddress(req);
       }
       return;
     }
@@ -238,7 +239,8 @@ export async function startBuildingImport(
       maxBuildings: Math.min(IMPORT_MAX_BUILDINGS, MAX_BUILDINGS - manual.length),
       maxVertices: Math.min(IMPORT_MAX_VERTICES, MAX_TOTAL_BUILDING_VERTICES - manualVertices),
     });
-    // Ids b<index + 1> (the compact form of share links); manual buildings first (never cut by the caps).
+    // Ids b<index + 1> (the compact form of share links). Imported buildings first: they are never deleted
+    // (only marked removed), so deleting a manual one shifts no imported id (explicit ids in the link).
     const imported: Building[] = plan.kept.map(({ index }) => ({
       id: '',
       name: '',
@@ -247,7 +249,7 @@ export async function startBuildingImport(
       height: candidates[index].height,
       source: 'swisstopo',
     }));
-    const buildings = [...manual, ...imported].map((b, i) => ({ ...b, id: `b${i + 1}` }));
+    const buildings = [...imported, ...manual].map((b, i) => ({ ...b, id: `b${i + 1}` }));
     const ownPos = plan.kept.findIndex((k) => k.reason === 'own');
     const date = localIsoDate(deps.now?.() ?? Date.now());
     useConfigStore.getState().setConfig((c) => ({
@@ -265,7 +267,7 @@ export async function startBuildingImport(
       stored: imported.length,
       horizon: plan.kept.filter((k) => k.reason === 'horizon').length,
       context: plan.kept.filter((k) => k.reason === 'context' || k.reason === 'adjoining').length,
-      ownId: ownPos >= 0 ? `b${manual.length + ownPos + 1}` : null,
+      ownId: ownPos >= 0 ? `b${ownPos + 1}` : null,
       droppedSetters: plan.droppedSetters,
       maxDroppedScore: plan.maxDroppedScore,
       keptManual: manual.length,
@@ -292,7 +294,10 @@ export async function startBuildingImport(
   }
 }
 
-/** After an address import that stored nothing: the laser scan still comes on and the site plan opens. */
+/**
+ * After an address pick that stored nothing (failed, outside CH/FL, or waiting for «Neu laden» / «Behalten»):
+ * the laser scan still comes on and the site plan opens.
+ */
 function finishAddress(req: BuildingImportRequest): void {
   if (req.reason !== 'address') return;
   useConfigStore.getState().patch('horizon', {

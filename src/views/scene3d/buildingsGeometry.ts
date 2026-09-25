@@ -1,6 +1,7 @@
 import { ShapeUtils, Vector2 } from 'three';
+import { OTHER_SITE_DISTANCE } from '../../model/buildings';
 import { facadeTransform, type GeoPoint } from '../../model/enu';
-import { pointInRing, ringArea, type ReadonlyVertex, type Vertex } from '../../model/polygon';
+import { pointInRing, ringArea, ringBounds, type ReadonlyVertex, type Vertex } from '../../model/polygon';
 import { ownBuildingIds, OWN_BUILDING_EXCLUSION } from '../../model/surroundings';
 import type { Building } from '../../model/types';
 import { clamp } from '../../model/units';
@@ -51,10 +52,19 @@ const ON_FACADE_M = 0.3;
 const ON_FACADE_DEG = 3;
 /** Depth behind the snapped wall at which the facade stretch is measured (m). */
 const STRETCH_N = 0.05;
+/**
+ * Buildings whose bounding box stays farther than this from the facade origin (m) are not drawn: they add
+ * nothing visible, but as shadow casters they would push the light (and the shadow camera's depth range,
+ * sceneLayout MAX_DEPTH_RANGE 3000 m) so far away that the panel rows fall out of it and no shadow shows at
+ * all. Imports reach 500 m (LIMITS.surfaceModel.radius), manual rectangles 1000 m + their depth.
+ */
+export const SCENE_BUILDING_RANGE = 1000;
 
 /**
- * Prisms of the stored buildings relative to the facade origin: removed ones and the own building
- * (ownBuildingIds) are left out; `kind` marks edited and manual ones.
+ * Prisms of the stored buildings relative to the facade origin: removed ones, the own building
+ * (ownBuildingIds) and those beyond SCENE_BUILDING_RANGE are left out; none when the location is more than
+ * OTHER_SITE_DISTANCE from the anchor (the buildings belong to another site). `kind` marks edited and manual
+ * ones.
  */
 export function sceneBuildings(
   buildings: readonly Building[],
@@ -65,11 +75,16 @@ export function sceneBuildings(
   if (!anchor || buildings.length === 0) return { prisms: [], own: null };
   const t = facadeTransform(anchor, location, facadeAzimuth);
   const [ox, oy] = t.origin;
+  if (!(Math.hypot(ox, oy) <= OTHER_SITE_DISTANCE)) return { prisms: [], own: null };
   const ownIds = new Set(ownBuildingIds(buildings, anchor, location, facadeAzimuth));
   const prisms: ScenePrism[] = [];
   let own: OwnBody | null = null;
   for (const b of buildings) {
     if (b.removed || b.footprint.length < 3) continue;
+    const [x0, y0, x1, y1] = ringBounds(b.footprint);
+    const dx = Math.max(x0 - ox, 0, ox - x1);
+    const dy = Math.max(y0 - oy, 0, oy - y1);
+    if (Math.hypot(dx, dy) > SCENE_BUILDING_RANGE) continue;
     if (ownIds.has(b.id)) {
       own ??= ownBody(
         b.footprint.map((p) => t.toFacade(p)),
