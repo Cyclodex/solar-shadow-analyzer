@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { currentPlacement, ownFacadeEdges, sitePlanOwnBuilding } from '../controls/siteplan/sitePlanModel';
 import {
   compassPoint,
   displayLocationName,
@@ -10,7 +11,9 @@ import {
 } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useSelectedUtc } from '../hooks/useModel';
-import type { ShadingModel } from '../model/types';
+import { SWISSTOPO_ATTRIBUTION } from '../model/buildingSources';
+import { lonLatToEnu } from '../model/enu';
+import type { Config, ShadingModel } from '../model/types';
 import { useConfig } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
@@ -67,6 +70,24 @@ const de = {
   perYear: '%/Jahr',
   lifetime: 'Betrachtungsdauer',
   link: 'Link zu dieser Konfiguration',
+  placement: 'Lage am Gebäude',
+  placed: (az: string, dir: string) =>
+    `Balkon auf der Fassade ${az} ${dir}, im Lageplan gesetzt; Koordinaten auf 0.000001° (höchstens 0.07 m)`,
+  notPlaced: 'nicht im Lageplan bestätigt',
+  surroundings: 'Umgebung',
+  buildings: 'Umgebungsgebäude',
+  buildingsNone: 'keine',
+  buildingsCount: (n: string, parts: string[]) => (parts.length > 0 ? `${n} (${parts.join(', ')})` : n),
+  manual: (n: string) => `${n} von Hand`,
+  edited: (n: string) => `${n} bearbeitet`,
+  removed: (n: string) => `${n} entfernt`,
+  buildingImport: 'Gebäude-Import',
+  buildingImportValue: (date: string, radius: string) =>
+    date ? `swisstopo, Stand ${date}, Umkreis ${radius}` : `Umkreis ${radius}`,
+  surfaceModel: 'Laserscan (swissSURFACE3D)',
+  surfaceOn: (trees: boolean, radius: string) =>
+    `ein, ${trees ? 'mit Bäumen (ganzjährig undurchsichtig)' : 'nur Gebäude'}, Umkreis ${radius}`,
+  sources: 'Datenquellen',
 };
 
 const messages: Messages<typeof de> = {
@@ -117,8 +138,40 @@ const messages: Messages<typeof de> = {
     perYear: '%/year',
     lifetime: 'Evaluation period',
     link: 'Link to this configuration',
+    placement: 'Position on the building',
+    placed: (az, dir) =>
+      `balcony on the ${az} ${dir} facade, set in the site plan; coordinates to 0.000001° (at most 0.07 m)`,
+    notPlaced: 'not confirmed in the site plan',
+    surroundings: 'Surroundings',
+    buildings: 'Surrounding buildings',
+    buildingsNone: 'none',
+    buildingsCount: (n, parts) => (parts.length > 0 ? `${n} (${parts.join(', ')})` : n),
+    manual: (n) => `${n} entered by hand`,
+    edited: (n) => `${n} edited`,
+    removed: (n) => `${n} removed`,
+    buildingImport: 'Building import',
+    buildingImportValue: (date, radius) =>
+      date ? `swisstopo, as of ${date}, radius ${radius}` : `radius ${radius}`,
+    surfaceModel: 'Laser scan (swissSURFACE3D)',
+    surfaceOn: (trees, radius) =>
+      `on, ${trees ? 'with trees (opaque all year)' : 'buildings only'}, radius ${radius}`,
+    sources: 'Data sources',
   },
 };
+
+/**
+ * Where the location sits on the own building (as the site plan finds it): the facade azimuth of the
+ * edge it lies on, null when it is not on a facade, undefined without surrounding buildings.
+ */
+function placementAzimuth(config: Config): number | null | undefined {
+  const { buildings, buildingImport } = config.horizon;
+  if (!buildingImport || buildings.length === 0) return undefined;
+  const { facadeAzimuth } = config.building;
+  const origin = lonLatToEnu(buildingImport, config.location.latitude, config.location.longitude);
+  const own = sitePlanOwnBuilding(buildings, origin, facadeAzimuth);
+  const placed = own ? currentPlacement(ownFacadeEdges(own, buildings), origin, facadeAzimuth) : null;
+  return placed ? facadeAzimuth : null;
+}
 
 function Group({ title, items }: { title: string; items: [string, ReactNode][] }) {
   return (
@@ -152,6 +205,54 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
   const weatherFallback = useDataStore((st) => st.weather.usingFallback);
   const { location: loc, building: b, panels: p, system: s, horizon: h, weather: w, economics: e } = config;
 
+  // Surroundings (buildings feature): position on the building, buildings, laser scan, sources.
+  const placedAz = placementAzimuth(config);
+  const placementRows: [string, ReactNode][] =
+    placedAz === undefined
+      ? []
+      : [
+          [
+            t.placement,
+            placedAz === null ? t.notPlaced : t.placed(f.deg(placedAz), compassPoint(placedAz, lang)),
+          ],
+        ];
+  const count = (pred: (x: (typeof h.buildings)[number]) => boolean): number =>
+    h.buildings.filter(pred).length;
+  const nManual = count((x) => x.source === 'manual');
+  const nEdited = count((x) => x.edited === true && !x.removed);
+  const nRemoved = count((x) => x.removed === true);
+  const imported = count((x) => x.source === 'swisstopo') > 0;
+  const surroundingRows: [string, ReactNode][] = [];
+  if (h.buildings.length > 0 || h.surfaceModel.enabled) {
+    surroundingRows.push([
+      t.buildings,
+      h.buildings.length === 0
+        ? t.buildingsNone
+        : t.buildingsCount(
+            f.int(h.buildings.length - nRemoved),
+            [
+              nManual > 0 ? t.manual(f.int(nManual)) : null,
+              nEdited > 0 ? t.edited(f.int(nEdited)) : null,
+              nRemoved > 0 ? t.removed(f.int(nRemoved)) : null,
+            ].filter((x): x is string => x !== null),
+          ),
+    ]);
+    if (h.buildingImport && h.buildingImport.radius > 0) {
+      surroundingRows.push([
+        t.buildingImport,
+        t.buildingImportValue(
+          h.buildingImport.date ? f.date(h.buildingImport.date) : '',
+          f.unit(h.buildingImport.radius, 'm'),
+        ),
+      ]);
+    }
+    surroundingRows.push([
+      t.surfaceModel,
+      h.surfaceModel.enabled ? t.surfaceOn(h.surfaceModel.trees, f.unit(h.surfaceModel.radius, 'm')) : t.off,
+    ]);
+    if (imported || h.surfaceModel.enabled) surroundingRows.push([t.sources, SWISSTOPO_ATTRIBUTION]);
+  }
+
   const created = new Intl.DateTimeFormat(f.locale, { dateStyle: 'long', timeStyle: 'short' }).format(
     printedAt,
   );
@@ -173,7 +274,9 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
           title={t.location}
           items={[
             [t.name, displayLocationName(loc, f)],
-            [t.coordinates, f.coords(loc.latitude, loc.longitude, 4)],
+            // 6 decimals: the stored precision (1e-6°, at most 0.07 m).
+            [t.coordinates, f.coords(loc.latitude, loc.longitude, 6)],
+            ...placementRows,
             [t.elevation, f.unit(loc.elevation, 'm')],
             [t.timezone, loc.timezone],
           ]}
@@ -227,6 +330,7 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
             ],
           ]}
         />
+        {surroundingRows.length > 0 && <Group title={t.surroundings} items={surroundingRows} />}
         <Group
           title={t.economics}
           items={[

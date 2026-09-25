@@ -521,6 +521,84 @@ Antworten.
   (synthetische Vektorkacheln per `page.route`: laden, entfernen, nach dem Neuladen gespeichert, Rückfrage beim
   Neu laden, iPhone ohne waagrechtes Scrollen und mit 44-px-Zielen).
 
+### C, Gebäude: Lageplan, 3D-Ansicht und Druck (Teil 2)
+
+- **Lageplan** (`controls/siteplan/SitePlan.tsx`, Zeichnung `SitePlanMap.tsx`, Geometrie `sitePlanModel.ts`): im
+  Abschnitt «Gebäude» unter dem Fassadenazimut, sobald Gebäude mit Anker gespeichert sind; aufklappbar, zugeklappt
+  eine Zeile zum Stand («Balkon an der Fassade 180° S …» oder «noch nicht auf einer Fassade»). SVG-Draufsicht in
+  echten Pixeln (`useElementWidth`, Höhe 78 % der Breite, 240–440 px), Norden oben, Nordpfeil, Massstab (1, 2 oder
+  5 · 10^k m, höchstens 30 % der Breite). Grundrisse in einer Weltgruppe (Striche `non-scaling-stroke`), Marken in
+  Pixeln: eigenes Gebäude (Akzent), Nachbarn, bearbeitete (Warnfarbe), von Hand erfasste (Ok-Farbe, gestrichelt),
+  entfernte (nur gestrichelter Umriss), wählbare Fassaden (blau), Brandmauern (gepunktet), Balkon als Punkt auf der
+  Fassadenlinie mit Pfeil der Aussennormale und der Panelreihe (Reihenbreite, um die Balkontiefe vor der Wand),
+  Importanker («Adresse», wenn der letzte Import dieser Sitzung von einer Adresswahl dort kam, sonst «Importpunkt»),
+  der bisherige Standort gestrichelt, auf Wunsch die Sonnenrichtung zur gewählten Zeit (`useSun`, nur Strahl und
+  Beschriftung folgen der Zeit). Legende unter dem Plan.
+- **Eigenes Gebäude im Plan** (`sitePlanOwnBuilding`, nie ein entferntes): das mit «Das ist mein Gebäude» gewählte,
+  sonst der Teil, der den Punkt 0.5 m hinter dem Fassadenursprung enthält (wie `ownBuildingIds`), sonst das eigene
+  Gebäude des Imports (`summary.ownId`), sonst der Teil mit dem Standort, sonst der nächste bis 25 m. Fassaden =
+  `facadeEdges` gegen die übrigen nicht entfernten Gebäude (ein entferntes Nachbarhaus macht die Brandmauer frei).
+- **Fassade und Balkon** sind ein Entwurf, bis «Übernehmen» `location` (Balkonpunkt auf der Fassadenlinie, 1e-6°;
+  Name, Zeitzone und Höhe bleiben) und `facadeAzimuth` (Aussennormale, ganze Grad, 360 → 0) schreibt: ein neuer
+  Standort lädt Wetter, Gelände und Laserscan neu, das soll nicht bei jedem Zwischenschritt geschehen. «Verwerfen»;
+  ein neuer Import verwirft den Entwurf (er gehört zu einer Gebäudeliste). Setzen: Tipp oder Klick auf eine wählbare
+  Kante (die nächste innerhalb 22 px bei Touch, 12 px mit der Maus) setzt Fassade und Balkon an diese Stelle, der
+  Balkon lässt sich entlang der Kante ziehen; Tastatur und Screenreader: Auswahl «Fassade mit dem Balkon» (Azimut,
+  Richtung, Länge) und «Position entlang der Fassade» (m ab der linken Ecke von aussen gesehen, 0.1 m). Der Balkon
+  bleibt 0.5 m von den Enden, damit der Prüfpunkt hinter dem Ursprung im eigenen Grundriss liegt und Plan, Prismen
+  und Laserscan dasselbe eigene Gebäude finden (Test). Ein Standort gilt als gesetzt, wenn er höchstens 0.25 m neben
+  einer wählbaren Kante liegt und der Azimut höchstens 0.5° von ihrer Normale abweicht; nach dem Runden ist das immer
+  erfüllt (Test: Abweichung unter 0.07 m). Sonst schlägt der Plan die Kante mit dem Azimut am nächsten beim
+  eingestellten vor (5°-Stufen, dann die nähere, dann die längere), den Balkon auf der Projektion des Standorts
+  (ausserhalb der mittleren 90 %: die Mitte). Eine Brandmauer antippen erklärt, warum sie nicht wählbar ist.
+- **Öffnen nach einem Import:** `requestSitePlan('address')` öffnet auch den Abschnitt «Gebäude»; der Lageplan holt
+  die Anfrage beim Einhängen ab (`sitePlanOpen`, `sitePlanGuide` in `buildingImportStore`, nicht gespeichert),
+  zeigt die Anleitung und springt ohne Animation an seinen Anfang (eine weiche Bewegung endete auf dem Handy
+  rund 250 px zu früh, weil Ergebnisse darüber noch wachsen; nach dem Sprung hält die Scroll-Verankerung ihn fest). Nach
+  «Gebäude laden» öffnet er sich nur, wenn der Standort noch auf keiner Fassade liegt, und erst wenn der Abschnitt
+  aufgeht.
+- **Touch, Maus, Tastatur:** `touch-action: pan-y`: senkrechtes Wischen scrollt die Seite; ein Tipp handelt erst mit
+  dem `click`; seitwärts mehr als 8 px verschiebt den Plan (auf dem Balkon: zieht ihn); zwei Finger zoomen und
+  verschieben. Das Mausrad scrollt die Seite und zeigt den Hinweis «Zum Zoomen Strg (Mac: ⌘) …», Strg/⌘ + Rad (auch
+  das Trackpad-Pinch) zoomt am Zeiger. Knöpfe Vergrössern, Verkleinern, Zentrieren (44 px auf Touch). Der Plan ist
+  eine fokussierbare Gruppe mit Textbeschreibung: Pfeile verschieben, Plus/Minus zoomen, 0 zentriert. Breite der
+  Ansicht 8–1500 m, anfangs 2.2 × das eigene Gebäude, mindestens 50 m.
+- **Nachbar antippen:** Karte mit Name, Markierungen, Höhe, Basis, Abstand und Richtung vom Balkon; «In der Liste
+  bearbeiten» (`requestBuildingFocus`: öffnet «Horizont & Umgebung», die Liste an dieser Stelle, klappt das Gebäude
+  auf und setzt den Fokus darauf), «Das ist mein Gebäude», «Schliessen».
+- **3D** (`views/scene3d/Buildings3D.tsx`, Geometrie `buildingsGeometry.ts`): alle nicht entfernten Gebäude ausser
+  dem eigenen (`ownBuildingIds`) als Prismen relativ zum Fassadenursprung (Weltursprung der Szene), unabhängig vom
+  Laserscan (Darstellung). Ein zusammengeführtes Dreiecksnetz mit flachen Normalen und Farbe je Ecke (swisstopo wie
+  die Hindernisse, bearbeitete zur Warnfarbe, von Hand erfasste zur Ok-Farbe getönt, wie im Lageplan), Dächer per
+  Earcut (`ShapeUtils`, konkave Grundrisse und Schlüssellochringe), Unterseite nur bei Basis über dem Boden, Umriss
+  mit senkrechten Kanten nur ab 20° Knick. Wirft und empfängt Schatten; die Schattenkamera bekommt alle Dächer als
+  Tiefe und passt sich zusätzlich an die Gebäude im Quadrat ±60 m an (darauf beschnitten; 60 m wie bei den
+  Hindernissen). Zwei Index-Puffer über dieselben Ecken teilen das Netz in deckend und durchscheinend (0.22):
+  Prismen, die eine der Panelreihen verdecken (Strecken Kamera → Enden und Mitte jeder Reihe gegen die Wände, nur
+  nach einer Kamerabewegung ab 5 cm), werden durchscheinend, ausser in «Aus Sonnenrichtung»; ihr Schatten bleibt.
+  Legendeneintrag «Umgebungsgebäude» (Ebene ein/aus). Gemessen (Node 22, Xeon 2.1 GHz, die 120 nächsten echten Teile,
+  909–960 Ecken): Netz 2.9–3.5 ms, Sichttest 0.03–0.05 ms je Kamerabewegung.
+- **Eigenes Gebäude in 3D:** Liegt der Standort auf der Wand des eigenen Grundrisses (höchstens 0.3 m und 3° daneben),
+  ersetzt dieser Grundriss den schematischen Quader (`ownBody`: um den Ursprung auf die Fassadenlinie gedreht und
+  geschoben, mindestens so hoch wie der Quader; Fenster über den ebenen Teil der Fassade um den Ursprung, im Raster
+  der Balkontüren), sodass angrenzende Nachbarn anstossen statt hineinzuragen. Sonst (noch nicht bestätigt) bleibt der
+  Quader. Rahmung, Kameravorlagen und Schattenpassung bleiben beim schematischen Gebäude. Ausserhalb des Bildschirms
+  friert die Szene wie bisher ein (`useKeptWhileHidden`, die Prismen gehören zu `SceneData`).
+- **Druckbericht** (`export/PrintReport.tsx`): Koordinaten mit 6 Nachkommastellen; mit Gebäuden «Lage am Gebäude»
+  (Balkon auf der Fassade …, im Lageplan gesetzt, Koordinaten auf 0.000001° (höchstens 0.07 m) / nicht im Lageplan
+  bestätigt); Gruppe «Umgebung»: Umgebungsgebäude (Anzahl ohne entfernte; von Hand, bearbeitet, entfernt),
+  Gebäude-Import (Stand, Umkreis), Laserscan (ein mit Bäumen oder nur Gebäude, Umkreis / aus), Datenquellen «© swisstopo».
+  Angaben der Adresssuche (A) und des Laserscan-Status (B) ergänzt die Integration.
+- **Tests:** `sitePlanModel.test.ts` (eigenes Gebäude, Platzierung und Runden, Vorschlag, Raster, Ansicht),
+  `SitePlan.test.tsx` (Öffnen nach dem Import, Tastatur, Klick, Brandmauer, Nachbar, «Das ist mein Gebäude», Touch:
+  Bildlauf, seitliches Ziehen, zwei Finger, Maus-Verschieben, Zoom-Knöpfe, Strg + Rad, Englisch),
+  `buildingsGeometry.test.ts` (Prismen, Einrasten auf die Fassade, Netz: Normalen, Umlaufsinn, Fläche konkaver Dächer;
+  Sichttest, Schattenpunkte), `BuildingList.test.tsx` (Anfrage aus dem Plan), `PrintReport.test.tsx`,
+  `e2e/buildings.spec.ts`: Import (mit der Adresssuche, sobald es sie gibt, sonst «Gebäude laden») → Lageplan mit
+  Anleitung → Klick auf die Ostwand, Südwand per Auswahl und Regler → «Übernehmen» → Teilen-Link mit Standort und
+  Azimut 180° → Liste → die Ebene «Umgebungsgebäude» ändert mehr als 2000 Pixel des 3D-Bilds; iPhone: Fassade antippen,
+  16-px-Auswahl, 44-px-Knöpfe, kein waagrechtes Scrollen. Beide Basis-Pfade.
+
 ## i18n
 
 Jede Komponente definiert ihre Texte lokal:

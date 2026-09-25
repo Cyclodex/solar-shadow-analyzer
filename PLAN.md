@@ -68,8 +68,12 @@ Die Phasen des alten Plans und ihre Umsetzung:
   - Erledigt, Gebäude Teil 1: exakter Prismen-Horizont (Kantensweep) je Stockwerk und Neigung, Import nach der
     Adresswahl und mit «Gebäude laden» (Fortschritt, Abbrechen, Fehler, Rückfrage vor dem Verwerfen von Änderungen),
     Ausdünnen auf die Gebäude, die den Horizont einer möglichen Fassade setzen, plus Umgebung, Fassadenkanten und
-    Brandmauern, Gebäudeliste mit Bearbeiten, Entfernen/Wiederherstellen und Eingabe von Hand. Offen für Teil 2:
-    Lageplan, 3D-Ansicht, Druckbericht.
+    Brandmauern, Gebäudeliste mit Bearbeiten, Entfernen/Wiederherstellen und Eingabe von Hand.
+  - Erledigt, Gebäude Teil 2: Lageplan (Draufsicht mit Massstab, Nordpfeil, Adresse, Sonnenrichtung; Fassade und
+    Balkon antippen, ziehen oder per Auswahl und Regler, «Übernehmen» setzt Standort und Fassadenazimut; Zoom mit
+    zwei Fingern, Strg + Mausrad oder Knöpfen; öffnet sich nach einer Adresswahl), Nachbargebäude als Prismen in der
+    3D-Ansicht (zusammengeführt, verdeckende durchscheinend, eigenes Gebäude mit echtem Grundriss) und Zeilen zu
+    Lage, Gebäuden, Laserscan und Datenquellen im Druckbericht.
 
 ## Offen
 

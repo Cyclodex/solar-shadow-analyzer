@@ -1,4 +1,4 @@
-import { useId, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Button } from '../../components/Button';
 import { DownloadIcon } from '../../components/icons';
 import { requestBuildingImport } from '../../hooks/useBuildingImport';
@@ -133,6 +133,32 @@ export function BuildingList() {
   }, [buildings, site]);
   const visible = showAll ? rows : rows.slice(0, LIST_PAGE);
 
+  // «In der Liste bearbeiten» in the site plan: open the list at that building (state adjusted while
+  // rendering, once per request), then focus it and clear the request (effect).
+  const focusRequest = useBuildingImportStore((s) => s.buildingFocus);
+  const [seenFocus, setSeenFocus] = useState(focusRequest);
+  const [focusTarget, setFocusTarget] = useState<{ id: number; buildingId: string } | null>(null);
+  if (focusRequest !== seenFocus) {
+    setSeenFocus(focusRequest);
+    const pos = focusRequest ? rows.findIndex((r) => r.building.id === focusRequest.buildingId) : -1;
+    if (focusRequest && pos >= 0) {
+      setListOpen(true);
+      if (pos >= LIST_PAGE) setShowAll(true);
+      setOpenIds((prev) => new Set(prev).add(focusRequest.buildingId));
+      setFocusTarget(focusRequest);
+    }
+  }
+  const rootRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (focusRequest) useBuildingImportStore.getState().consumeBuildingFocus();
+  }, [focusRequest]);
+  useEffect(() => {
+    if (!focusTarget) return;
+    const items = rootRef.current?.querySelectorAll<HTMLElement>('li[data-building]') ?? [];
+    const item = [...items].find((el) => el.dataset.building === focusTarget.buildingId);
+    item?.querySelector<HTMLButtonElement>('button[aria-expanded]')?.focus();
+  }, [focusTarget]);
+
   const setBuildings = (next: Building[]): void =>
     setConfig((c) => ({ ...c, horizon: { ...c.horizon, buildings: next } }));
 
@@ -207,7 +233,7 @@ export function BuildingList() {
     .join(' · ');
 
   return (
-    <div className={styles.root}>
+    <div ref={rootRef} className={styles.root}>
       <h4 className={styles.heading}>{t.heading}</h4>
       {buildings.length > 0 ? (
         <p className={styles.summary}>{summaryLine}</p>

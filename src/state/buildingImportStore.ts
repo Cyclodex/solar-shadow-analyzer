@@ -1,11 +1,13 @@
 import { create } from 'zustand';
 import type { BuildingSourceError } from '../model/buildingSources';
+import { useUiStore } from './uiStore';
 
 // ─────────────────────────────────────────────
 // BUILDING IMPORT STATE (not persisted; owned by the buildings feature, docs/ARCHITECTURE.md "Umgebung")
 // Progress, result and errors of the swisstopo building import (hooks/useBuildingImport.ts writes them), a
-// pending confirmation (a re-import would discard the user's changes to imported buildings), and the request
-// to open the site plan after an import (the site plan consumes it once, like uiStore.surroundingsImport).
+// pending confirmation (a re-import would discard the user's changes to imported buildings), the request
+// to open the site plan after an import (the site plan consumes it once, like uiStore.surroundingsImport),
+// whether the site plan is open, and a request from the site plan to show one building in the building list.
 // ─────────────────────────────────────────────
 
 /** Why an import runs: an address was picked (automatic) or the user pressed «Gebäude laden». */
@@ -73,6 +75,12 @@ export interface SitePlanRequest {
   reason: BuildingImportReason;
 }
 
+/** Request of the site plan to open one building in the building list; `id` grows with every request. */
+export interface BuildingFocusRequest {
+  id: number;
+  buildingId: string;
+}
+
 export interface BuildingImportState {
   status: BuildingImportStatus;
   progress: BuildingImportProgress | null;
@@ -86,6 +94,14 @@ export interface BuildingImportState {
   sitePlanRequest: SitePlanRequest | null;
   /** Returns the pending site-plan request and clears it (null when none): each request is handled once. */
   consumeSitePlanRequest: () => SitePlanRequest | null;
+  /** Site plan shown (this session; the «Gebäude» section renders it only while open). */
+  sitePlanOpen: boolean;
+  /** The site plan shows its instructions (opened by an import until the placement is applied). */
+  sitePlanGuide: boolean;
+  /** Pending request to open a building in the building list (null when none). */
+  buildingFocus: BuildingFocusRequest | null;
+  /** Returns the pending building-list request and clears it (null when none). */
+  consumeBuildingFocus: () => BuildingFocusRequest | null;
 }
 
 export const INITIAL_BUILDING_IMPORT = {
@@ -96,7 +112,10 @@ export const INITIAL_BUILDING_IMPORT = {
   summary: null,
   pendingConfirm: null,
   sitePlanRequest: null,
-} as const satisfies Omit<BuildingImportState, 'consumeSitePlanRequest'>;
+  sitePlanOpen: false,
+  sitePlanGuide: false,
+  buildingFocus: null,
+} as const satisfies Omit<BuildingImportState, 'consumeSitePlanRequest' | 'consumeBuildingFocus'>;
 
 export const useBuildingImportStore = create<BuildingImportState>()((set, get) => ({
   ...INITIAL_BUILDING_IMPORT,
@@ -105,11 +124,28 @@ export const useBuildingImportStore = create<BuildingImportState>()((set, get) =
     if (request) set({ sitePlanRequest: null });
     return request;
   },
+  consumeBuildingFocus: () => {
+    const request = get().buildingFocus;
+    if (request) set({ buildingFocus: null });
+    return request;
+  },
 }));
 
 let sitePlanRequestId = 0;
+let buildingFocusId = 0;
 
-/** Asks the site plan to open (after an import). */
+/**
+ * Asks the site plan to open (after an import). After an address pick the «Gebäude» section opens too (the
+ * site plan lives there and consumes the request when it mounts); after «Gebäude laden» the request waits
+ * until the user opens that section.
+ */
 export function requestSitePlan(reason: BuildingImportReason): void {
   useBuildingImportStore.setState({ sitePlanRequest: { id: ++sitePlanRequestId, reason } });
+  if (reason === 'address') useUiStore.getState().setSectionOpen('building', true);
+}
+
+/** Opens «Horizont & Umgebung» and asks the building list to show and focus `buildingId`. */
+export function requestBuildingFocus(buildingId: string): void {
+  useBuildingImportStore.setState({ buildingFocus: { id: ++buildingFocusId, buildingId } });
+  useUiStore.getState().setSectionOpen('horizon', true);
 }

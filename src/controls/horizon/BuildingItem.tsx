@@ -116,7 +116,12 @@ export function BuildingItem({
   ].filter((b): b is string => b !== null);
 
   return (
-    <li className={styles.item} data-open={open || undefined} data-removed={removed || undefined}>
+    <li
+      className={styles.item}
+      data-building={building.id}
+      data-open={open || undefined}
+      data-removed={removed || undefined}
+    >
       <div className={styles.head}>
         <button
           ref={toggleRef}

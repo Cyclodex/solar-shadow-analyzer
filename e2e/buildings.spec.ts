@@ -1,9 +1,14 @@
-import { devices, expect, test, type Page } from '@playwright/test';
+import { devices, expect, test, type Locator, type Page } from '@playwright/test';
+import { decode } from 'fast-png';
 import { PbfWriter } from 'pbf';
+import { enuToLonLat } from '../src/model/enu.ts';
+import { wgs84ToLv95 } from '../src/model/lv95.ts';
 
 // Surrounding buildings (docs/ARCHITECTURE.md, "Umgebung"): «Gebäude laden» around the default location with
-// the swisstopo vector tiles mocked by a synthetic tile, then the list (edit, remove, persisted). Every other
-// external request is blocked, like in the other specs.
+// the swisstopo vector tiles mocked by a synthetic tile, then the list (edit, remove, persisted), the site plan
+// (facade and balcony → location) and the 3D view. The address search (SearchServer, building register,
+// height service) answers with a synthetic address in the own building. Every other external request is
+// blocked, like in the other specs.
 
 /** Default location of the app (DEFAULT_CONFIG): 47.1° N, 7.45° E. */
 const SITE = { latitude: 47.1, longitude: 7.45 };
@@ -131,8 +136,56 @@ function tileBytes(x: number, y: number): Uint8Array {
   );
 }
 
+/** The synthetic address: 6 m north of SITE, inside the own building. */
+const ADDRESS = enuToLonLat(SITE, 0, 6);
+
+/** SearchServer answer for the synthetic address (the shape of api3.geo.admin.ch, see geocode fixtures). */
+function searchResult(): unknown {
+  const { east, north } = wgs84ToLv95(ADDRESS.latitude, ADDRESS.longitude);
+  return {
+    results: [
+      {
+        attrs: {
+          detail: 'teststrasse 1 3000 bern 351 bern ch be',
+          featureId: '9999999_0',
+          geom_st_box2d: `BOX(${east.toFixed(3)} ${north.toFixed(3)},${east.toFixed(3)} ${north.toFixed(3)})`,
+          label: 'Teststrasse 1 <b>3000 Bern</b>',
+          lat: ADDRESS.latitude,
+          lon: ADDRESS.longitude,
+          num: 1,
+          objectclass: '',
+          origin: 'address',
+          rank: 7,
+          x: north,
+          y: east,
+          zoomlevel: 10,
+        },
+        id: 1,
+        weight: 7,
+      },
+    ],
+  };
+}
+
 async function mockTiles(page: Page): Promise<void> {
   await page.route(/open-meteo\.com|amazonaws\.com|geo\.admin\.ch/, (route) => route.abort());
+  // The address search (feature A): search, building register (none: 404) and height service.
+  await page.route(/api3\.geo\.admin\.ch/, (route) => {
+    const url = new URL(route.request().url());
+    const json = (body: unknown, status = 200) =>
+      route.fulfill({
+        status,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': '*' },
+        body: JSON.stringify(body),
+      });
+    if (url.pathname.endsWith('/SearchServer')) {
+      const text = url.searchParams.get('searchText') ?? '';
+      return json(/^teststrasse/i.test(text) ? searchResult() : { results: [] });
+    }
+    if (url.pathname.endsWith('/height')) return json({ height: '540.0' });
+    return json({ status: 'error', code: 404 }, 404);
+  });
   // Registered later = matched first: the vector tiles are served, everything else stays blocked.
   await page.route(/vectortiles\.geo\.admin\.ch/, (route) => {
     const url = route.request().url();
@@ -190,6 +243,8 @@ test('«Gebäude laden» imports the surrounding buildings; edits persist across
   await expect(across.getByRole('button', { name: /wiederherstellen$/ })).toBeVisible();
   await expect(page.getByText(/^2 Gebäude · Quelle swisstopo, Stand .* · 1 entfernt$/)).toBeVisible();
 
+  // The share hash follows the config at most every 400 ms, and a reload restores it from there.
+  await expect.poll(async () => JSON.stringify(await hashConfig(page))).toContain('"r":1');
   await page.reload();
   await openBuildings(page);
   await expect(page.getByText(/^2 Gebäude · Quelle swisstopo, Stand .* · 1 entfernt$/)).toBeVisible();
@@ -235,5 +290,154 @@ test.describe('iPhone', () => {
       const box = await button.boundingBox();
       expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
     }
+  });
+});
+
+// ── Site plan and 3D view ─────────────────────
+
+/** The config in the #c= share hash (base64url JSON with short keys, see share.ts). */
+async function hashConfig(page: Page): Promise<{ l?: { a?: number; o?: number }; b?: { a?: number } }> {
+  const hash = new URL(page.url()).hash;
+  if (!hash.startsWith('#c=')) return {};
+  return JSON.parse(Buffer.from(hash.slice(3), 'base64url').toString('utf8')) as never;
+}
+
+async function openSection(page: Page, name: RegExp, touch: boolean): Promise<void> {
+  const toggle = page.getByRole('button', { name });
+  await toggle.scrollIntoViewIfNeeded();
+  if ((await toggle.getAttribute('aria-expanded')) !== 'true') await (touch ? toggle.tap() : toggle.click());
+}
+
+/**
+ * Imports the surroundings: with the address search (feature A) by picking the synthetic address (the site
+ * plan then opens by itself), else with «Gebäude laden» and opening the «Gebäude» section.
+ */
+async function importSurroundings(page: Page, touch: boolean): Promise<void> {
+  const press = (l: Locator): Promise<void> => (touch ? l.tap() : l.click());
+  await openSection(page, /^Standort/, touch);
+  const search = page.getByRole('combobox', { name: 'Adresse oder Ort suchen' });
+  if ((await search.count()) > 0) {
+    await press(search);
+    await search.pressSequentially('Teststrasse 1', { delay: 30 });
+    await press(page.getByRole('option', { name: /Teststrasse 1, 3000 Bern/ }));
+    return;
+  }
+  await openSection(page, /^Horizont & Umgebung/, touch);
+  await press(page.getByRole('button', { name: 'Gebäude laden' }));
+  await expect(page.getByText(/^3 Gebäude · Quelle swisstopo/)).toBeVisible({ timeout: 20_000 });
+  await openSection(page, /^Gebäude\s?\d+°/, touch);
+}
+
+/** Screen centre of the facade edge `index` of the own building on the plan (a line, 0 px wide if vertical). */
+async function edgeCentre(plan: Locator, index: string | null): Promise<{ x: number; y: number }> {
+  await plan.scrollIntoViewIfNeeded();
+  return plan
+    .locator(`[data-edge="${index}"] line`)
+    .first()
+    .evaluate((line) => {
+      const r = line.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    });
+}
+
+/** Pixels (of equal-size PNG screenshots) that differ clearly in colour. */
+function differingPixels(a: Buffer, b: Buffer): number {
+  const pa = decode(a);
+  const pb = decode(b);
+  if (pa.width !== pb.width || pa.height !== pb.height) return Infinity;
+  const ch = pa.channels;
+  let n = 0;
+  for (let i = 0; i < pa.data.length; i += ch) {
+    const d =
+      Math.abs(pa.data[i] - pb.data[i]) +
+      Math.abs(pa.data[i + 1] - pb.data[i + 1]) +
+      Math.abs(pa.data[i + 2] - pb.data[i + 2]);
+    if (d > 40) n++;
+  }
+  return n;
+}
+
+test('site plan: facade and balcony set the location; the buildings show in the list and in 3D', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await importSurroundings(page, false);
+  const plan = page.getByRole('group', { name: 'Lageplan, Norden oben' });
+  await expect(plan).toBeVisible({ timeout: 20_000 });
+  await expect(page.getByRole('note')).toContainText('Fassade und Balkon bestätigen');
+
+  // The own building stands alone: all four walls are facades.
+  const select = page.getByRole('combobox', { name: 'Fassade mit dem Balkon' });
+  await expect(select.locator('option')).toHaveText([/^0° N/, /^90° O/, /^180° S/, /^270° W/]);
+  // Clicking the east wall on the plan chooses it …
+  const east = await select.locator('option', { hasText: '90° O' }).getAttribute('value');
+  const eastCentre = await edgeCentre(plan, east);
+  await page.mouse.click(eastCentre.x, eastCentre.y);
+  await expect(select).toHaveValue(east ?? '');
+  // … the keyboard alternative: the south wall, 4 m from its west corner.
+  const south = await select.locator('option', { hasText: '180° S' }).getAttribute('value');
+  await select.selectOption(south ?? '');
+  const along = page.getByRole('textbox', { name: /Position entlang der Fassade/ });
+  await along.fill('4');
+  await along.press('Enter');
+  await expect(page.getByText(/Noch nicht übernommen/)).toBeVisible();
+  await page.getByRole('button', { name: 'Übernehmen', exact: true }).click();
+  await expect(page.getByText('Balkon an der Fassade 180° S des eigenen Gebäudes.')).toBeVisible();
+
+  // Location = the balcony on the south wall (≈ 4 m east of its west corner at −8 m), 1e-6°.
+  await expect.poll(async () => (await hashConfig(page)).b?.a).toBe(180);
+  const { l } = await hashConfig(page);
+  const metresPerDegLon = (Math.PI / 180) * 6378137 * Math.cos((SITE.latitude * Math.PI) / 180);
+  expect(Math.abs((l?.a ?? 0) - SITE.latitude) * 111_200).toBeLessThan(0.6);
+  expect(Math.abs((l?.o ?? 0) - (SITE.longitude - 4 / metresPerDegLon)) * metresPerDegLon).toBeLessThan(0.6);
+  for (const v of [l?.a ?? 0, l?.o ?? 0]) expect(Math.round(v * 1e6) / 1e6).toBe(v);
+
+  // Listed in «Horizont & Umgebung».
+  await openSection(page, /^Horizont & Umgebung/, false);
+  await page.getByRole('button', { name: 'Liste (3)' }).click();
+  await expect(page.locator('li[data-building]')).toHaveCount(3);
+
+  // 3D: the buildings layer changes the picture.
+  const canvas = page.locator('canvas').first();
+  await canvas.scrollIntoViewIfNeeded();
+  const layer = page.getByRole('button', { name: 'Umgebungsgebäude' });
+  await expect(layer).toHaveAttribute('aria-pressed', 'true');
+  await page.waitForTimeout(500);
+  const withBuildings = await canvas.screenshot();
+  await layer.click();
+  await expect(layer).toHaveAttribute('aria-pressed', 'false');
+  await expect
+    .poll(async () => differingPixels(withBuildings, await canvas.screenshot()), { timeout: 10_000 })
+    .toBeGreaterThan(2000);
+});
+
+test.describe('site plan on an iPhone', () => {
+  const { userAgent, deviceScaleFactor, isMobile, hasTouch, viewport } = devices['iPhone 14'];
+  test.use({ userAgent, deviceScaleFactor, isMobile, hasTouch, viewport });
+
+  test('tap a facade, apply; fits the screen with 44 px buttons', async ({ page }) => {
+    await page.goto('./');
+    await importSurroundings(page, true);
+    const plan = page.getByRole('group', { name: 'Lageplan, Norden oben' });
+    await expect(plan).toBeVisible({ timeout: 20_000 });
+    const select = page.getByRole('combobox', { name: 'Fassade mit dem Balkon' });
+    expect(await select.evaluate((el) => getComputedStyle(el).fontSize)).toBe('16px');
+    const north = await select.locator('option', { hasText: '0° N' }).getAttribute('value');
+    const edge = await edgeCentre(plan, north);
+    await page.touchscreen.tap(edge.x, edge.y);
+    await expect(select).toHaveValue(north ?? '');
+    await page.getByRole('button', { name: 'Übernehmen', exact: true }).tap();
+    await expect(page.getByText('Balkon an der Fassade 0° N des eigenen Gebäudes.')).toBeVisible();
+    for (const name of ['Vergrössern', 'Verkleinern', 'Plan zentrieren', 'Übernehmen']) {
+      const box = await page.getByRole('button', { name, exact: true }).boundingBox();
+      expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
+      expect(box?.width ?? 0).toBeGreaterThanOrEqual(44);
+    }
+    const planBox = await plan.boundingBox();
+    expect((planBox?.x ?? 0) + (planBox?.width ?? 999)).toBeLessThanOrEqual(viewport.width);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(0);
   });
 });

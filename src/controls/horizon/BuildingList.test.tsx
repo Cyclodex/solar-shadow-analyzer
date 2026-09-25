@@ -8,7 +8,7 @@ import { facadeTransform } from '../../model/enu';
 import { ringArea } from '../../model/polygon';
 import { MAX_BUILDINGS, sanitizeConfig } from '../../model/share';
 import type { Building, Config } from '../../model/types';
-import { useBuildingImportStore } from '../../state/buildingImportStore';
+import { requestBuildingFocus, useBuildingImportStore } from '../../state/buildingImportStore';
 import { useConfigStore } from '../../state/configStore';
 import { useDataStore } from '../../state/dataStore';
 import { useUiStore } from '../../state/uiStore';
@@ -149,6 +149,19 @@ describe('BuildingList', () => {
       expect.stringMatching(/^Gebäude 215\sm hoch · 30\sm entfernt, S$/),
       expect.stringMatching(/^Neubauvon Hand12\sm hoch · 32\sm entfernt, OSO$/),
     ]);
+  });
+
+  it('«In der Liste bearbeiten» of the site plan opens the list at that building and focuses it', () => {
+    setConfig({ buildings: BUILDINGS, buildingImport: { ...SITE, radius: 300, date: '2026-09-25' } });
+    render(<BuildingList />);
+    expect(screen.queryByRole('list')).toBeNull();
+    act(() => requestBuildingFocus('b2'));
+    expect(useUiStore.getState().openSections.horizon).toBe(true);
+    const toggle = itemToggle('Gebäude 2');
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(toggle).toHaveFocus();
+    expect(screen.getByRole('textbox', { name: 'Höhe über der Basis' })).toHaveValue('15');
+    expect(useBuildingImportStore.getState().buildingFocus).toBeNull();
   });
 
   it('editing the height marks an imported building as edited', () => {
