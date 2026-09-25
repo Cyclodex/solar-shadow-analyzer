@@ -11,8 +11,7 @@ import {
 } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useSelectedUtc } from '../hooks/useModel';
-import { anchorDistance, OTHER_SITE_DISTANCE } from '../model/buildings';
-import { SWISSTOPO_ATTRIBUTION } from '../model/buildingSources';
+import { anchorDistance, OTHER_SITE_DISTANCE, SWISSTOPO_CREDIT } from '../model/buildings';
 import { lonLatToEnu } from '../model/enu';
 import type { Config, ShadingModel } from '../model/types';
 import { useConfig } from '../state/configStore';
@@ -254,7 +253,7 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
       t.surfaceModel,
       h.surfaceModel.enabled ? t.surfaceOn(h.surfaceModel.trees, f.unit(h.surfaceModel.radius, 'm')) : t.off,
     ]);
-    if (imported || h.surfaceModel.enabled) surroundingRows.push([t.sources, SWISSTOPO_ATTRIBUTION]);
+    if (imported || h.surfaceModel.enabled) surroundingRows.push([t.sources, SWISSTOPO_CREDIT]);
   }
 
   const created = new Intl.DateTimeFormat(f.locale, { dateStyle: 'long', timeStyle: 'short' }).format(

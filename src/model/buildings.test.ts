@@ -2,14 +2,11 @@ import { describe, expect, it } from 'vitest';
 import type { Building, FacadeVector, Obstacle } from './types';
 import {
   ADJOINING_DISTANCE,
-  CONTEXT_RADIUS,
   FACADE_MIN_LENGTH,
   IMPORT_MAX_BUILDINGS,
   IMPORT_MAX_VERTICES,
   OWN_MAX_DISTANCE,
-  PRUNE_HEIGHT_MIN,
-  PRUNE_MAX_HEIGHTS,
-  STATION_SPACING,
+  SWISSTOPO_CREDIT,
   buildingBearing,
   clipRingAbove,
   edgePoint,
@@ -18,25 +15,32 @@ import {
   facadePrisms,
   findOwnBuilding,
   hasImportEdits,
-  horizonScores,
-  importCandidate,
   localIsoDate,
   manualAnchor,
-  planImport,
   prismHorizonTangents,
   prismHorizons,
   projectOntoEdge,
-  pruneHeights,
-  pruneStations,
   reanchorFootprint,
   rectFootprint,
   ringCentroid,
   ringsDistance,
   tanToDeg,
-  type ImportCandidate,
   type Prism,
-  type PruneStation,
 } from './buildings';
+import {
+  CONTEXT_RADIUS,
+  PRUNE_HEIGHT_MIN,
+  PRUNE_MAX_HEIGHTS,
+  STATION_SPACING,
+  horizonScores,
+  importCandidate,
+  planImport,
+  pruneHeights,
+  pruneStations,
+  type ImportCandidate,
+  type PruneStation,
+} from './buildingImport';
+import { SWISSTOPO_ATTRIBUTION } from './buildingSources';
 import { enuToLonLat, facadeToEnu, facadeTransform, lonLatToEnu } from './enu';
 import { obstacleHorizon } from './horizon';
 import { MAX_BUILDING_VERTICES } from './share';
@@ -933,6 +937,10 @@ describe('small helpers', () => {
     expect(hasImportEdits([b({ source: 'manual' })])).toBe(false);
     expect(hasImportEdits([b({ removed: true })])).toBe(true);
     expect(hasImportEdits([b({ edited: true })])).toBe(true);
+  });
+
+  it('SWISSTOPO_CREDIT is the attribution of the tile source', () => {
+    expect(SWISSTOPO_CREDIT).toBe(SWISSTOPO_ATTRIBUTION);
   });
 
   it('localIsoDate is the local calendar date', () => {

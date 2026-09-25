@@ -152,7 +152,10 @@ describe('building import', () => {
     const { fn } = deferredFetch(ok());
     const run = startBuildingImport({ ...SITE, reason: 'manual' }, deps(fn));
     expect(state().status).toBe('loading');
-    expect(state().progress).toEqual({ phase: 'tiles', done: 1, total: 2, bytes: 150_000 });
+    // The job module loads first (in this thread without a worker), then the tiles report.
+    await waitFor(() =>
+      expect(state().progress).toEqual({ phase: 'tiles', done: 1, total: 2, bytes: 150_000 }),
+    );
     abortBuildingImport();
     await run;
     expect(state().status).toBe('idle');
@@ -167,7 +170,9 @@ describe('building import', () => {
     const run2 = startBuildingImport({ ...SITE, reason: 'manual' }, deps(vi.fn(async () => ok())));
     await Promise.all([run1, run2]);
     expect(state().status).toBe('ready');
-    expect((first.fn.mock.calls[0] as unknown as FetchArgs)[3]?.signal?.aborted).toBe(true);
+    // The first one stopped before or while fetching its tiles.
+    const call = first.fn.mock.calls[0] as unknown as FetchArgs | undefined;
+    if (call) expect(call[3]?.signal?.aborted).toBe(true);
   });
 
   it('an error keeps the config, retry repeats the import', async () => {

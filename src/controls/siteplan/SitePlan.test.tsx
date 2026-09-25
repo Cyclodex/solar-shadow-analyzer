@@ -10,7 +10,8 @@ import { requestSitePlan, useBuildingImportStore } from '../../state/buildingImp
 import { useConfigStore } from '../../state/configStore';
 import { useUiStore } from '../../state/uiStore';
 import { resetStores } from '../../test/utils';
-import { SitePlan } from './SitePlan';
+import { SitePlan as SitePlanEntry } from './SitePlan';
+import { SitePlanPanel as SitePlan } from './SitePlanPanel';
 
 const ANCHOR = { latitude: 46.958474, longitude: 7.45363, radius: 300, date: '2026-09-25' };
 
@@ -90,6 +91,14 @@ describe('SitePlan', () => {
   it('renders nothing without stored buildings', () => {
     const { container } = render(<SitePlan />);
     expect(container).toBeEmptyDOMElement();
+  });
+
+  it('the entry loads the plan (its own chunk) once buildings are stored', async () => {
+    const { container } = render(<SitePlanEntry />);
+    expect(container).toBeEmptyDOMElement();
+    act(() => setSite());
+    expect(await screen.findByRole('button', { name: 'Lageplan' })).toBeInTheDocument();
+    expect(screen.getByText(/liegt noch nicht auf einer Fassade/)).toBeInTheDocument();
   });
 
   it('shows the status closed; open, it draws the plan with the own building and its facades', () => {

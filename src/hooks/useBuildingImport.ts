@@ -1,25 +1,16 @@
 import { useEffect } from 'react';
 import type { Building, Config } from '../model/types';
-import { fetchSwisstopoBuildings } from '../model/buildingSources';
+import type { ImportJobInput, ImportJobOptions } from '../model/buildingImportJob';
 import {
-  findOwnBuilding,
   hasImportEdits,
-  horizonScores,
-  importCandidate,
   IMPORT_MAX_BUILDINGS,
   IMPORT_MAX_VERTICES,
   localIsoDate,
-  planImport,
-  pruneHeights,
-  pruneStations,
   reanchorFootprint,
-  type ImportCandidate,
-  type PruneStation,
 } from '../model/buildings';
-import { facadeToEnu, lonLatToEnu } from '../model/enu';
+import { lonLatToEnu } from '../model/enu';
 import { floorPlacements } from '../model/geometry';
 import { MAX_BUILDINGS, MAX_TOTAL_BUILDING_VERTICES } from '../model/share';
-import { OWN_BUILDING_EXCLUSION } from '../model/surroundings';
 import { cmToM } from '../model/units';
 import {
   INITIAL_BUILDING_IMPORT,
@@ -30,25 +21,26 @@ import {
 } from '../state/buildingImportStore';
 import { useConfigStore } from '../state/configStore';
 import { useUiStore, type SurroundingsImportRequest } from '../state/uiStore';
+import { runImport } from './buildingImportClient';
 
 // ─────────────────────────────────────────────
 // SWISSTOPO BUILDING IMPORT (owned by the buildings feature, docs/ARCHITECTURE.md "Umgebung")
 // After an address pick (uiStore.requestSurroundingsImport → useBuildingImportLoader, mounted once in
-// <DataLoader/>) or «Gebäude laden» (BuildingList): fetch the building parts within surfaceModel.radius
-// (model/buildingSources.ts), identify the own building (part containing the address point, else the nearest
-// within 25 m; for «Gebäude laden» first the part behind the facade origin), keep the buildings that set the
-// horizon of any candidate facade plus the own building, its adjoining parts and near context within the caps
-// (model/buildings.ts planImport), and store them with the anchor. A re-import replaces the imported buildings
-// and keeps the manual ones (moved to the new anchor). An address pick also switches the laser scan on and
-// asks the site plan to open. The import runs outside React (one at a time, a new one aborts the running
-// one): the state lives in state/buildingImportStore.ts. Never throws.
+// <DataLoader/>) or «Gebäude laden» (BuildingList): fetch the building parts within surfaceModel.radius,
+// identify the own building (part containing the address point, else the nearest within 25 m; for «Gebäude
+// laden» first the part behind the facade origin), keep the buildings that set the horizon of any candidate
+// facade plus the own building, its adjoining parts and near context within the caps (model/buildingImportJob.ts,
+// in the building-import worker: buildingImportClient.ts), and store them with the anchor. A re-import replaces
+// the imported buildings and keeps the manual ones (moved to the new anchor). An address pick also switches the
+// laser scan on and asks the site plan to open. The import runs outside React (one at a time, a new one aborts
+// the running one): the state lives in state/buildingImportStore.ts. Never throws.
 // ─────────────────────────────────────────────
 
-/** Injectable dependencies (tests). */
+/** Injectable dependencies (tests; with a tile source or fetch the import runs in this thread). */
 export interface BuildingImportDeps {
-  fetchBuildings?: typeof fetchSwisstopoBuildings;
+  fetchBuildings?: ImportJobOptions['fetchBuildings'];
   fetchImpl?: typeof fetch;
-  /** Awaited between the selection steps (default: a macrotask, keeps the page responsive). */
+  /** Awaited between the selection steps in this thread (default: a macrotask, keeps the page responsive). */
   pause?: () => Promise<void>;
   /** Import date (default: now). */
   now?: () => number;
@@ -150,9 +142,6 @@ export async function startBuildingImport(
   const id = ++runId;
   const current = (): boolean => id === runId && !ctrl.signal.aborted;
   const req = { ...request, latitude: round6(request.latitude), longitude: round6(request.longitude) };
-  const fetchBuildings = deps.fetchBuildings ?? fetchSwisstopoBuildings;
-  const pause = deps.pause ?? macrotask;
-  const radius = useConfigStore.getState().config.horizon.surfaceModel.radius;
   setState({
     status: 'loading',
     progress: { phase: 'tiles', done: 0, total: 0, bytes: 0 },
@@ -161,11 +150,30 @@ export async function startBuildingImport(
     pendingConfirm: null,
   });
   try {
-    const res = await fetchBuildings(req.latitude, req.longitude, radius, {
+    // The selection works with the config as it is now; room is left for the buildings entered by hand.
+    const config = useConfigStore.getState().config;
+    const manualNow = config.horizon.buildings.filter((b) => b.source === 'manual');
+    const input: ImportJobInput = {
+      latitude: req.latitude,
+      longitude: req.longitude,
+      radius: config.horizon.surfaceModel.radius,
+      probeOwn: req.reason === 'manual',
+      location: { latitude: config.location.latitude, longitude: config.location.longitude },
+      facadeAzimuth: config.building.facadeAzimuth,
+      observers: configuredObservers(config),
+      maxBuildings: Math.min(IMPORT_MAX_BUILDINGS, MAX_BUILDINGS - manualNow.length),
+      maxVertices: Math.min(
+        IMPORT_MAX_VERTICES,
+        MAX_TOTAL_BUILDING_VERTICES - manualNow.reduce((n, b) => n + b.footprint.length, 0),
+      ),
+    };
+    const res = await runImport(input, {
       signal: ctrl.signal,
       fetchImpl: deps.fetchImpl,
-      onProgress: (done, total, bytes) => {
-        if (current()) setState({ progress: { phase: 'tiles', done, total, bytes } });
+      fetchBuildings: deps.fetchBuildings,
+      pause: deps.pause ?? macrotask,
+      onProgress: (progress) => {
+        if (current()) setState({ progress });
       },
     });
     if (!current()) return;
@@ -181,47 +189,10 @@ export async function startBuildingImport(
       return;
     }
 
-    // Selection (pruning), with the config as it is now.
-    const started = performance.now();
-    const config = useConfigStore.getState().config;
-    const anchor = { latitude: req.latitude, longitude: req.longitude };
-    const candidates: ImportCandidate[] = [];
-    for (const p of res.parts) {
-      const c = importCandidate(p);
-      if (c) candidates.push(c);
-    }
-    const footprints = candidates.map((c) => c.footprint);
-    const tops = candidates.map((c) => c.base + c.height);
-    const facadeAzimuth = config.building.facadeAzimuth;
-    const loc = lonLatToEnu(anchor, config.location.latitude, config.location.longitude);
-    const back = facadeToEnu([0, OWN_BUILDING_EXCLUSION.probeN], facadeAzimuth);
-    const probe: [number, number] = [loc[0] + back[0], loc[1] + back[1]];
-    const own = findOwnBuilding(footprints, [0, 0], req.reason === 'manual' ? probe : null);
-    const others = footprints.filter((_, i) => i !== own);
-    const observers = configuredObservers(config);
-    // The configured facade counts too while its origin lies within the import radius.
-    const extra: PruneStation[] =
-      Math.hypot(loc[0], loc[1]) <= radius ? [{ origin: loc, facadeAzimuth }] : [];
-    const stations = pruneStations(own >= 0 ? footprints[own] : null, others, extra);
-    const ownTop = own >= 0 ? tops[own] : observers.top;
-    const heights = pruneHeights(Math.max(ownTop, observers.top), observers.heights);
-    let done = 0;
-    const total = stations.length;
-    setState({ progress: { phase: 'select', done, total, bytes: res.bytes } });
-    const scores = await horizonScores(footprints, tops, stations, heights, observers.offsets, {
-      exclude: own >= 0 ? [own] : [],
-      signal: ctrl.signal,
-      pause: async () => {
-        done++;
-        if (current()) setState({ progress: { phase: 'select', done, total, bytes: res.bytes } });
-        await pause();
-      },
-    });
-    if (!current()) return;
-
     // Manual buildings stay (moved to the new anchor); the latest config wins (edits while loading).
     const latest = useConfigStore.getState().config;
     const oldAnchor = latest.horizon.buildingImport;
+    const anchor = { latitude: req.latitude, longitude: req.longitude };
     const manual: Building[] = [];
     let droppedManual = 0;
     for (const b of latest.horizon.buildings) {
@@ -230,27 +201,28 @@ export async function startBuildingImport(
       if (footprint) manual.push({ ...b, footprint });
       else droppedManual++;
     }
-    const manualVertices = manual.reduce((s, b) => s + b.footprint.length, 0);
-    const plan = planImport({
-      candidates,
-      scores,
-      own,
-      site: [0, 0],
-      maxBuildings: Math.min(IMPORT_MAX_BUILDINGS, MAX_BUILDINGS - manual.length),
-      maxVertices: Math.min(IMPORT_MAX_VERTICES, MAX_TOTAL_BUILDING_VERTICES - manualVertices),
-    });
+    // Buildings entered by hand while it loaded may need more room: the kept list is in priority order.
+    const kept = [...res.kept];
+    const room = MAX_BUILDINGS - manual.length;
+    const roomVertices = MAX_TOTAL_BUILDING_VERTICES - manual.reduce((n, b) => n + b.footprint.length, 0);
+    let vertices = kept.reduce((n, k) => n + k.footprint.length, 0);
+    while (kept.length > 0 && (kept.length > room || vertices > roomVertices)) {
+      vertices -= kept[kept.length - 1].footprint.length;
+      kept.pop();
+    }
     // Ids b<index + 1> (the compact form of share links). Imported buildings first: they are never deleted
     // (only marked removed), so deleting a manual one shifts no imported id (explicit ids in the link).
-    const imported: Building[] = plan.kept.map(({ index }) => ({
+    const imported: Building[] = kept.map((k) => ({
       id: '',
       name: '',
-      footprint: candidates[index].footprint,
-      base: candidates[index].base,
-      height: candidates[index].height,
+      footprint: k.footprint,
+      base: k.base,
+      height: k.height,
       source: 'swisstopo',
     }));
     const buildings = [...imported, ...manual].map((b, i) => ({ ...b, id: `b${i + 1}` }));
-    const ownPos = plan.kept.findIndex((k) => k.reason === 'own');
+    const ownPos = kept.findIndex((k) => k.reason === 'own');
+    const radius = input.radius;
     const date = localIsoDate(deps.now?.() ?? Date.now());
     useConfigStore.getState().setConfig((c) => ({
       ...c,
@@ -263,25 +235,25 @@ export async function startBuildingImport(
       },
     }));
     const summary: BuildingImportSummary = {
-      found: res.parts.length,
+      found: res.found,
       stored: imported.length,
-      horizon: plan.kept.filter((k) => k.reason === 'horizon').length,
-      context: plan.kept.filter((k) => k.reason === 'context' || k.reason === 'adjoining').length,
+      horizon: kept.filter((k) => k.reason === 'horizon').length,
+      context: kept.filter((k) => k.reason === 'context' || k.reason === 'adjoining').length,
       ownId: ownPos >= 0 ? `b${ownPos + 1}` : null,
-      droppedSetters: plan.droppedSetters,
-      maxDroppedScore: plan.maxDroppedScore,
+      droppedSetters: res.droppedSetters,
+      maxDroppedScore: res.maxDroppedScore,
       keptManual: manual.length,
       droppedManual,
       coverage: res.coverage,
       attribution: res.attribution,
       tileCount: res.tileCount,
       bytes: res.bytes,
-      selectMs: performance.now() - started,
+      selectMs: res.selectMs,
     };
     setState({ status: 'ready', progress: null, summary, error: null });
     requestSitePlan(req.reason);
   } catch (e) {
-    // Defensive: a bug in the selection must not escape to the UI.
+    // Defensive: a bug here must not escape to the UI.
     if (current()) {
       setState({
         status: 'error',

@@ -13,7 +13,8 @@ import { useConfigStore } from '../../state/configStore';
 import { useDataStore } from '../../state/dataStore';
 import { useUiStore } from '../../state/uiStore';
 import { resetStores } from '../../test/utils';
-import { BuildingList, LIST_PAGE } from './BuildingList';
+import { BuildingList as BuildingListEntry } from './BuildingList';
+import { BuildingListPanel as BuildingList, LIST_PAGE } from './BuildingListPanel';
 
 const fetchMock = vi.hoisted(() => vi.fn());
 vi.mock('../../model/buildingSources', async (importOriginal) => ({
@@ -101,6 +102,13 @@ describe('BuildingList', () => {
     fetchMock.mockReset();
   });
   afterEach(() => resetBuildingImport());
+
+  it('the entry loads the list (its own chunk) on first use', async () => {
+    setConfig();
+    render(<BuildingListEntry />);
+    expect(await screen.findByRole('heading', { name: 'Umgebungsgebäude' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Gebäude laden' })).toBeInTheDocument();
+  });
 
   it('empty state explains the address search and offers load and manual entry', () => {
     setConfig();
@@ -306,8 +314,10 @@ describe('BuildingList', () => {
     );
     render(<BuildingList />);
     fireEvent.click(screen.getByRole('button', { name: 'Gebäude laden' }));
-    expect(fetchMock).toHaveBeenCalledWith(SITE.latitude, SITE.longitude, 300, expect.any(Object));
-    expect(screen.getByText('Gebäude werden geladen … 1 von 4 Kacheln, 0.3 MB')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(SITE.latitude, SITE.longitude, 300, expect.any(Object)),
+    );
+    expect(await screen.findByText('Gebäude werden geladen … 1 von 4 Kacheln, 0.3 MB')).toBeInTheDocument();
     expect(screen.getByRole('progressbar', { name: 'Fortschritt Gebäude-Import' })).toHaveAttribute(
       'aria-valuenow',
       '13',

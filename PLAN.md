@@ -74,6 +74,9 @@ Die Phasen des alten Plans und ihre Umsetzung:
     zwei Fingern, Strg + Mausrad oder Knöpfen; öffnet sich nach einer Adresswahl), Nachbargebäude als Prismen in der
     3D-Ansicht (zusammengeführt, verdeckende durchscheinend, eigenes Gebäude mit echtem Grundriss) und Zeilen zu
     Lage, Gebäuden, Laserscan und Datenquellen im Druckbericht.
+  - Erledigt, Gebäude Teil 3 (Durchsicht): Gebäude eines anderen Orts (Hinweis, nicht in 3D, wo sie alle Schatten
+    löschten), Flügel des eigenen Teils schatten, «Eigenes Gebäude» per Tastatur, von Hand erfasste nie das eigene,
+    spitze Ecken, kompakter Teilen-Link, Import im Web Worker, Liste und Lageplan als eigene Chunks.
 
 ## Offen
 

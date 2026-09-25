@@ -369,6 +369,13 @@ test('site plan: facade and balcony set the location; the buildings show in the 
   // The own building stands alone: all four walls are facades.
   const select = page.getByRole('combobox', { name: 'Fassade mit dem Balkon' });
   await expect(select.locator('option')).toHaveText([/^0° N/, /^90° O/, /^180° S/, /^270° W/]);
+  // Keyboard alternative to tapping another building: «Eigenes Gebäude» (imported ones within 25 m).
+  const own = page.getByRole('combobox', { name: 'Eigenes Gebäude' });
+  await expect(own.locator('option')).toHaveText([/^Gebäude 1 · /, /^Gebäude 2 · 20\sm S$/]);
+  await own.selectOption({ label: (await own.locator('option').nth(1).textContent()) ?? '' });
+  await expect(select.locator('option')).toHaveText([/^0° N · 30/, /^90° O/, /^180° S/, /^270° W/]);
+  await page.getByRole('button', { name: 'Verwerfen' }).click();
+  await expect(own).toHaveValue('b1');
   // Clicking the east wall on the plan chooses it …
   const east = await select.locator('option', { hasText: '90° O' }).getAttribute('value');
   const eastCentre = await edgeCentre(plan, east);
@@ -409,6 +416,40 @@ test('site plan: facade and balcony set the location; the buildings show in the 
   await expect
     .poll(async () => differingPixels(withBuildings, await canvas.screenshot()), { timeout: 10_000 })
     .toBeGreaterThan(2000);
+});
+
+test('another site: after moving the location far away the buildings are said to belong elsewhere', async ({
+  page,
+}) => {
+  await page.goto('./');
+  await importSurroundings(page, false);
+  await expect(page.getByRole('group', { name: 'Lageplan, Norden oben' })).toBeVisible({ timeout: 20_000 });
+  const layer = page.getByRole('button', { name: 'Umgebungsgebäude' });
+  await expect(layer).toBeVisible();
+  // Zürich by the coordinate fields: no new import.
+  await openSection(page, /^Standort/, false);
+  for (const [name, value] of [
+    [/^Breitengrad/, '47.3769'],
+    [/^Längengrad/, '8.5417'],
+  ] as const) {
+    const field = page.getByRole('textbox', { name });
+    await field.fill(value);
+    await field.press('Enter');
+  }
+  await expect(
+    page.getByText(/gehören zu einem anderen Ort: Sie liegen \d+\.\d\skm vom Standort entfernt\.$/),
+  ).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Gebäude um den Standort laden' })).toBeVisible();
+  // 3D: none of them is drawn (as far-away shadow casters they took every shadow away).
+  await expect(layer).toHaveCount(0);
+  // The list says so too, and adding a building by hand explains why it cannot.
+  await openSection(page, /^Horizont & Umgebung/, false);
+  await expect(page.getByTestId('other-site')).toContainText('Für diesen Standort «Neu laden» wählen.');
+  await page.getByRole('button', { name: 'Gebäude hinzufügen' }).click();
+  const form = page.getByRole('group', { name: 'Gebäude von Hand erfassen' });
+  await form.getByRole('button', { name: 'Hinzufügen' }).click();
+  await expect(form.getByRole('alert')).toContainText('lässt sich hier nicht hinzufügen');
+  await expect(page.getByText(/^3 Gebäude · Quelle swisstopo/)).toBeVisible();
 });
 
 test.describe('site plan on an iPhone', () => {
