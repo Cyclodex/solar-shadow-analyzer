@@ -7,6 +7,7 @@ import { InstallButton } from '../pwa/InstallButton';
 import { useConfig } from '../state/configStore';
 import { useUiStore } from '../state/uiStore';
 import { ExportMenu } from './ExportMenu';
+import { openLocationSearch } from './openLocationSearch';
 import { ShareButton } from './ShareButton';
 import styles from './Header.module.css';
 
@@ -15,6 +16,7 @@ const de = {
   toLight: 'Helles Design',
   toDark: 'Dunkles Design',
   facade: (deg: string, dir: string) => `Fassade ${deg} ${dir}`,
+  findLocation: (name: string) => `${name}: Adresse oder Ort suchen`,
 };
 const messages: Messages<typeof de> = {
   de,
@@ -23,6 +25,7 @@ const messages: Messages<typeof de> = {
     toLight: 'Light theme',
     toDark: 'Dark theme',
     facade: (deg, dir) => `Facade ${deg} ${dir}`,
+    findLocation: (name) => `${name}: search for an address or place`,
   },
 };
 
@@ -37,8 +40,18 @@ export function Header() {
   const toggleTheme = useUiStore((s) => s.toggleTheme);
   const { location, building, panels } = useConfig();
 
+  const locationName = displayLocationName(location, f);
   const summary = [
-    displayLocationName(location, f),
+    <button
+      key="location"
+      type="button"
+      className={styles.locationLink}
+      aria-label={t.findLocation(locationName)}
+      title={t.findLocation(locationName)}
+      onClick={openLocationSearch}
+    >
+      {locationName}
+    </button>,
     t.facade(f.deg(building.facadeAzimuth), compassPoint(building.facadeAzimuth, lang)),
     c.floorsCount(building.numFloors),
     `${panels.count} × ${f.unit(panels.powerWp, 'Wp')}`,

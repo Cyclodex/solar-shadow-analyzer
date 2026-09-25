@@ -194,6 +194,11 @@
   border-radius: var(--radius-pill);
 }
 
+.swatchBuildings {
+  background: color-mix(in srgb, var(--wall) 70%, var(--ground));
+  box-shadow: inset 0 0 0 1px var(--wall-edge);
+}
+
 .swatchHorizon {
   background: color-mix(in srgb, var(--ground) 55%, var(--sky-bottom));
   border-top: 2px solid var(--axis);

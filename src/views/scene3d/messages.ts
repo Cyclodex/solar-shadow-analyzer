@@ -38,6 +38,7 @@ const de = {
   castShadows: 'Schattenwurf',
   sunPath: 'Sonnenbahn',
   horizon: 'Horizont',
+  buildings: 'Umgebungsgebäude',
   /** Phones: the legend shows only the layer toggles until the explanations are opened. */
   legendHelpShow: 'Legende erklären',
   legendHelpHide: 'Erklärungen ausblenden',
@@ -49,6 +50,8 @@ const de = {
     `${date}, mit Stundenmarken (Ortszeit); blass, wo die Sonne hinter der Fassade steht.`,
   legendHorizon: (distance: string) =>
     `Gelände und manuelle Punkte als Silhouette in ${distance} Entfernung.`,
+  legendBuildings:
+    'Gebäude von swisstopo und von Hand erfasste als Gebäude mit flachem Dach (bearbeitete gelblich, von Hand erfasste grünlich, entfernte ausgeblendet). Verdecken sie die Panels, werden sie durchscheinend, ebenso Flügel des eigenen Gebäudes vor der Fassade. Das eigene Gebäude zeigt die Fassade mit den Balkonen.',
   shadeNow: 'Jetzt laut Modell',
   sunlit: 'besonnt',
   shaded: (pct: string) => `${pct} der Fläche verschattet`,
@@ -99,6 +102,7 @@ export const sceneMessages: Messages<SceneMessages> = {
     castShadows: 'Cast shadows',
     sunPath: 'Sun path',
     horizon: 'Horizon',
+    buildings: 'Surrounding buildings',
     legendHelpShow: 'Explain legend',
     legendHelpHide: 'Hide explanations',
     legendModel:
@@ -107,6 +111,8 @@ export const sceneMessages: Messages<SceneMessages> = {
       'Rendered by the 3D graphics (shadow mapping), for comparison with the model. As in the model, the facade counts as infinitely wide and tall: with the sun behind the facade, everything in front of it is in shade.',
     legendPath: (date) => `${date}, with hour marks (local time); faded where the sun is behind the facade.`,
     legendHorizon: (distance) => `Terrain and manual points as a silhouette ${distance} away.`,
+    legendBuildings:
+      'Buildings from swisstopo and those entered by hand as flat-roofed buildings (edited ones yellowish, manual ones greenish, removed ones hidden). Where they hide the panels they turn translucent, and so do wings of your own building in front of the facade. Your own building shows the facade with the balconies.',
     shadeNow: 'Now, according to the model',
     sunlit: 'sunlit',
     shaded: (pct) => `${pct} of the area shaded`,

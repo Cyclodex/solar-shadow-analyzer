@@ -18,7 +18,10 @@ import {
   useSimulation,
   useSimulationConfig,
 } from '../hooks/useModel';
+import { useProvisionalNote } from '../controls/horizon/provisional';
+import { UnconfirmedResultsNote } from '../controls/location/PlacementPrompt';
 import { useConfig } from '../state/configStore';
+import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { floorColor } from '../styles/tokens';
 import styles from './KpiBar.module.css';
@@ -50,7 +53,6 @@ const de = {
   power: 'Leistung jetzt',
   powerSub: 'bei klarem Himmel, AC',
   loading: 'Jahresergebnisse werden berechnet …',
-  provisional: 'vorläufig – Geländehorizont wird geladen',
   paybackBatterySub: (savings: string) => `mit Batterie · Ersparnis ${savings} pro Jahr`,
   battery: 'Batterie',
   extra: 'Mehrertrag durch Batterie',
@@ -95,7 +97,6 @@ const messages: Messages<typeof de> = {
     power: 'Power now',
     powerSub: 'clear sky, AC',
     loading: 'Computing annual results …',
-    provisional: 'provisional – loading terrain horizon',
     paybackBatterySub: (savings) => `with battery · savings ${savings} per year`,
     battery: 'Battery',
     extra: 'Extra yield from the battery',
@@ -218,6 +219,7 @@ export function KpiBar() {
   const batteryEcon = useBatteryEconomics();
   const econ = batteryEcon?.withBattery ?? plainEcon;
   const annualState = useAnnualResultsState();
+  const provisionalNote = useProvisionalNote();
   const instant = useInstant();
   const power = useInstantPower();
   const layout = useLayout();
@@ -230,7 +232,12 @@ export function KpiBar() {
   const { numFloors } = config.building;
   const loading = annualState === 'loading' || simulation === null;
   const ready = simulation !== null && !loading;
-  const provisional = ready && annualState === 'provisional';
+  // The laser scan waits for the location (an address point inside the building, site plan not applied): the
+  // values hold for that point without the scan, so they are provisional too.
+  const unconfirmed = useDataStore(
+    (s) => s.surface.status === 'waiting' && config.horizon.surfaceModel.enabled,
+  );
+  const provisional = ready && (annualState === 'provisional' || unconfirmed);
   const topDown = [...placements].reverse();
 
   // ── Annual (one snapshot: simulation + simConfig) ──
@@ -304,7 +311,12 @@ export function KpiBar() {
           {t.year} {config.weather.year}
         </h3>
         {loading && <span className="sr-only">{t.loading}</span>}
-        {provisional && <p className={styles.provisionalNote}>{t.provisional}</p>}
+        {provisional &&
+          (unconfirmed ? (
+            <UnconfirmedResultsNote className={styles.provisionalNote} />
+          ) : (
+            <p className={styles.provisionalNote}>{provisionalNote}</p>
+          ))}
         <dl className={styles.grid}>
           <Kpi
             label={t.annualYield}

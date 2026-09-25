@@ -1,7 +1,9 @@
+import { lazy, Suspense } from 'react';
 import { Section } from '../components/Section';
 import { Toggle } from '../components/Toggle';
 import { useMessages, type Messages } from '../i18n';
 import { useConfigSection, usePatch } from '../state/configStore';
+import { BuildingList } from './horizon/BuildingList';
 import { HorizonSparkline } from './horizon/HorizonSparkline';
 import { ManualHorizon } from './horizon/ManualHorizon';
 import { ObstacleList } from './horizon/ObstacleList';
@@ -9,11 +11,19 @@ import { TerrainStatus } from './horizon/TerrainStatus';
 import sections from './sections.module.css';
 import styles from './HorizonSection.module.css';
 
+// The laser-scan settings load with the section's first opening (the section renders its content only open),
+// like the building list (docs/ARCHITECTURE.md "Laden und Rechenlast").
+const SurfaceModelControls = lazy(() =>
+  import('./horizon/SurfaceModelControls').then((m) => ({ default: m.SurfaceModelControls })),
+);
+
 const de = {
   title: 'Horizont & Umgebung',
   terrain: 'Geländehorizont berechnen',
   terrainHint: 'Aus einem digitalen Höhenmodell (Terrain Tiles), Sichtweite bis ca. 50 km.',
   summaryTerrain: 'Gelände',
+  summarySurface: 'Laserscan',
+  summaryBuildings: (n: number) => (n === 1 ? '1 Gebäude' : `${n} Gebäude`),
   summaryObstacles: (n: number) => (n === 1 ? '1 Hindernis' : `${n} Hindernisse`),
   summaryPoints: (n: number) => (n === 1 ? '1 Punkt' : `${n} Punkte`),
   summaryFree: 'Freie Sicht',
@@ -25,22 +35,30 @@ const messages: Messages<typeof de> = {
     terrain: 'Compute terrain horizon',
     terrainHint: 'From a digital elevation model (Terrain Tiles), visibility up to about 50 km.',
     summaryTerrain: 'Terrain',
+    summarySurface: 'Laser scan',
+    summaryBuildings: (n) => (n === 1 ? '1 building' : `${n} buildings`),
     summaryObstacles: (n) => (n === 1 ? '1 obstacle' : `${n} obstacles`),
     summaryPoints: (n) => (n === 1 ? '1 point' : `${n} points`),
     summaryFree: 'Open view',
   },
 };
 
-/** Terrain horizon (toggle + load state), horizon chart, obstacles and custom horizon points. */
+/**
+ * Terrain horizon (toggle + load state), horizon chart, laser-scan surroundings, surrounding buildings,
+ * obstacles and custom horizon points.
+ */
 export function HorizonSection() {
   const t = useMessages(messages);
   const horizon = useConfigSection('horizon');
   const patch = usePatch();
-  const { terrainEnabled, obstacles, manual } = horizon;
+  const { terrainEnabled, obstacles, manual, buildings, surfaceModel } = horizon;
+  const shownBuildings = buildings.filter((b) => !b.removed).length;
 
   const summary =
     [
       terrainEnabled ? t.summaryTerrain : null,
+      surfaceModel.enabled ? t.summarySurface : null,
+      shownBuildings > 0 ? t.summaryBuildings(shownBuildings) : null,
       obstacles.length > 0 ? t.summaryObstacles(obstacles.length) : null,
       manual.length > 0 ? t.summaryPoints(manual.length) : null,
     ]
@@ -61,6 +79,10 @@ export function HorizonSection() {
       <div className={styles.chart}>
         <HorizonSparkline />
       </div>
+      <Suspense fallback={null}>
+        <SurfaceModelControls />
+      </Suspense>
+      <BuildingList />
       <ObstacleList />
       <ManualHorizon />
     </Section>

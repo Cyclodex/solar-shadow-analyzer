@@ -1,16 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import type { Config } from './types';
-import { DEFAULT_CONFIG, LIMITS, createObstacle, type FieldLimit } from './defaults';
+import type { Building, Config } from './types';
+import { DEFAULT_CONFIG, LIMITS, createBuilding, createObstacle, type FieldLimit } from './defaults';
+import { bridgeHoles, dropDuplicateVertices, ringArea } from './polygon';
 import {
   HORIZON_POINT_LIMITS,
+  MAX_BUILDINGS,
+  MAX_BUILDING_VERTICES,
   MAX_CURRENCY_LENGTH,
   MAX_HORIZON_POINTS,
   MAX_LOCATION_NAME_LENGTH,
   MAX_OBSTACLES,
+  MAX_RAW_RING_VERTICES,
   MAX_TEXT_LENGTH,
+  MAX_TOTAL_BUILDING_VERTICES,
+  MIN_BUILDING_AREA,
   ROUNDING_OVERRIDES,
+  SHARE_ADDED_FIELDS,
   SHARE_BASES,
   SHARE_VERSION,
+  type ShareBase,
   buildShareUrl,
   canonicalTimeZone,
   configFromJson,
@@ -71,9 +79,6 @@ const NUMERIC_SECTIONS = [
   'battery',
 ] as const;
 
-/** What a version-1 link (base 1) decodes to: config v3 with the battery section of base 2 (storage off). */
-const V1_CONFIG: Config = { ...SHARE_BASES[1], version: 3, battery: SHARE_BASES[2]!.battery! };
-
 function limitsOf(section: string): [string, FieldLimit][] {
   return Object.entries((LIMITS as unknown as Record<string, Record<string, FieldLimit>>)[section] ?? {});
 }
@@ -88,6 +93,17 @@ function onGrid(v: number, step: number): boolean {
 }
 
 const codePoints = (s: string): number => Array.from(s).length;
+
+/** A share base completed with the fields added after it was frozen (what a link without them decodes to). */
+function withAdded(base: ShareBase): Config {
+  return { ...base, horizon: { ...SHARE_ADDED_FIELDS.horizon, ...base.horizon } } as Config;
+}
+
+/**
+ * What a version-1 link (base 1) decodes to: config v3 with the battery section of base 2 (storage off) and the
+ * horizon fields added later (no buildings, laser scan off).
+ */
+const V1_CONFIG: Config = withAdded({ ...SHARE_BASES[1], version: 3, battery: SHARE_BASES[2]!.battery! });
 
 /** Asserts every invariant sanitizeConfig promises. */
 function expectValid(c: Config): void {
@@ -134,6 +150,50 @@ function expectValid(c: Config): void {
       expect(onGrid(n, lim.step)).toBe(true);
     }
   }
+  const { buildings, buildingImport, surfaceModel } = c.horizon;
+  expect(buildings.length).toBeLessThanOrEqual(MAX_BUILDINGS);
+  expect(new Set(buildings.map((b) => b.id)).size).toBe(buildings.length);
+  expect(buildings.reduce((a, b) => a + b.footprint.length, 0)).toBeLessThanOrEqual(
+    MAX_TOTAL_BUILDING_VERTICES,
+  );
+  for (const b of buildings) {
+    expect(b.id.length).toBeGreaterThan(0);
+    expect(codePoints(b.id)).toBeLessThanOrEqual(MAX_TEXT_LENGTH);
+    expect(codePoints(b.name)).toBeLessThanOrEqual(MAX_TEXT_LENGTH);
+    expect(['swisstopo', 'manual']).toContain(b.source);
+    expect(b.footprint.length).toBeGreaterThanOrEqual(3);
+    expect(b.footprint.length).toBeLessThanOrEqual(MAX_BUILDING_VERTICES);
+    expect(ringArea(b.footprint)).toBeGreaterThanOrEqual(MIN_BUILDING_AREA);
+    for (const [e, n] of b.footprint) {
+      for (const v of [e, n]) {
+        expect(Math.abs(v)).toBeLessThanOrEqual(LIMITS.neighbour.coord.max);
+        expect(onGrid(v, 0.1)).toBe(true);
+      }
+    }
+    for (const [field, lim] of limitsOf('neighbour')) {
+      if (field === 'coord') continue;
+      const n = (b as unknown as Rec)[field] as number;
+      expect(n).toBeGreaterThanOrEqual(lim.min);
+      expect(n).toBeLessThanOrEqual(lim.max);
+      expect(onGrid(n, lim.step)).toBe(true);
+    }
+    if (b.source === 'manual') expect(b.removed ?? b.edited).toBeUndefined();
+    if (b.removed !== undefined) expect(b.removed).toBe(true);
+    if (b.edited !== undefined) expect(b.edited).toBe(true);
+  }
+  if (buildings.length > 0) expect(buildingImport).not.toBeNull();
+  if (buildingImport) {
+    expect(onGrid(buildingImport.latitude, 1e-6)).toBe(true);
+    expect(buildingImport.radius).toBeGreaterThanOrEqual(LIMITS.buildingImport.radius.min);
+    expect(buildingImport.radius).toBeLessThanOrEqual(LIMITS.buildingImport.radius.max);
+    expect(buildingImport.date).toMatch(/^(\d{4}-\d{2}-\d{2})?$/);
+  }
+  expect(typeof surfaceModel.enabled).toBe('boolean');
+  expect(typeof surfaceModel.trees).toBe('boolean');
+  expect(surfaceModel.radius % LIMITS.surfaceModel.radius.step).toBe(0);
+  expect(surfaceModel.radius).toBeGreaterThanOrEqual(LIMITS.surfaceModel.radius.min);
+  expect(surfaceModel.radius).toBeLessThanOrEqual(LIMITS.surfaceModel.radius.max);
+
   expect(c.horizon.manual.length).toBeLessThanOrEqual(MAX_HORIZON_POINTS);
   c.horizon.manual.forEach((p, i) => {
     expect(p.azimuth).toBeGreaterThanOrEqual(0);
@@ -221,7 +281,44 @@ function randomRawConfig(rnd: () => number): Rec {
       rnd() < 0.5 ? [rnd() * 360, rnd() * 40] : { azimuth: rnd() * 360, elevation: rnd() * 40 },
     );
   }
+  if (rnd() < 0.5) hor.buildings = randomBuildings(rnd, Math.floor(rnd() * 12));
+  if (rnd() < 0.5) {
+    hor.buildingImport = {
+      latitude: 45.8 + rnd() * 2,
+      longitude: 5.9 + rnd() * 4.6,
+      radius: rnd() * 600,
+      date: pickOne(rnd, ['2026-09-25', '2026-09-25T10:11:12Z', '2026-02-30', 'gestern', '']),
+    };
+  }
+  if (rnd() < 0.5) hor.surfaceModel = { enabled: rnd() < 0.5, trees: rnd() < 0.5, radius: rnd() * 700 };
   return raw;
+}
+
+/** Random raw buildings: polygons (either orientation) around random centres, off the 0.1 m grid. */
+function randomBuildings(rnd: () => number, count: number): Rec[] {
+  return Array.from({ length: count }, (_, i) => {
+    const cx = (rnd() - 0.5) * 600;
+    const cy = (rnd() - 0.5) * 600;
+    const r = 3 + rnd() * 15;
+    const k = 3 + Math.floor(rnd() * 10);
+    const dir = rnd() < 0.5 ? 1 : -1;
+    const footprint = Array.from({ length: k }, (_, j) => {
+      const a = (dir * 2 * Math.PI * j) / k;
+      const rr = r * (0.6 + 0.4 * rnd());
+      return [cx + rr * Math.cos(a), cy + rr * Math.sin(a)];
+    });
+    const b: Rec = {
+      id: rnd() < 0.7 ? `b${i + 1}` : rnd() < 0.5 ? '' : 'x',
+      name: rnd() < 0.3 ? randomString(rnd, 50) : '',
+      footprint,
+      base: (rnd() - 0.3) * 20,
+      height: rnd() * 60,
+      source: rnd() < 0.7 ? 'swisstopo' : 'manual',
+    };
+    if (rnd() < 0.2) b.removed = true;
+    if (rnd() < 0.2) b.edited = rnd() < 0.8;
+    return b;
+  });
 }
 
 /** Random value of a random JSON-ish type (incl. NaN, ±Infinity, huge numbers, nested junk). */
@@ -276,14 +373,14 @@ describe('sanitizeConfig', () => {
 
   it('rounds to the LIMITS step, with the documented overrides', () => {
     const c = sanitizeConfig({
-      location: { latitude: 46.948094, longitude: 7.447449 },
+      location: { latitude: 46.9480944, longitude: 7.4474496 },
       building: { floorHeight: 280.4, numFloors: 2.6 },
       panels: { length: 113.44, gap: 2.3, powerWp: 432 },
       economics: { electricityPrice: 0.3214, feedInTariff: 0.08126, investmentPerFloor: 849 },
     });
-    // 1e-4 grid: 46.948094 → 46.9481 (5th decimal 9 rounds up), 7.447449 → 7.4474 (5th decimal 4 rounds down)
-    expect(c.location.latitude).toBe(46.9481);
-    expect(c.location.longitude).toBe(7.4474);
+    // 1e-6 grid (≤ 0.07 m, exact addresses): 46.9480944 → 46.948094, 7.4474496 → 7.44745
+    expect(c.location.latitude).toBe(46.948094);
+    expect(c.location.longitude).toBe(7.44745);
     expect(c.building.floorHeight).toBe(280); // step 1
     expect(c.building.numFloors).toBe(3); // step 1: 2.6 → 3
     expect(c.panels.length).toBe(113.4); // step 0.1
@@ -574,6 +671,7 @@ describe('encodeConfig / decodeConfig', () => {
     const d: Config = {
       ...DEFAULT_CONFIG,
       horizon: {
+        ...DEFAULT_CONFIG.horizon,
         terrainEnabled: false,
         obstacles: [
           { id: 'o1', name: 'Haus', offsetAlong: -5, distance: 20, width: 15, depth: 10, height: 12 },
@@ -734,7 +832,8 @@ describe('share format versions', () => {
   it('DEFAULT_CONFIG equals the current share base', () => {
     // Changed a default? Add SHARE_BASES[SHARE_VERSION + 1] as a literal copy of the new DEFAULT_CONFIG and bump
     // SHARE_VERSION (compactDiff then writes `v`). Never edit an existing base.
-    expect(DEFAULT_CONFIG).toEqual(SHARE_BASES[SHARE_VERSION]);
+    // Fields added without a version bump (SHARE_ADDED_FIELDS) default to their "absent" value.
+    expect(DEFAULT_CONFIG).toEqual(withAdded(SHARE_BASES[SHARE_VERSION]));
   });
 
   it('decodes a golden link to the full config it was created with', () => {
@@ -786,7 +885,7 @@ describe('share format versions', () => {
     }
     const future = decodeConfig(refEncodeJson(`{"v":${SHARE_VERSION + 1},"p":{"t":30}}`));
     expect(future).toEqual({
-      ...SHARE_BASES[SHARE_VERSION],
+      ...withAdded(SHARE_BASES[SHARE_VERSION]),
       panels: { ...SHARE_BASES[SHARE_VERSION].panels, tiltFromVertical: 30 },
     });
     // From version 2 on every link carries `v`: the default config is '{"v":2}'.
@@ -813,6 +912,423 @@ describe('config v2 → v3 (battery)', () => {
     expect(c.battery.units).toBe(LIMITS.battery.units.max);
     expect(c.battery.minSocPct).toBe(0);
     expect(c.battery.preset).toBe(DEFAULT_CONFIG.battery.preset);
+  });
+});
+
+// ── Surroundings (buildings, import anchor, laser scan) ──
+
+const square = (e: number, n: number, s: number): [number, number][] => [
+  [e, n],
+  [e + s, n],
+  [e + s, n + s],
+  [e, n + s],
+];
+
+describe('sanitizeConfig: surroundings', () => {
+  const horizonOf = (hor: Rec): Config['horizon'] => sanitizeConfig({ horizon: hor }).horizon;
+
+  it('defaults: no buildings, no anchor, laser scan off with trees, 300 m', () => {
+    expect(DEFAULT_CONFIG.horizon.buildings).toEqual([]);
+    expect(DEFAULT_CONFIG.horizon.buildingImport).toBeNull();
+    expect(DEFAULT_CONFIG.horizon.surfaceModel).toEqual({ enabled: false, trees: true, radius: 300 });
+    // A stored config or file from before the feature (horizon without the fields) gets them.
+    expect(horizonOf({ terrainEnabled: false, obstacles: [], manual: [] })).toEqual({
+      ...DEFAULT_CONFIG.horizon,
+      terrainEnabled: false,
+    });
+  });
+
+  it('rounds footprints to 0.1 m, clamps coordinates, base and height, orients rings CCW', () => {
+    const cw = [
+      [0.04, 0.06],
+      [0, 10.04],
+      [5000, 10],
+      [10.26, -3000],
+    ];
+    const [b] = horizonOf({
+      buildings: [{ id: 'a', name: 'Haus', footprint: cw, base: -99, height: 1234.56, source: 'swisstopo' }],
+    }).buildings;
+    // Clockwise input → reversed after the first vertex; ±2000 m clamp; 0.1 m grid.
+    expect(b).toEqual({
+      id: 'a',
+      name: 'Haus',
+      footprint: [
+        [0, 0.1],
+        [10.3, -2000],
+        [2000, 10],
+        [0, 10],
+      ],
+      base: LIMITS.neighbour.base.min,
+      height: LIMITS.neighbour.height.max,
+      source: 'swisstopo',
+    });
+    expect(ringArea(b!.footprint)).toBeGreaterThan(0);
+  });
+
+  it('drops invalid and degenerate rings, closing and duplicate vertices', () => {
+    const hor = horizonOf({
+      buildings: [
+        {
+          footprint: [
+            [0, 0],
+            [1, 0],
+          ],
+        }, // < 3 vertices
+        {
+          footprint: [
+            [0, 0],
+            [1, 0],
+            [1, 0.4],
+          ],
+        }, // area 0.2 m² < 0.5
+        {
+          footprint: [
+            [0, 0],
+            [10, 0],
+            ['x', 5],
+          ],
+        }, // invalid vertex
+        { footprint: 'junk' },
+        'junk',
+        {
+          footprint: [
+            [0, 0],
+            [0, 0],
+            [4, 0],
+            [4, 0.04],
+            [4, 4],
+            [0, 4],
+            [0, 0],
+          ],
+        }, // dups + closing vertex
+        {
+          footprint: [
+            { e: 0, n: 0 },
+            { x: 3, y: 0 },
+            { e: 3, n: 3 },
+          ],
+        }, // object vertices
+      ],
+    });
+    expect(hor.buildings.map((b) => b.footprint)).toEqual([
+      square(0, 0, 4),
+      [
+        [0, 0],
+        [3, 0],
+        [3, 3],
+      ],
+    ]);
+    // Defaults: unnamed manual building, 10 m high on the site ground, unique ids.
+    expect(hor.buildings.map((b) => [b.id, b.name, b.source, b.base, b.height])).toEqual([
+      ['b1', '', 'manual', 0, 10],
+      ['b2', '', 'manual', 0, 10],
+    ]);
+  });
+
+  it('caps buildings, vertices per building (simplified) and total vertices', () => {
+    const many = Array.from({ length: MAX_BUILDINGS + 10 }, (_, i) => ({ footprint: square(i * 12, 0, 10) }));
+    expect(horizonOf({ buildings: many }).buildings).toHaveLength(MAX_BUILDINGS);
+
+    // A 100-vertex circle is simplified to MAX_BUILDING_VERTICES vertices (all of them original vertices).
+    const circle = Array.from({ length: 100 }, (_, k): [number, number] => {
+      const a = (2 * Math.PI * k) / 100;
+      return [Math.round(30 * Math.cos(a) * 10) / 10 + 0, Math.round(30 * Math.sin(a) * 10) / 10 + 0];
+    });
+    const [c] = horizonOf({ buildings: [{ footprint: circle }] }).buildings;
+    expect(c!.footprint).toHaveLength(MAX_BUILDING_VERTICES);
+    for (const p of c!.footprint) expect(circle).toContainEqual(p);
+    expect(ringArea(c!.footprint)).toBeGreaterThan(0.97 * ringArea(circle));
+
+    // 40 buildings × 60 vertices = 2400 > MAX_TOTAL_BUILDING_VERTICES: later buildings are dropped.
+    const big = Array.from({ length: 40 }, (_, i) => ({
+      footprint: Array.from({ length: 60 }, (_, k): [number, number] => {
+        const a = (2 * Math.PI * k) / 60;
+        return [i * 50 + 20 * Math.cos(a), 20 * Math.sin(a)];
+      }),
+    }));
+    const kept = horizonOf({ buildings: big }).buildings;
+    expect(kept).toHaveLength(Math.floor(MAX_TOTAL_BUILDING_VERTICES / 60));
+    // Absurdly long raw rings are rejected before any work.
+    expect(horizonOf({ buildings: [{ footprint: new Array(5000).fill([1, 2]) }] }).buildings).toEqual([]);
+    const ringOf = (n: number): [number, number][] =>
+      Array.from({ length: n }, (_, k): [number, number] => {
+        const a = (2 * Math.PI * k) / n;
+        return [300 * Math.cos(a), 300 * Math.sin(a)];
+      });
+    expect(horizonOf({ buildings: [{ footprint: ringOf(MAX_RAW_RING_VERTICES) }] }).buildings).toHaveLength(
+      1,
+    );
+    expect(horizonOf({ buildings: [{ footprint: ringOf(MAX_RAW_RING_VERTICES + 1) }] }).buildings).toEqual(
+      [],
+    );
+  });
+
+  it('is idempotent for keyhole rings (courtyards) that get simplified, also through a share link', () => {
+    // 61-gon (r = 20 m) with a small shaft joined by bridgeHoles (repeated bridge vertices): the courtyard is
+    // simplified away and its bridge vertices end up next to each other; they are dropped in the first pass.
+    const sweep: [number, number, number][] = [];
+    for (let n = 58; n <= 72; n++)
+      for (const w of [0.2, 0.3, 0.5, 1]) for (const hv of [3, 4, 5]) sweep.push([n, w, hv]);
+    let simplified = 0;
+    for (const [n, w, hv] of sweep) {
+      const outer = Array.from({ length: n }, (_, i): [number, number] => [
+        20 * Math.cos((2 * Math.PI * i) / n),
+        20 * Math.sin((2 * Math.PI * i) / n),
+      ]);
+      const hole = Array.from({ length: hv }, (_, i): [number, number] => [
+        2 + w * Math.cos((2 * Math.PI * i) / hv),
+        1 + w * Math.sin((2 * Math.PI * i) / hv),
+      ]);
+      const footprint = bridgeHoles(outer, [hole]);
+      const once = sanitizeConfig({
+        horizon: { buildings: [{ footprint, height: 20, source: 'swisstopo', removed: true }] },
+      });
+      const [b] = once.horizon.buildings;
+      if (footprint.length > MAX_BUILDING_VERTICES) simplified++;
+      expect(dropDuplicateVertices(b!.footprint)).toEqual(b!.footprint);
+      expect(sanitizeConfig(once)).toEqual(once);
+      expect(decodeConfig(encodeConfig(once))).toEqual(once);
+    }
+    expect(simplified).toBeGreaterThan(100);
+  });
+
+  it('keeps ids unique and flags only on imported buildings, and only when true', () => {
+    const hor = horizonOf({
+      buildings: [
+        { id: 'b2', footprint: square(0, 0, 5), source: 'swisstopo', removed: true, edited: 'yes' },
+        { id: 'b2', footprint: square(10, 0, 5), source: 'swisstopo', removed: false, edited: true },
+        { footprint: square(20, 0, 5), source: 'manual', removed: true, edited: true },
+        { footprint: square(30, 0, 5), source: 'osm' },
+      ],
+    });
+    expect(hor.buildings.map((b) => b.id)).toEqual(['b2', 'b3', 'b4', 'b5']);
+    expect(hor.buildings.map((b) => [b.source, b.removed, b.edited])).toEqual([
+      ['swisstopo', true, undefined],
+      ['swisstopo', undefined, true],
+      ['manual', undefined, undefined],
+      ['manual', undefined, undefined],
+    ]);
+    expect('removed' in hor.buildings[1]!).toBe(false);
+  });
+
+  it('sanitizes the import anchor; buildings without one are anchored at the location', () => {
+    const anchor = horizonOf({
+      buildingImport: {
+        latitude: '46.94784949',
+        longitude: 367.4499784,
+        radius: 333,
+        date: '2026-09-25T08:00:00Z',
+      },
+    }).buildingImport;
+    expect(anchor).toEqual({ latitude: 46.947849, longitude: 7.449978, radius: 330, date: '2026-09-25' });
+    for (const date of ['2026-02-30', '25.09.2026', 42, '']) {
+      expect(horizonOf({ buildingImport: { latitude: 47, longitude: 7, date } }).buildingImport?.date).toBe(
+        '',
+      );
+    }
+    expect(horizonOf({ buildingImport: 'x' }).buildingImport).toBeNull();
+    const c = sanitizeConfig({
+      location: { latitude: 46.1234567, longitude: 7.7654321 },
+      horizon: { buildings: [{ footprint: square(0, 0, 5) }] },
+    });
+    expect(c.horizon.buildingImport).toEqual({
+      latitude: 46.123457,
+      longitude: 7.765432,
+      radius: 0,
+      date: '',
+    });
+  });
+
+  it('sanitizes the laser-scan settings', () => {
+    expect(horizonOf({ surfaceModel: { enabled: true, trees: false, radius: 333 } }).surfaceModel).toEqual({
+      enabled: true,
+      trees: false,
+      radius: 350,
+    });
+    expect(horizonOf({ surfaceModel: { enabled: 'yes', radius: 9000 } }).surfaceModel).toEqual({
+      enabled: false,
+      trees: true,
+      radius: LIMITS.surfaceModel.radius.max,
+    });
+    expect(horizonOf({ surfaceModel: null }).surfaceModel).toEqual(DEFAULT_CONFIG.horizon.surfaceModel);
+  });
+});
+
+/** The share link (with the old 1e-4 rounding) of main 030c38d before buildings existed (see its test). */
+const OLD_LINK =
+  'eyJsIjp7Im4iOiJLcmFtZ2Fzc2UgNDksIDMwMTEgQmVybiIsImEiOjQ2Ljk0NzgsImUiOjU0MX0sImIiOnsiYSI6MH0sImgiOnsidCI6ZmFsc2Us' +
+  'Im8iOlt7ImkiOiJvMSIsIm4iOiJOYWNoYmFyIiwidSI6LTMuNSwiZCI6MTIsInciOjIwLCJ0Ijo4LCJoIjoxNX1dLCJtIjpbWzkwLDVdLFsx' +
+  'ODAsMTIuNV1dfX0';
+
+/** Deterministic neighbourhood: `count` buildings with `vertices` footprint vertices in total within ±300 m. */
+function neighbourhood(count: number, vertices: number, seed = 1): Building[] {
+  const rnd = mulberry32(seed);
+  const per = Array.from(
+    { length: count },
+    (_, i) => Math.floor(vertices / count) + (i < vertices % count ? 1 : 0),
+  );
+  return per.map((k, i) => {
+    const cx = Math.round((rnd() - 0.5) * 5400) / 10;
+    const cy = Math.round((rnd() - 0.5) * 5400) / 10;
+    const r = 5 + rnd() * 12;
+    const footprint = Array.from({ length: k }, (_, j): [number, number] => {
+      const a = (2 * Math.PI * j) / k;
+      const rr = r * (0.75 + 0.25 * rnd());
+      return [Math.round((cx + rr * Math.cos(a)) * 10) / 10, Math.round((cy + rr * Math.sin(a)) * 10) / 10];
+    });
+    return {
+      id: `b${i + 1}`,
+      name: '',
+      footprint,
+      base: 0,
+      height: 5 + Math.round(rnd() * 25),
+      source: 'swisstopo',
+    };
+  });
+}
+
+describe('share links: surroundings', () => {
+  const site: Config['location'] = {
+    name: 'Kramgasse 49, 3011 Bern',
+    latitude: 46.947849,
+    longitude: 7.449978,
+    timezone: 'Europe/Zurich',
+    elevation: 541,
+  };
+
+  it('keeps the exact location (1e-6°) in links', () => {
+    const c: Config = { ...DEFAULT_CONFIG, location: site };
+    expect(encodeConfig(c)).toBe(
+      refEncodeJson('{"v":2,"l":{"n":"Kramgasse 49, 3011 Bern","a":46.947849,"o":7.449978,"e":541}}'),
+    );
+    expect(decodeConfig(encodeConfig(c))?.location).toEqual(site);
+  });
+
+  it('encodes buildings compactly as decimetre integers with delta vertices (format is part of the link contract)', () => {
+    const c: Config = {
+      ...DEFAULT_CONFIG,
+      horizon: {
+        ...DEFAULT_CONFIG.horizon,
+        buildings: [
+          { id: 'b1', name: '', footprint: square(10, 20.5, 8), base: 0, height: 12.5, source: 'swisstopo' },
+          {
+            id: 'x7',
+            name: 'Neubau',
+            footprint: square(-5, 3, 4),
+            base: 1.5,
+            height: 9,
+            source: 'swisstopo',
+            removed: true,
+            edited: true,
+          },
+          { ...createBuilding('b3', ''), footprint: square(0, 40, 10) },
+        ],
+        buildingImport: { latitude: 46.947849, longitude: 7.449978, radius: 300, date: '2026-09-25' },
+        surfaceModel: { enabled: true, trees: true, radius: 300 },
+      },
+    };
+    expect(encodeConfig(c)).toBe(
+      refEncodeJson(
+        '{"v":2,"h":{"g":[[125,0,100,205,80,0,0,80,-80,0],' +
+          '{"g":[90,15,-50,30,40,0,0,40,-40,0],"i":"x7","n":"Neubau","r":1,"e":1},' +
+          '{"g":[100,0,0,400,100,0,0,100,-100,0],"m":1}],' +
+          '"k":{"a":46.947849,"o":7.449978,"r":300,"d":"2026-09-25"},"s":{"e":true}}}',
+      ),
+    );
+    expect(decodeConfig(encodeConfig(c))).toEqual(c);
+  });
+
+  it('omits the fields while they are absent/off, so existing links keep their exact form', () => {
+    expect(encodeConfig(DEFAULT_CONFIG)).toBe(refEncodeJson('{"v":2}'));
+    const off: Config = {
+      ...DEFAULT_CONFIG,
+      horizon: { ...DEFAULT_CONFIG.horizon, surfaceModel: { enabled: false, trees: false, radius: 450 } },
+    };
+    expect(encodeConfig(off)).toBe(refEncodeJson('{"v":2,"h":{"s":{"t":false,"r":450}}}'));
+    expect(decodeConfig(encodeConfig(off))).toEqual(off);
+  });
+
+  it('decodes links created before the feature (1e-4 coordinates) to no buildings and the laser scan off', () => {
+    // Created with src/model/share.ts of main 030c38d: exact address typed, stored with the old 1e-4 rounding.
+    // A version-1 link: decoded against share base 1 (V1_CONFIG), not against today's defaults.
+    expect(decodeConfig(OLD_LINK)).toEqual({
+      ...V1_CONFIG,
+      location: { ...site, latitude: 46.9478, longitude: 7.45 },
+      building: { ...V1_CONFIG.building, facadeAzimuth: 0 },
+      horizon: {
+        ...V1_CONFIG.horizon,
+        terrainEnabled: false,
+        obstacles: [
+          { id: 'o1', name: 'Nachbar', offsetAlong: -3.5, distance: 12, width: 20, depth: 8, height: 15 },
+        ],
+        manual: [
+          { azimuth: 90, elevation: 5 },
+          { azimuth: 180, elevation: 12.5 },
+        ],
+        buildings: [],
+        buildingImport: null,
+        surfaceModel: { enabled: false, trees: true, radius: 300 },
+      },
+    });
+  });
+
+  it('accepts long keys and full building objects, and sanitizes decoded buildings', () => {
+    const json = JSON.stringify({
+      horizon: {
+        buildings: [
+          { id: 'q', footprint: square(0, 0, 3), height: 7, source: 'manual' },
+          [50, 0, 0, 0, 1, 0],
+        ],
+        buildingImport: { latitude: 47, longitude: 8, radius: 100, date: '2026-01-01' },
+        surfaceModel: { enabled: true },
+      },
+    });
+    const c = decodeConfig(refEncodeJson(json));
+    expect(c?.horizon.buildings).toEqual([
+      { id: 'q', name: '', footprint: square(0, 0, 3), base: 0, height: 7, source: 'manual' },
+    ]);
+    expect(c?.horizon.buildingImport).toEqual({
+      latitude: 47,
+      longitude: 8,
+      radius: 100,
+      date: '2026-01-01',
+    });
+    expect(c?.horizon.surfaceModel).toEqual({ enabled: true, trees: true, radius: 300 });
+    // Junk in the compact form never throws.
+    for (const g of ['[["a"]]', '[{"g":1}]', '[[1]]', '[null,{"g":[1,2,"x"]}]', '{"x":1}']) {
+      expect(decodeConfig(refEncodeJson(`{"h":{"g":${g}}}`))?.horizon.buildings).toEqual([]);
+    }
+  });
+
+  it('fuzz: round-trips random configs with buildings exactly', () => {
+    const rnd = mulberry32(0x5a17e);
+    for (let n = 0; n < 150; n++) {
+      const raw = randomRawConfig(rnd);
+      (raw.horizon as Rec).buildings = randomBuildings(rnd, 1 + Math.floor(rnd() * 20));
+      const c = sanitizeConfig(raw);
+      expectValid(c);
+      expect(decodeConfig(encodeConfig(c))).toEqual(c);
+      expect(configFromJson(configToJson(c))).toEqual(c);
+    }
+  });
+
+  it('link length: 78 imported buildings with 612 vertices stay about 7 k characters', () => {
+    const c: Config = {
+      ...DEFAULT_CONFIG,
+      location: site,
+      horizon: {
+        ...DEFAULT_CONFIG.horizon,
+        buildings: neighbourhood(78, 612),
+        buildingImport: { latitude: 46.947849, longitude: 7.449978, radius: 300, date: '2026-09-25' },
+        surfaceModel: { enabled: true, trees: true, radius: 300 },
+      },
+    };
+    const s = encodeConfig(c);
+    expect(sanitizeConfig(c).horizon.buildings.reduce((a, b) => a + b.footprint.length, 0)).toBe(612);
+    expect(decodeConfig(s)).toEqual(sanitizeConfig(c));
+    // Measured: 7,160 chars (11.4 per vertex; URL on GitHub Pages 7,212). Real Kramgasse parts: 11.6 per vertex.
+    expect(s.length).toBeLessThan(8000);
+    expect(s.length / 612).toBeLessThan(13);
   });
 });
 

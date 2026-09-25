@@ -18,6 +18,7 @@ describe('Footer', () => {
       'Open-Meteo Geocoding API: Ortssuche; Ortsdaten von GeoNames, Lizenz CC BY 4.0.',
     );
     expect(footer).not.toHaveTextContent(/Weather data by/);
+    expect(footer).toHaveTextContent(/swisstopo \(geo\.admin\.ch\): Adresssuche.*© swisstopo/);
     expect(footer).toHaveTextContent(
       'EU-DEM (produced using Copernicus data and information funded by the European Union), 3DEP/NED',
     );
@@ -31,6 +32,7 @@ describe('Footer', () => {
     const footer = screen.getByRole('contentinfo');
     expect(footer).toHaveTextContent('Weather data by Open-Meteo.com, licence CC BY 4.0.');
     expect(footer).toHaveTextContent('Open-Meteo Geocoding API: Place search; place data by GeoNames');
+    expect(footer).toHaveTextContent(/swisstopo \(geo\.admin\.ch\): Address search.*© swisstopo/);
     expect(footer).toHaveTextContent(
       'EU-DEM (produced using Copernicus data and information funded by the European Union), 3DEP/NED',
     );

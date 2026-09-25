@@ -3,6 +3,8 @@ import type { Config, FloorPlacement, HorizonProfile } from '../model/types';
 import { cachedTerrainHorizons, fetchTerrainHorizons, type TerrainHorizonResult } from '../model/terrain';
 import { floorPlacements } from '../model/geometry';
 import { FLOOR_HORIZON_STEP_DEG, floorHorizons, maxHorizon } from '../model/horizon';
+import { prismFloorHorizons } from '../model/buildingHorizon';
+import { dsmFloorHorizons, type SurfaceHorizons } from '../model/dsmHorizon';
 import { useConfig } from '../state/configStore';
 import { useDataStore, INITIAL_TERRAIN, type TerrainProfiles } from '../state/dataStore';
 import { terrainDownloadGate } from '../state/loadGate';
@@ -64,12 +66,44 @@ export function terrainProfileAt(terrain: TerrainSource, height: number): Horizo
   return best;
 }
 
+/** Runtime inputs of the surroundings horizons beyond the config (docs/ARCHITECTURE.md, "Umgebung"). */
+export interface SurroundingsSource {
+  /**
+   * Laser-scan (DSM) horizons per observer key while the scan is active for the current site (useDsmActive in
+   * hooks/useSurfaceModel.ts), else null. Non-null = dsmActive (prismBuildings then keeps only manual and
+   * edited buildings).
+   */
+  dsm: SurfaceHorizons | null;
+}
+
+/** No runtime surroundings: prisms of all buildings (if any), no laser scan. */
+export const NO_SURROUNDINGS: SurroundingsSource = Object.freeze({ dsm: null });
+
 /**
- * Horizon per floor as model floorHorizons (terrain if enabled ∪ manual points ∪ obstacles seen from the
- * floor), but with each floor's own terrain horizon (terrainProfileAt its floorTerrainHeight).
- * Equal to floorHorizons(config, profile) when a single profile is given.
+ * Horizon per floor: terrain (if enabled; each floor's own terrain horizon, terrainProfileAt its
+ * floorTerrainHeight) ∪ manual points ∪ obstacles ∪ prism horizon of the surrounding buildings
+ * (model/buildingHorizon.ts) ∪ laser-scan horizon (model/dsmHorizon.ts, only while `surroundings.dsm`), as the
+ * per-azimuth maximum. Obstacles, prisms and the scan are seen from each floor's panel centre (tilt-dependent).
+ * Without buildings and scan it equals floorHorizons(config, profile) when a single profile is given.
  */
-export function floorHorizonsWithTerrain(config: Config, terrain: TerrainSource): HorizonProfile[] {
+export function floorHorizonsWithTerrain(
+  config: Config,
+  terrain: TerrainSource,
+  surroundings: SurroundingsSource = NO_SURROUNDINGS,
+): HorizonProfile[] {
+  const base = terrainFloorHorizons(config, terrain);
+  const { dsm } = surroundings;
+  if (config.horizon.buildings.length === 0 && !dsm) return base;
+  const placements = floorPlacements(config);
+  const prism =
+    config.horizon.buildings.length > 0 ? prismFloorHorizons(config, placements, dsm !== null) : null;
+  const scan = dsm ? dsmFloorHorizons(dsm, placements) : null;
+  if (!prism && !scan) return base;
+  return base.map((h, k) => maxHorizon([h, prism?.[k], scan?.[k]], FLOOR_HORIZON_STEP_DEG));
+}
+
+/** floorHorizonsWithTerrain without the surroundings (terrain ∪ manual points ∪ obstacles). */
+function terrainFloorHorizons(config: Config, terrain: TerrainSource): HorizonProfile[] {
   if (!config.horizon.terrainEnabled || !terrain || isProfile(terrain)) {
     return floorHorizons(config, terrain && isProfile(terrain) ? terrain : null);
   }

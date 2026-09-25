@@ -2,7 +2,7 @@ import { devices, expect, test, type Page } from '@playwright/test';
 
 // External data (Open-Meteo, terrain tiles) is blocked: the app must fall back to the clear-sky year.
 test.beforeEach(async ({ page }) => {
-  await page.route(/open-meteo\.com|amazonaws\.com/, (route) => route.abort());
+  await page.route(/open-meteo\.com|amazonaws\.com|geo\.admin\.ch/, (route) => route.abort());
 });
 
 test('app loads, shows the main heading and annual results', async ({ page }) => {

@@ -1,11 +1,14 @@
 import { useId, useMemo, useState, type KeyboardEvent, type PointerEvent } from 'react';
 import { linePath } from '../../components/svg/paths';
 import { useFloorPlacements, useFocusFloor, useTerrainProfile } from '../../hooks/useModel';
+import { useSurroundingsSource } from '../../hooks/useSurfaceModel';
 import { compassPoint, floorLabel, useFormat, useLang, useMessages, type Messages } from '../../i18n';
+import { prismFloorHorizons } from '../../model/buildingHorizon';
+import { dsmFloorHorizons } from '../../model/dsmHorizon';
 import { horizonAt, horizonFromPoints, obstacleHorizon } from '../../model/horizon';
 import type { HorizonProfile } from '../../model/types';
 import { angleDiff, clamp, normalizeDeg } from '../../model/units';
-import { useConfigSection } from '../../state/configStore';
+import { useConfig, useConfigSection } from '../../state/configStore';
 import styles from './HorizonSparkline.module.css';
 
 // Geometry of the plot (viewBox units ≈ CSS px at the sidebar width; narrower and wider layouts are capped
@@ -26,7 +29,7 @@ const NEAR_FACADE = 22;
 /** Relative azimuths −90…90 in 1° steps. */
 const RELS = Array.from({ length: 2 * HALF_RANGE + 1 }, (_, i) => i - HALF_RANGE);
 
-type SeriesKey = 'terrain' | 'obstacles' | 'manual';
+type SeriesKey = 'terrain' | 'surface' | 'buildings' | 'obstacles' | 'manual';
 
 interface Series {
   key: SeriesKey;
@@ -38,6 +41,8 @@ const de = {
   title: 'Horizont vor der Fassade',
   subtitle: (from: string, to: string, floor: string) => `Blick von ${from} bis ${to}, vom ${floor} aus`,
   terrain: 'Gelände',
+  surface: 'Laserscan',
+  buildings: 'Gebäude',
   obstacles: 'Hindernisse',
   manual: 'Eigene Punkte',
   effective: 'Wirksamer Horizont',
@@ -53,6 +58,8 @@ const messages: Messages<typeof de> = {
     title: 'Horizon in front of the facade',
     subtitle: (from, to, floor) => `View from ${from} to ${to}, seen from ${floor}`,
     terrain: 'Terrain',
+    surface: 'Laser scan',
+    buildings: 'Buildings',
     obstacles: 'Obstacles',
     manual: 'Custom points',
     effective: 'Effective horizon',
@@ -76,9 +83,9 @@ function points(values: readonly number[], y: (el: number) => number): [number, 
 }
 
 /**
- * Small chart of the horizon in front of the facade (facade normal ± 90°): terrain and obstacles seen from
- * the focus floor, and the custom points, as 2 px lines, their maximum (what the model uses for that
- * floor) as a wash.
+ * Small chart of the horizon in front of the facade (facade normal ± 90°): terrain, laser scan (when active),
+ * surrounding buildings and obstacles seen from the focus floor, and the custom points, as 2 px lines, their
+ * maximum (what the model uses for that floor) as a wash.
  * Hover or focus + arrow keys show the values at one azimuth.
  */
 export function HorizonSparkline() {
@@ -92,6 +99,20 @@ export function HorizonSparkline() {
   const focus = useFocusFloor();
   const terrain = useTerrainProfile(focus);
   const placement = placements[focus];
+  const config = useConfig();
+  const surroundings = useSurroundingsSource(config);
+  // Laser scan (while active) and prisms of the surrounding buildings, seen from the focus floor.
+  const surface = useMemo(
+    () => (surroundings.dsm && placement ? dsmFloorHorizons(surroundings.dsm, [placement])[0] : null),
+    [surroundings, placement],
+  );
+  const prisms = useMemo(
+    () =>
+      config.horizon.buildings.length > 0
+        ? (prismFloorHorizons(config, placements, surroundings.dsm !== null)?.[focus] ?? null)
+        : null,
+    [config, placements, surroundings, focus],
+  );
   /** Relative azimuth under the crosshair (−90…90), null = none. */
   const [cursor, setCursor] = useState<number | null>(null);
   /** Keyboard focus on the plot: only then the readout is announced. */
@@ -100,6 +121,8 @@ export function HorizonSparkline() {
   const series = useMemo<Series[]>(() => {
     const out: Series[] = [];
     if (terrain) out.push({ key: 'terrain', label: t.terrain, values: sample(terrain, facade) });
+    if (surface) out.push({ key: 'surface', label: t.surface, values: sample(surface, facade) });
+    if (prisms) out.push({ key: 'buildings', label: t.buildings, values: sample(prisms, facade) });
     if (horizon.obstacles.length > 0 && placement) {
       const profile = obstacleHorizon(horizon.obstacles, placement.center, facade, 0.5);
       out.push({ key: 'obstacles', label: t.obstacles, values: sample(profile, facade) });
@@ -112,7 +135,7 @@ export function HorizonSparkline() {
       });
     }
     return out;
-  }, [terrain, horizon, placement, facade, t]);
+  }, [terrain, surface, prisms, horizon, placement, facade, t]);
 
   if (series.length === 0) return null;
 

@@ -1,6 +1,7 @@
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { clearModelCaches } from '../hooks/useModel';
 import { INITIAL_INSTALL, useInstallStore } from '../pwa/install';
+import { useAddressPointStore } from '../state/addressPointStore';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { INITIAL_SHARE_LINK, useShareLinkStore } from '../state/shareLinkStore';
@@ -17,8 +18,16 @@ export const TEST_DATE = '2025-06-21';
 export function resetStores(): void {
   useConfigStore.setState({ config: DEFAULT_CONFIG });
   useTimeStore.setState({ date: TEST_DATE, minutes: DEFAULT_MINUTES, playing: false, speed: DEFAULT_SPEED });
-  useUiStore.setState({ lang: 'de', theme: 'dark', views: DEFAULT_VIEWS, openSections: {}, focusFloor: 0 });
+  useUiStore.setState({
+    lang: 'de',
+    theme: 'dark',
+    views: DEFAULT_VIEWS,
+    openSections: {},
+    focusFloor: 0,
+    surroundingsImport: null,
+  });
   useDataStore.getState().resetData();
+  useAddressPointStore.setState({ point: null, anchor: null });
   useShareLinkStore.setState(INITIAL_SHARE_LINK);
   useInstallStore.setState(INITIAL_INSTALL);
   clearModelCaches();

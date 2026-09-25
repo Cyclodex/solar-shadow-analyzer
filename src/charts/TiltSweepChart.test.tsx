@@ -276,4 +276,28 @@ describe('TiltSweepChart', () => {
     expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(container.querySelectorAll('path[stroke="var(--text)"]')).toHaveLength(0);
   });
+
+  it('keeps its height while the first sweep of a new site computes (no layout shift)', () => {
+    // jsdom has no layout: the card reports the height it had with the chart.
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return { height: this.tagName === 'SECTION' ? 548 : 0, width: 0, top: 0, left: 0 } as DOMRect;
+    });
+    useDataStore.getState().setWeather({ status: 'ready', series });
+    const { container } = renderChart();
+    const card = container.querySelector('section') as HTMLElement;
+    expect(screen.getByRole('img', { name: 'Neigungsvergleich' })).toBeInTheDocument();
+    expect(card.style.minHeight).toBe('');
+    // Another site (an address pick): no weather and no sweep for it yet.
+    act(() => useConfigStore.getState().patch('location', { latitude: 46.947847, longitude: 7.449979 }));
+    expect(screen.getByText('Der Neigungsvergleich wird berechnet …')).toBeInTheDocument();
+    expect(card.style.minHeight).toBe('548px');
+    const there = clearSkyYear(46.947847, 7.449979, 2025);
+    act(() => useDataStore.getState().setWeather({ status: 'ready', series: there }));
+    act(() => flushSweeps());
+    expect(screen.getByRole('img', { name: 'Neigungsvergleich' })).toBeInTheDocument();
+    expect(card.style.minHeight).toBe('');
+    rect.mockRestore();
+  });
 });

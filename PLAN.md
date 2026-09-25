@@ -63,8 +63,56 @@ Die Phasen des alten Plans und ihre Umsetzung:
   Speichers; Laden aus dem Netz und dynamische Tarife; Herstellerwerte für Wirkungsgrad und Eigenverbrauch, sobald
   veröffentlicht.
 
+## Erledigt nach Version 2.0
+
+- **Umgebung: exakte Adresse, Laserscan-Horizont und Nachbargebäude** (Schweiz und Liechtenstein; Konzept,
+  Rechenregeln und Messungen: [ARCHITECTURE.md](docs/ARCHITECTURE.md#umgebung-adresse-laserscan-gebäude)):
+  - Fundament: Config-Vertrag (`horizon.buildings`, `buildingImport`, `surfaceModel`, additiv ohne
+    Versionswechsel), Koordinaten auf 1e-6°, Teilen-Links mit Gebäuden, WGS84 ⇄ LV95 und lokale Meter,
+    Gebäude-Import aus den swisstopo-Vektorkacheln (zusammengefügt an Kachelkanten), Rechenregeln, Ladezustände und
+    Platzhalter der Oberfläche.
+  - Adresssuche (A): Adressen der Schweiz und Liechtensteins (swisstopo) und Orte in einer Suche,
+    Gebäudeangaben aus dem GWR, Höhe vom Höhendienst, «Nächste Adresse übernehmen», Koordinaten auf 6 Stellen.
+  - Laserscan (B): swissSURFACE3D-Horizont je Stockwerk und Neigung im Web Worker (eigener COG-Leser, STAC,
+    Masken für entfernte Gebäude und «nur Gebäude», Ergebnis-Cache), Einstellungen mit Status, Datenstand und
+    geschätzter Datenmenge; `npm run validate:dsm` (Breitenrainstrasse 10: 32.73° / 18.03°, vor der Durchsicht
+    der Integration 32.52° / 17.92°). Nach dem Review: Rechnen und Laden getrennt (Neigung und Fassade brechen
+    keinen Download mehr ab, Nachladen nach einem Reload sichtbar und gemeldet), Eigenbereich je Auftrag, Pipeline
+    aus dem Haupt-Chunk.
+  - Gebäude (C), Teil 1: exakter Prismen-Horizont (Kantensweep) je Stockwerk und Neigung, Import nach der
+    Adresswahl und mit «Gebäude laden» (Fortschritt, Abbrechen, Fehler, Rückfrage vor dem Verwerfen von Änderungen),
+    Ausdünnen auf die Gebäude, die den Horizont einer möglichen Fassade setzen, plus Umgebung, Fassadenkanten und
+    Brandmauern, Gebäudeliste mit Bearbeiten, Entfernen/Wiederherstellen und Eingabe von Hand.
+  - Gebäude (C), Teil 2: Lageplan (Draufsicht mit Massstab, Nordpfeil, Adresse, Sonnenrichtung; Fassade und
+    Balkon antippen, ziehen oder per Auswahl und Regler, «Übernehmen» setzt Standort und Fassadenazimut; Zoom mit
+    zwei Fingern, Strg + Mausrad oder Knöpfen; öffnet sich nach einer Adresswahl), Nachbargebäude als Prismen in der
+    3D-Ansicht (zusammengeführt, verdeckende durchscheinend, eigenes Gebäude mit echtem Grundriss) und Zeilen zu
+    Lage, Gebäuden, Laserscan und Datenquellen im Druckbericht.
+  - Gebäude (C), Teil 3 (Durchsicht): Gebäude eines anderen Orts (Hinweis, nicht in 3D, wo sie alle Schatten
+    löschten), Flügel des eigenen Teils schatten, «Eigenes Gebäude» per Tastatur, von Hand erfasste nie das eigene,
+    spitze Ecken, kompakter Teilen-Link, Import im Web Worker, Liste und Lageplan als eigene Chunks.
+  - Integration: Mit echten Daten (Kramgasse 49 und Breitenrainstrasse 10, Bern) von der Suche bis zum
+    Teilen-Link geprüft. Der Laserscan wartet, solange der Standort der Adresspunkt im eigenen Gebäude ist (vorher
+    88.7° Horizont und scheinbar endgültige Werte, wenn «Übernehmen» länger dauerte), und ein Download wartet auf
+    einen laufenden Gebäude-Import. Der Lageplan bleibt nach dem Sprung stehen (die Karte «Neigungsvergleich»
+    behält ihre Höhe; ohne Scroll-Verankerung hält ihn die App). Druckbericht mit den Angaben des Gebäuderegisters
+    und dem Stand des Laserscans. Adresssuche, Laserscan-Einstellungen und -Lader und Gebäude-Import als eigene
+    Chunks.
+  - Integration, Durchsicht: Laserscan durch jede gekreuzte Zelle (vorher 0.25-m-Schritte: Horizont tiefer
+    Stockwerke zu tief) und eigener Bereich an der gelesenen Zelle; der Adresspunkt bleibt gemerkt, bis der Balkon
+    gesetzt ist (Laserscan wartet auch nach einem gescheiterten oder unterbrochenen Import, Import nach dem Neuladen
+    erneut), mit Hinweis und Aktion unter der Suche, im Laserscan-Status und bei den vorläufigen Jahreswerten; Fokus
+    folgt dem Lageplan; Flügel des eigenen Gebäudes in 3D durchscheinend; Balkon per Touch entlang jeder Fassade;
+    gekürzter Link im Druck; begrenzter Laserscan-Cache; veraltetes Import-Ergebnis verworfen; Einstieg über den
+    Standort in der Kopfzeile.
+
 ## Offen
 
+- Umgebung: Ein Teilen-Link, der vor dem Setzen des Balkons ohne Gebäude erzeugt wurde, trägt den Adresspunkt nicht
+  als solchen; scheitert beim Empfänger auch der Import, rechnet der Laserscan dort am Adresspunkt. Der
+  Geländehorizont (Terrarium) steht in dichten Altstädten bis 10 m zu hoch (Kramgasse), Merkmale in 0.5–1 km liegen
+  dann rund 1° zu tief. Safari/iOS und Firefox mit den Bereichsanfragen des Laserscans ungeprüft.
+- Druckbericht: ein QR-Code statt des gekürzten Teilen-Links mit Gebäuden.
 - Übersetzungen Französisch und Italienisch (aus dem alten Punkt 4.4).
 - SVG-Export der Ansichten und Diagramme (aus dem alten Punkt 4.3).
 - Open-Graph-Tags `og:url` und `og:image` (eigenes Vorschaubild) für die feste Adresse auf GitHub Pages.

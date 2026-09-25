@@ -54,6 +54,23 @@ describe('useUiStore', () => {
     expect(fresh.getState().focusFloor).toBe(1);
   });
 
+  it('hands a surroundings import request over once (not persisted)', () => {
+    const s = useUiStore.getState();
+    expect(s.surroundingsImport).toBeNull();
+    s.requestSurroundingsImport(46.947849, 7.449978);
+    const first = useUiStore.getState().surroundingsImport;
+    expect(first).toMatchObject({ latitude: 46.947849, longitude: 7.449978 });
+    s.requestSurroundingsImport(NaN, 7);
+    expect(useUiStore.getState().surroundingsImport).toBe(first);
+    expect(useUiStore.getState().consumeSurroundingsImport()).toBe(first);
+    expect(useUiStore.getState().surroundingsImport).toBeNull();
+    expect(useUiStore.getState().consumeSurroundingsImport()).toBeNull();
+    // The same address again is a new request.
+    s.requestSurroundingsImport(46.947849, 7.449978);
+    expect(useUiStore.getState().surroundingsImport!.id).toBeGreaterThan(first!.id);
+    expect(localStorage.getItem(UI_STORAGE_KEY) ?? '').not.toContain('surroundingsImport');
+  });
+
   it('persists and validates stored state', async () => {
     localStorage.setItem(
       UI_STORAGE_KEY,

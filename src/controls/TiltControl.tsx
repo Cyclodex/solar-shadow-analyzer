@@ -6,6 +6,8 @@ import { useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { LIMITS } from '../model/defaults';
 import { useAnnualResultsState, useTiltSweep } from '../hooks/useModel';
+import { useSurfaceSweepPending } from '../hooks/useSurfaceModel';
+import { useProvisionalNote } from './horizon/provisional';
 import { useConfigSection, usePatch } from '../state/configStore';
 import styles from './TiltControl.module.css';
 
@@ -21,7 +23,7 @@ const de = {
   clearSky: '(klarer Himmel)',
   computing: 'Optimum wird berechnet …',
   sweepNote: 'Gerechnet in 5°-Schritten.',
-  provisional: 'vorläufig – Geländehorizont wird geladen',
+  sweepSurface: 'vorläufig – Laserscan für die anderen Neigungen wird gerechnet',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -37,7 +39,7 @@ const messages: Messages<typeof de> = {
     clearSky: '(clear sky)',
     computing: 'Computing optimum …',
     sweepNote: 'Computed in 5° steps.',
-    provisional: 'provisional – loading terrain horizon',
+    sweepSurface: 'provisional – computing the laser scan for the other tilts',
   },
 };
 
@@ -46,8 +48,9 @@ const messages: Messages<typeof de> = {
  * tilt sweep (annual total of all floors) as slider mark and apply button. While the weather of a new site
  * or year is still arriving a spinner replaces the optimum; while only the terrain horizon is (after
  * PROVISIONAL_DELAY_MS), the optimum without it is shown dimmed and marked as provisional, without the
- * apply button; while the sweep is being updated after another input changed, the previous optimum is
- * shown dimmed.
+ * apply button; likewise while the laser-scan horizons of the other tilts are still computed (the sweep uses
+ * the nearest tilt's horizon meanwhile); while the sweep is being updated after another input changed, the
+ * previous optimum is shown dimmed.
  */
 export function TiltControl() {
   const t = useMessages(messages);
@@ -61,7 +64,9 @@ export function TiltControl() {
   // weather is final. While only the terrain horizon loads, the optimum is provisional.
   const annualState = useAnnualResultsState();
   const sweep = useTiltSweep(annualState !== 'loading');
-  const provisional = annualState === 'provisional';
+  const provisionalNote = useProvisionalNote();
+  const sweepSurface = useSurfaceSweepPending();
+  const provisional = annualState === 'provisional' || (annualState === 'final' && sweepSurface);
   const theta = panels.tiltFromVertical;
   const optimum = sweep?.optimum;
   const updating = sweep?.updating === true;
@@ -106,7 +111,9 @@ export function TiltControl() {
               <span className={styles.sub}>
                 {t.optimumSub(f.kwh(optimum.totalKwh))} {sweep.source === 'clear-sky' ? t.clearSky : ''}
               </span>
-              <span className={styles.sub}>{provisional ? t.provisional : t.sweepNote}</span>
+              <span className={styles.sub}>
+                {annualState === 'provisional' ? provisionalNote : provisional ? t.sweepSurface : t.sweepNote}
+              </span>
             </div>
             {provisional ? null : optimum.tiltFromVertical === theta ? (
               <span className={styles.badge}>{t.isOptimum}</span>

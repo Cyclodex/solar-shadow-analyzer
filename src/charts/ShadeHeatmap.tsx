@@ -61,6 +61,7 @@ import { useElementWidth } from '../components/svg/useElementWidth';
 import { isFocusVisible } from './lib/focus';
 import { usePlotPointer } from './lib/usePlotPointer';
 import { useNearViewport } from '../hooks/useNearViewport';
+import { useProvisionalNote } from '../controls/horizon/provisional';
 import { useSvgId } from '../components/svg/useSvgId';
 import chart from './lib/chart.module.css';
 import styles from './ShadeHeatmap.module.css';
@@ -100,7 +101,6 @@ const de = {
   colShare: 'Anteil verschattet',
   colMax: 'Max. verschattete Fläche',
   total: 'Jahr',
-  provisional: 'vorläufig – Geländehorizont wird geladen',
 };
 type Texts = typeof de;
 const messages: Messages<Texts> = {
@@ -135,7 +135,6 @@ const messages: Messages<Texts> = {
     colShare: 'Shaded share',
     colMax: 'Max. shaded area',
     total: 'Year',
-    provisional: 'provisional – loading terrain horizon',
   },
 };
 
@@ -498,9 +497,10 @@ const HeatmapCard = memo(function HeatmapCard({ floor, heatmap, stats, nearRef }
   );
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
-  // Computed without the terrain horizon while it is loading (like the annual KPIs, marked; the CSV export
-  // waits for it).
+  // Computed without the terrain horizon or the laser scan while they are loading (like the annual KPIs,
+  // marked with what is loading; the CSV export waits for it).
   const provisional = useTerrainPending();
+  const provisionalNote = useProvisionalNote();
   const hasAbove = floor < numFloors - 1;
   const floorName = labels[floor] ?? String(floor);
   const aboveName = hasAbove ? (labels[floor + 1] ?? String(floor + 1)) : null;
@@ -641,7 +641,7 @@ const HeatmapCard = memo(function HeatmapCard({ floor, heatmap, stats, nearRef }
             : []),
         ]}
       />
-      {provisional && <p className={styles.provisionalNote}>{t.provisional}</p>}
+      {provisional && <p className={styles.provisionalNote}>{provisionalNote}</p>}
       <div ref={rootRef} className={chart.root}>
         <canvas
           ref={canvasRef}

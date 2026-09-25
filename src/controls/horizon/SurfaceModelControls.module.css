@@ -1,0 +1,102 @@
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.label {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Meter: accent fill on a lighter track of the same hue (as TerrainStatus). */
+.bar {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--accent-soft);
+}
+
+.fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: calc(var(--progress, 0) * 100%);
+  border-radius: inherit;
+  background: var(--accent);
+  transition: width var(--transition);
+}
+
+.error {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--warn);
+  border-radius: var(--radius-sm);
+  background: var(--warn-soft);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.ready {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ok {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.note {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.attribution {
+  font-size: var(--fs-xs);
+  color: var(--text-faint);
+}
+
+@media (forced-colors: active) {
+  .fill {
+    background: Highlight;
+  }
+}
+
+/* Wraps the load state: the focus target after «Erneut versuchen» (its button unmounts). */
+.status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  border-radius: var(--radius-sm);
+}
+
+.status:focus {
+  outline: none;
+}
+
+.status:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}

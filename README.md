@@ -3,7 +3,8 @@
 Verschattungsanalyse für Balkon-Solarpanels, die geneigt an übereinanderliegenden Balkongeländern hängen. Die App
 berechnet exakt in 3D, wann und wie stark die Panelreihe eines Stockwerks die Reihe darunter verschattet, und
 simuliert daraus den Jahresertrag je Stockwerk: mit stündlichen Wetterdaten, Geländehorizont, Hindernissen und
-Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
+Wirtschaftlichkeit, in der Schweiz und in Liechtenstein auch mit der genauen Adresse, den Nachbargebäuden und dem
+Laserscan der Umgebung. Alles läuft im Browser, ohne eigenes Backend.
 
 ![Übersicht: Zeitpunkt und Panelneigung links, Jahres- und Momentanwerte oben, 3D-Ansicht mit dem Schatten der oberen Reihe auf dem 1. OG](docs/images/overview.png)
 
@@ -19,7 +20,16 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
   15 / 30 / 60 / 120 simulierten Minuten pro Sekunde.
 - **Panelneigung** θ 0–90° ab Senkrechte (β = 90° − θ als Zusatzinfo) mit Optimum aus dem Neigungsvergleich und
   Knopf «Optimum … übernehmen».
-- **Standort:** Ortssuche, 24 Presets (14 CH, 3 AT, 7 DE), Gerätestandort, Koordinaten, Höhe und Zeitzone.
+- **Standort:** Adress- und Ortssuche in einem Feld, 24 Presets (14 CH, 3 AT, 7 DE), Gerätestandort, Koordinaten
+  auf 6 Nachkommastellen, Höhe und Zeitzone.
+- **Genaue Adresse (Schweiz und Liechtenstein):** Gebäudeadressen von swisstopo mit Höhe am Standort und den Angaben
+  des Gebäude- und Wohnungsregisters (Geschosse, Baujahr, Grundfläche); nach «Mein Standort» übernimmt «Nächste
+  Adresse übernehmen» die nächste Gebäudeadresse. Die Wahl einer Adresse lädt die Umgebungsgebäude, schaltet den
+  Laserscan ein und öffnet den Lageplan.
+- **Lageplan:** Draufsicht mit Massstab und Nordpfeil; Fassade und Balkon auf dem eigenen Gebäude antippen oder
+  entlang der Fassade ziehen (auch per Auswahl und Regler), «Übernehmen» setzt Standort und Fassadenausrichtung.
+  Brandmauern sind nicht wählbar, ein anderes Gebäude lässt sich als eigenes wählen; Zoom mit zwei Fingern,
+  Strg + Mausrad oder Knöpfen.
 - **Gebäude und Panels:** 1–8 Stockwerke ab einem wählbaren untersten Stockwerk, Stockwerkhöhe, Geländerhöhe,
   Balkontiefe; 5 Modul-Presets, Quer- oder Hochformat, 1–8 Module nebeneinander, Modulabstand, Nennleistung.
 - **System:** Wechselrichter-Grenze je Stockwerk, Systemverluste, Temperaturkoeffizient, NOCT, Albedo, Modell der
@@ -32,15 +42,24 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
   Autarkie, Vollzyklen, Tagesverlauf mit Ladestand, Energiefluss je Monat mit und ohne Batterie,
   Wirtschaftlichkeit mit und ohne Batterie, CSV je Monat und je Stunde.
 - **Horizont & Umgebung:** Geländehorizont aus einem Höhenmodell (bis ca. 50 km), bis zu 20 Hindernisse
-  (Nachbargebäude als Quader), eigene Horizontpunkte oder Import einer PVGIS-Horizontdatei.
+  (Nachbargebäude als Quader), eigene Horizontpunkte oder Import einer PVGIS-Horizontdatei. Ein Diagramm zeigt jede
+  Quelle des Horizonts vor der Fassade.
+- **Umgebungsgebäude (Schweiz und Liechtenstein):** Grundrisse und Höhen der Gebäude im Umkreis aus den
+  Vektorkacheln von swisstopo, ausgedünnt auf die, die den Horizont einer möglichen Fassade setzen, und die nahen;
+  als Körper mit flachem Dach im Horizont jedes Stockwerks und in der 3D-Ansicht. Liste mit Höhe, Basis, Entfernen
+  und Wiederherstellen, dazu Gebäude von Hand.
+- **Laserscan-Umgebung (Schweiz und Liechtenstein):** Horizont aus dem Oberflächenmodell swissSURFACE3D (0.5 m) je
+  Stockwerk und Neigung, mit Bäumen (ganzjährig undurchsichtig) oder nur mit Gebäuden, Umkreis 150–500 m (bei 300 m
+  rund 5 MB); gerechnet im Hintergrund (Web Worker), fertige Horizonte bleiben im Browser gespeichert.
 - **Wetterdaten:** stündliche Open-Meteo-Daten für ein Jahr ab 1940 bis zum letzten vollständigen Jahr, oder ein
   synthetisches Jahr mit klarem Himmel (als theoretisches Maximum gekennzeichnet).
 - **Ergebnisse:** Kennzahlen (Jahresertrag, Verschattungsverlust, spezifischer Ertrag, Amortisation, Werte zum
   gewählten Zeitpunkt), Tagesverlauf, Jahres-Heatmap der Verschattung, Monatsertrag, Neigungsvergleich 0–90° in
   5°-Schritten, Wirtschaftlichkeit und Monatstabelle.
-- **Teilen und Export:** Teilen-Link (`#c=…`), Konfiguration als JSON speichern und laden, CSV (Monatsertrag je
-  Stockwerk, Neigungsvergleich, Heatmap, Batterie), PNG je Ansicht und Diagramm, Druckbericht (auch als PDF). Einstellungen bleiben im
-  Browser gespeichert.
+- **Teilen und Export:** Teilen-Link (`#c=…`, mit dem genauen Standort und den Umgebungsgebäuden), Konfiguration
+  als JSON speichern und laden, CSV (Monatsertrag je Stockwerk, Neigungsvergleich, Heatmap, Batterie), PNG je
+  Ansicht und Diagramm, Druckbericht (auch als PDF; mit Adresse, Lage am Gebäude, Umgebungsgebäuden und
+  Laserscan). Einstellungen bleiben im Browser gespeichert.
 - **Oberfläche:** Deutsch und Englisch, dunkles und helles Design. Ab 1100 px Breite stehen die Eingaben in einer
   Seitenleiste; schmaler ist die Seite einspaltig, mit den Ergebnissen vor den Einstellungen (ausgelegt ab 320 px
   Breite, automatisch getestet bei 360 px).
@@ -74,8 +93,9 @@ Jahreswerte und optimale Neigung zuerst mit dem Hinweis «vorläufig – Geländ
 2 MB Höhenkacheln für den Geländehorizont da sind.
 
 Nach dem ersten Besuch startet die App auch ohne Internet, installiert oder im Browser: Alle App-Dateien liegen dann
-im Browser. Wetterdaten und Geländehorizont für einen neuen Standort oder ein anderes Jahr brauchen eine Verbindung;
-einmal geladene bleiben gespeichert, ohne Verbindung rechnet die App sonst mit klarem Himmel und ohne Gelände. Im
+im Browser. Wetterdaten, Geländehorizont, Adresssuche, Gebäude und Laserscan für einen neuen Standort oder ein
+anderes Jahr brauchen eine Verbindung; einmal geladene Wetterdaten und Horizonte bleiben gespeichert, ohne Verbindung
+rechnet die App sonst mit klarem Himmel, ohne Gelände und ohne Laserscan. Im
 Safari-Browser auf iPhone und iPad löscht iOS diese Daten samt den gespeicherten Einstellungen, wenn Safari sieben
 Tage lang benutzt, die Seite dabei aber nicht besucht wurde; als Home-Bildschirm-App bleiben sie erhalten
 ([WebKit](https://webkit.org/blog/10218/full-third-party-cookie-blocking-and-more/)). Ist eine neue Version
@@ -103,21 +123,23 @@ npm run dev   # http://localhost:5173
 
 ## Skripte
 
-| Befehl                     | Zweck                                                                  |
-| -------------------------- | ---------------------------------------------------------------------- |
-| `npm run dev`              | Entwicklungsserver (Vite)                                              |
-| `npm run build`            | Typecheck (`tsc -b`) und Produktions-Build nach `dist/`                |
-| `npm run preview`          | Build lokal ausliefern                                                 |
-| `npm test`                 | Unit- und Komponententests (Vitest: `model` in Node, `ui` in jsdom)    |
-| `npm run test:watch`       | Vitest im Watch-Modus                                                  |
-| `npm run typecheck`        | TypeScript-Prüfung (`tsc -b`)                                          |
-| `npm run lint`             | ESLint                                                                 |
-| `npm run format`           | Prettier: alle Dateien formatieren                                     |
-| `npm run format:check`     | Prettier: Formatierung prüfen                                          |
-| `npm run e2e`              | End-to-End-Tests mit Playwright (Chromium) gegen den Produktions-Build |
-| `npm run icons`            | App-Icons (PNG) aus `public/favicon.svg` erzeugen                      |
-| `npm run validate:terrain` | Geländehorizont gegen PVGIS `printhorizon` prüfen (braucht Netzwerk)   |
-| `npm run validate:yield`   | Jahresertrag gegen PVGIS prüfen (braucht Netzwerk)                     |
+| Befehl                       | Zweck                                                                    |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `npm run dev`                | Entwicklungsserver (Vite)                                                |
+| `npm run build`              | Typecheck (`tsc -b`) und Produktions-Build nach `dist/`                  |
+| `npm run preview`            | Build lokal ausliefern                                                   |
+| `npm test`                   | Unit- und Komponententests (Vitest: `model` in Node, `ui` in jsdom)      |
+| `npm run test:watch`         | Vitest im Watch-Modus                                                    |
+| `npm run typecheck`          | TypeScript-Prüfung (`tsc -b`)                                            |
+| `npm run lint`               | ESLint                                                                   |
+| `npm run format`             | Prettier: alle Dateien formatieren                                       |
+| `npm run format:check`       | Prettier: Formatierung prüfen                                            |
+| `npm run e2e`                | End-to-End-Tests mit Playwright (Chromium) gegen den Produktions-Build   |
+| `npm run icons`              | App-Icons (PNG) aus `public/favicon.svg` erzeugen                        |
+| `npm run validate:terrain`   | Geländehorizont gegen PVGIS `printhorizon` prüfen (braucht Netzwerk)     |
+| `npm run validate:yield`     | Jahresertrag gegen PVGIS prüfen (braucht Netzwerk)                       |
+| `npm run validate:buildings` | swisstopo-Gebäude um eine Adresse laden und zählen (braucht Netzwerk)    |
+| `npm run validate:dsm`       | Laserscan-Horizont an der Breitenrainstrasse 10, Bern (braucht Netzwerk) |
 
 ### Tests und CI
 
@@ -130,8 +152,9 @@ npm run dev   # http://localhost:5173
   Pages (dort kommt der Pfad aus `actions/configure-pages`). Mit derselben Variable laufen auch die E2E-Tests unter diesem Pfad, z. B.
   `BASE_PATH=/solar-shadow-analyzer/ E2E_PORT=4811 npm run e2e`.
 - `npm run validate:terrain` lädt Höhenkacheln und PVGIS-Horizonte, `npm run validate:yield` Open-Meteo-Wetter und
-  PVGIS-Ertragsreihen. Hinter einem HTTP-Proxy braucht Node `NODE_USE_ENV_PROXY=1`; die Optionen stehen im Kopf von
-  `scripts/validate-terrain.ts` und `scripts/validate-yield.ts`.
+  PVGIS-Ertragsreihen, `npm run validate:buildings` die swisstopo-Vektorkacheln (Standard: Kramgasse 49, Bern) und
+  `npm run validate:dsm` den Laserscan an der Breitenrainstrasse 10, Bern. Hinter einem HTTP-Proxy braucht Node
+  `NODE_USE_ENV_PROXY=1`; die Optionen stehen im Kopf der Skripte in `scripts/`.
 - Die CI (GitHub Actions, Node aus `.nvmrc`) führt Lint, `format:check`, Typecheck, Tests und Build aus und danach die
   E2E-Tests, einmal unter `/` und einmal unter `/solar-shadow-analyzer/`. Nach einer erfolgreichen CI für einen Push
   auf `main` veröffentlicht `.github/workflows/pages.yml` die App auf GitHub Pages.
@@ -173,6 +196,11 @@ stehen dort in `LIMITS`.
   Stockwerk ab der Oberkante der Panelreihe, im Hintergrund (Web Worker) gerechnet. Gegenüber
   PVGIS `printhorizon` RMS 0.34° (Mittelland), 1.19° (Grindelwald) und 1.22° (Zermatt).
 
+- **Umgebung:** Der Laserscan-Horizont (swissSURFACE3D, 0.5 m) ergibt an der Breitenrainstrasse 10 in Bern 1 m vor
+  der Fassade 32.52° (8 m über Boden) und 17.92° (14 m), von Hand aus dem Haus gegenüber 32.68° und 17.97°
+  (`npm run validate:dsm`). Der Horizont der Umgebungsgebäude ist exakt (Kantensweep; gegen die Hindernis-Quader
+  höchstens 1.4e-14°).
+
 Formeln, Koordinatensysteme, Konventionen und Modulgrenzen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Datenquellen und Datenschutz
@@ -185,8 +213,24 @@ ruft direkt aus dem Browser folgende Dienste auf:
 - **Open-Meteo Historical Weather API** (`archive-api.open-meteo.com`): erhält die auf 0.01° gerundeten Koordinaten
   und das Jahr, automatisch bei der Wetterquelle Open-Meteo (Standard). Daten unter
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), «Weather data by Open-Meteo.com».
-- **Open-Meteo Geocoding API** (`geocoding-api.open-meteo.com`): erhält den Suchtext, nur bei einer Ortssuche. Ortsdaten
-  von GeoNames (CC BY 4.0).
+- **Open-Meteo Geocoding API** (`geocoding-api.open-meteo.com`): erhält den Suchtext bei jeder Suche im Suchfeld
+  (ab 2 Zeichen, 300 ms nach der letzten Eingabe; Orte und Adressen werden gleichzeitig gesucht). Ortsdaten von
+  GeoNames (CC BY 4.0).
+- **swisstopo / geo.admin.ch** (Daten nur für die Schweiz und Liechtenstein; freie Geodaten, «© swisstopo»,
+  [Nutzungsbedingungen](https://www.swisstopo.admin.ch/de/nutzungsbedingungen-kostenlose-geodaten-und-geodienste)):
+  - Adresssuche (`api3.geo.admin.ch`): erhält denselben Suchtext bei jeder Suche, auch für Orte ausserhalb der
+    Schweiz. Nach der Wahl einer Adresse: deren Gebäudenummer (EGID) für die Angaben des Gebäude- und
+    Wohnungsregisters und ihre Koordinaten für die Höhe am Standort. Die Koordinaten des Gerätestandorts nur bei einem
+    Klick auf «Nächste Adresse übernehmen» (nach «Mein Standort»).
+  - Gebäude der Basiskarte (`vectortiles.geo.admin.ch`): 1–4 Kartenkacheln rund um den Standort (etwa 0.15–0.7 MB;
+    ihre Nummern verraten die Gegend), automatisch nach der Wahl einer Adresse und bei «Gebäude laden»; mit
+    ausgeschalteten Bäumen auch für den Laserscan.
+  - Laserscan (`data.geo.admin.ch`, dazu die Höhe am Standort über `api3.geo.admin.ch`): Katalog und Ausschnitte
+    von swissSURFACE3D und swissALTI3D rund um den Standort (bei 300 m Umkreis in Bern gemessen 4.9–5.0 MB, ohne
+    Bäume rund 0.9 MB mehr), automatisch, solange die Laserscan-Umgebung eingeschaltet ist: Die Wahl einer Adresse
+    schaltet sie ein, geladen wird dann nach «Übernehmen» im Lageplan. Fertige Horizonte bleiben im Browser; neu
+    geladen wird für einen neuen Standort oder, nach einem Neuladen der Seite, für eine neue Neigung oder neue
+    Stockwerke.
 - **Terrain Tiles** (AWS Open Data, `s3.amazonaws.com/elevation-tiles-prod`): Höhenkacheln rund um den Standort,
   automatisch bei eingeschaltetem Geländehorizont (Standard). Quellen und Namensnennung:
   [Tilezen/Mapzen](https://github.com/tilezen/joerd/blob/master/docs/attribution.md), u. a. SRTM, GMTED2010, ETOPO1
@@ -197,12 +241,16 @@ ruft direkt aus dem Browser folgende Dienste auf:
   Standort, die heruntergeladene Datei kann importiert werden.
 
 Der Gerätestandort wird nur auf Klick über die Geolocation-API des Browsers abgefragt. Konfiguration (inkl.
-Koordinaten), UI-Einstellungen und zwischengespeicherte Wetter- und Geländedaten liegen im `localStorage`, die
-App-Dateien für den Offline-Start im Cache des Service Workers (nur Dateien der App selbst). Wird die Seite verlassen,
+Koordinaten und Umgebungsgebäuden), UI-Einstellungen, zwischengespeicherte Wetter- und Geländedaten, fertige
+Laserscan-Horizonte und der Punkt der zuletzt gewählten Adresse (`ssa.addressPoint`, damit der Laserscan erst nach
+dem Setzen des Balkons im Lageplan lädt) liegen im `localStorage`, die Angaben des Gebäuderegisters nur bis zum Neuladen im Speicher der
+Seite, die App-Dateien für den Offline-Start im Cache des Service Workers (nur Dateien der App selbst). Wird die Seite verlassen,
 bevor der URL-Hash nachgeführt ist, übergibt der `sessionStorage` (`ssa.pendingHash`) ihn dem nächsten Aufruf im
 selben Tab; dort merkt sich die App auch, wann sie sich wegen einer neuen Version selbst neu geladen hat
-(`ssa.chunkReload`). Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet, wer
-den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
+(`ssa.chunkReload`). Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet. **Der
+Link enthält immer den genauen Standort** (Koordinaten auf 0.000001°, etwa 10 cm, nach einer Adresssuche auch die
+Adresse als Bezeichnung) **und die gespeicherten Nachbargebäude** (Grundrisse und Höhen); wer ihn erhält, sieht beides.
+Der Druckbericht druckt denselben Link, ab 500 Zeichen (mit Gebäuden) nur gekürzt. Der Sonnenstand wird lokal berechnet.
 
 ## Einschränkungen
 
@@ -218,6 +266,10 @@ den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechn
   langjähriges Mittel; das Jahr mit klarem Himmel ist eine Obergrenze.
 - Der Geländehorizont hängt von der Auflösung der Höhenkacheln ab. Lassen sich die Kacheln nicht laden, rechnet die
   App ohne Gelände und zeigt einen Hinweis.
+- Adresssuche, Laserscan-Umgebung und Gebäude-Import gibt es nur in der Schweiz und in Liechtenstein (swisstopo).
+  Bäume gelten ganzjährig als undurchsichtig; Nachbargebäude als Grundriss mit flachem Dach überschätzen
+  Schrägdächer. Der Laserscan wartet nach der Wahl einer Adresse auf «Übernehmen» im Lageplan, weil der Adresspunkt
+  im Gebäude liegt; ohne importierte Gebäude (Import gescheitert) erkennt die App das nicht.
 - Wirtschaftlichkeit mit konstanten Preisen, ohne Diskontierung und ohne laufende Kosten.
 - Batterie: stündliche Energiebilanz ohne Alterung und Ersatz des Speichers, ohne Laden aus dem Netz, ohne
   Feiertage im Lastprofil (H0 ist ein deutsches Standardprofil); Wirkungsgrade und Eigenverbrauch sind Annahmen.
@@ -227,9 +279,9 @@ den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechn
 ## Stack
 
 React 19 · TypeScript 6 · Vite 8 · zustand 5 · three.js 0.186 mit @react-three/fiber 9 und drei 10 (nur die 3D-Ansicht,
-lazy geladen) · fast-png in einem Web Worker für den Geländehorizont · CSS Modules mit CSS-Variablen · SVG- und
-Canvas-Diagramme ohne Chart-Library · vite-plugin-pwa (Workbox) für Installation und Offline-Start · Vitest 5,
-Testing Library, Playwright, ESLint 10, Prettier 3.
+lazy geladen) · fast-png in einem Web Worker für den Geländehorizont · @mapbox/vector-tile und pbf für die
+swisstopo-Gebäude · CSS Modules mit CSS-Variablen · SVG- und Canvas-Diagramme ohne Chart-Library · vite-plugin-pwa
+(Workbox) für Installation und Offline-Start · Vitest 5, Testing Library, Playwright, ESLint 10, Prettier 3.
 
 ## Weiterentwicklung
 
