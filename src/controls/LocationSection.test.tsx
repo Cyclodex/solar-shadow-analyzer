@@ -49,7 +49,7 @@ interface Routes {
   search?: (text: string) => Response;
   height?: () => Response;
   gwr?: (featureId: string) => Response;
-  identify?: () => Response;
+  identify?: () => Response | Promise<Response>;
 }
 
 /** fetch stub routing the app's services (geo.admin.ch answers from the recorded fixtures). */
@@ -323,21 +323,22 @@ describe('LocationSection', () => {
       expect(first).toHaveAccessibleName(/^Orte/);
     });
 
-    it('marks similar spellings and keeps them only with the typed house number', async () => {
+    it('marks similar spellings and keeps them only with the typed house number and a similar street', async () => {
       stubServices();
       render(<LocationSection />);
       fireEvent.change(searchInput(), { target: { value: 'Kramgase 49 Bern' } });
       const options = await findResults();
+      // Recorded: also Bernstrasse 49, Kramgasse 1 and Kramgasse 2 (fuzzy; other street or number).
       expect(options.map((o) => o.textContent)).toEqual([
         'Kramgasse 49, 3011 BernGebäudeadresse · Schweiz · ähnliche Schreibweise',
-        'Bernstrasse 49, 3018 BernGebäudeadresse · Schweiz · ähnliche Schreibweise',
       ]);
-      fireEvent.change(searchInput(), { target: { value: 'Stephansplatz 1 Wien' } });
-      expect(
-        await screen.findByText(
-          'Keine Treffer für «Stephansplatz 1 Wien» – oder die Suche ist nicht erreichbar.',
-        ),
-      ).toBeInTheDocument();
+      // Foreign street addresses: SearchServer's fuzzy Swiss look-alikes (Wien-Strasse 2, Via Milano 1 …) are dropped.
+      for (const text of ['Stephansplatz 1 Wien', 'Via Roma 1 Milano']) {
+        fireEvent.change(searchInput(), { target: { value: text } });
+        expect(
+          await screen.findByText(`Keine Treffer für «${text}» – oder die Suche ist nicht erreichbar.`),
+        ).toBeInTheDocument();
+      }
     });
 
     it('Liechtenstein: Europe/Vaduz, no building register record', async () => {
@@ -442,6 +443,97 @@ describe('LocationSection', () => {
       const [identify] = calls('/identify');
       expect(identify).toContain('tolerance=50');
       expect(identify).toContain('layers=all%3Ach.swisstopo.amtliches-gebaeudeadressverzeichnis');
+    });
+
+    describe('another location while the nearest address is looked up', () => {
+      const f = fixtures.identify.breitenrain;
+
+      /** Device fix at Breitenrain; the first identify reply waits for `release`, later ones answer at once. */
+      function setup() {
+        let release: () => void = () => {};
+        let held = 0;
+        const { fetchMock } = stubServices({
+          identify: () => {
+            if (held++ > 0) return jsonResponse(f.body);
+            return new Promise<Response>((resolve) => {
+              release = () => resolve(jsonResponse(f.body));
+            });
+          },
+        });
+        const fix = lv95ToWgs84(f.easting, f.northing);
+        mockGeolocation({
+          getCurrentPosition: (success: PositionCallback) =>
+            success({ coords: { ...fix, accuracy: 12 } } as GeolocationPosition),
+        });
+        render(<LocationSection />);
+        fireEvent.click(screen.getByRole('button', { name: 'Mein Standort' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Nächste Adresse übernehmen' }));
+        expect(screen.getByText('Nächste Adresse wird gesucht …')).toBeInTheDocument();
+        const identifySignal = (): AbortSignal | undefined => {
+          const call = fetchMock.mock.calls.find((c) => String(c[0]).includes('/identify'));
+          return (
+            (call as unknown as [unknown, RequestInit | undefined] | undefined)?.[1]?.signal ?? undefined
+          );
+        };
+        return { release: () => release(), identifySignal };
+      }
+
+      /** Waits until the identify request is on its way (after the request budget). */
+      async function inFlight(identifySignal: () => AbortSignal | undefined): Promise<void> {
+        await waitFor(() => expect(identifySignal()).toBeDefined());
+        expect(identifySignal()?.aborted).toBe(false);
+      }
+
+      /** Lets the held reply through and waits for the promise chain to settle. */
+      async function releaseReply(release: () => void): Promise<void> {
+        await act(async () => {
+          release();
+          await new Promise((r) => setTimeout(r, 20));
+        });
+      }
+
+      it('a preset: the late reply does not overwrite it; the offer works again afterwards', async () => {
+        const { release, identifySignal } = setup();
+        await inFlight(identifySignal);
+        fireEvent.change(screen.getByRole('combobox', { name: 'Vorlage' }), { target: { value: 'zuerich' } });
+        expect(location().name).toBe('Zürich');
+        // The lookup is aborted with the location change, its message goes away.
+        expect(identifySignal()?.aborted).toBe(true);
+        await waitFor(() =>
+          expect(screen.queryByText('Nächste Adresse wird gesucht …')).not.toBeInTheDocument(),
+        );
+        await releaseReply(release);
+        expect(location()).toMatchObject({ name: 'Zürich', latitude: 47.3667, longitude: 8.55 });
+        expect(useConfigStore.getState().config.horizon.surfaceModel.enabled).toBe(false);
+        expect(useUiStore.getState().surroundingsImport).toBeNull();
+        expect(screen.queryByText(/^Übernommen: Breitenrainplatz/)).not.toBeInTheDocument();
+        // Nothing is stuck: the device position and its nearest address can be used again.
+        fireEvent.click(screen.getByRole('button', { name: 'Mein Standort' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Nächste Adresse übernehmen' }));
+        expect(
+          await screen.findByText('Übernommen: Breitenrainplatz 42, 3014 Bern (7 m von der Position).'),
+        ).toBeInTheDocument();
+        expect(location().name).toBe('Breitenrainplatz 42, 3014 Bern');
+      });
+
+      it('a searched address: it stays, with its own surroundings import', async () => {
+        const { release, identifySignal } = setup();
+        await inFlight(identifySignal);
+        await pickAddress('Kramgasse 49 Bern');
+        expect(location().name).toBe('Kramgasse 49, 3011 Bern');
+        expect(identifySignal()?.aborted).toBe(true);
+        await releaseReply(release);
+        expect(location()).toMatchObject({
+          name: 'Kramgasse 49, 3011 Bern',
+          latitude: 46.947847,
+          longitude: 7.449979,
+        });
+        expect(useUiStore.getState().surroundingsImport).toMatchObject({
+          latitude: 46.947847,
+          longitude: 7.449979,
+        });
+        expect(screen.queryByText(/^Übernommen: Breitenrainplatz/)).not.toBeInTheDocument();
+      });
     });
 
     it('says so when there is no address nearby', async () => {

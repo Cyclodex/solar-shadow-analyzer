@@ -834,6 +834,1311 @@
           "weight": 4
         }
       ]
+    },
+    "Kramgase 49": {
+      "fuzzy": "true",
+      "results": [
+        {
+          "attrs": {
+            "detail": "kramgasse 49 3011 bern 351 bern ch be",
+            "featureId": "1230393_0",
+            "geom_quadindex": "021300202211103211332",
+            "geom_st_box2d": "BOX(2600863.761 1199640.3740000017,2600863.761 1199640.3740000017)",
+            "label": "Kramgasse 49 <b>3011 Bern</b>",
+            "lat": 46.94784927368164,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100775538",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230393_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.449978351593018,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199640.375,
+            "y": 2600863.75,
+            "zoomlevel": 10
+          },
+          "id": 1784087,
+          "weight": 1571
+        },
+        {
+          "attrs": {
+            "detail": "obergasse 49 7494 davos wiesen 3851 davos ch gr",
+            "featureId": "191225310_0",
+            "geom_quadindex": "030331120131031021023",
+            "geom_st_box2d": "BOX(2774234.0320000015 1175713.5549999997,2774234.0320000015 1175713.5549999997)",
+            "label": "Obergasse 49 <b>7494 Davos Wiesen</b>",
+            "lat": 46.70985794067383,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100357149",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191225310_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.717480659484863,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1175713.5,
+            "y": 2774234.0,
+            "zoomlevel": 10
+          },
+          "id": 92511,
+          "weight": 1539
+        },
+        {
+          "attrs": {
+            "detail": "pagrueegerweg 49 7249 serneus 3871 klosters ch gr",
+            "featureId": "1202052_0",
+            "geom_quadindex": "031200221230211210111",
+            "geom_st_box2d": "BOX(2782443.4120000005 1197211.8520000018,2782443.4120000005 1197211.8520000018)",
+            "label": "Pagrüegerweg 49 <b>7249 Serneus</b>",
+            "lat": 46.90095901489258,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100740130",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1202052_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.833369255065918,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1197211.875,
+            "y": 2782443.5,
+            "zoomlevel": 10
+          },
+          "id": 112344,
+          "weight": 1539
+        },
+        {
+          "attrs": {
+            "detail": "voia gonda 49 7492 alvaneu dorf 3542 albula/alvra ch gr",
+            "featureId": "191766832_0",
+            "geom_quadindex": "030331201111233022130",
+            "geom_st_box2d": "BOX(2768607.3220000006 1172282.5929999985,2768607.3220000006 1172282.5929999985)",
+            "label": "Voia Gonda 49 <b>7492 Alvaneu Dorf</b>",
+            "lat": 46.68045425415039,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102455390",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191766832_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.642666816711426,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1172282.625,
+            "y": 2768607.25,
+            "zoomlevel": 10
+          },
+          "id": 149258,
+          "weight": 1539
+        },
+        {
+          "attrs": {
+            "detail": "in burnisgia 49 6749 cavagnago 5072 faido ch ti",
+            "featureId": "11187254_0",
+            "geom_quadindex": "032011211203321310320",
+            "geom_st_box2d": "BOX(2711030.4279999994 1141134.2820000015,2711030.4279999994 1141134.2820000015)",
+            "label": "in Burnísgia 49 <b>6749 Cavagnago</b>",
+            "lat": 46.41237258911133,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101405506",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/11187254_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.882743835449219,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1141134.25,
+            "y": 2711030.5,
+            "zoomlevel": 10
+          },
+          "id": 185489,
+          "weight": 1539
+        },
+        {
+          "attrs": {
+            "detail": "plaz cadruvi 49 7149 vrin 3618 lumnezia ch gr",
+            "featureId": "1179529_0",
+            "geom_quadindex": "030320231112032023121",
+            "geom_st_box2d": "BOX(2727096.789000001 1168414.9050000012,2727096.789000001 1168414.9050000012)",
+            "label": "Plaz Cadruvi 49 <b>7149 Vrin</b>",
+            "lat": 46.654869079589844,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100815986",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1179529_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.099160194396973,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1168414.875,
+            "y": 2727096.75,
+            "zoomlevel": 10
+          },
+          "id": 204178,
+          "weight": 1539
+        },
+        {
+          "attrs": {
+            "detail": "via ponte romano 49 6719 aquila 5049 blenio ch ti",
+            "featureId": "11184820_0",
+            "geom_quadindex": "030233323123100033230",
+            "geom_st_box2d": "BOX(2715676.909000002 1151157.5830000006,2715676.909000002 1151157.5830000006)",
+            "label": "Via Ponte Romano 49 <b>6719 Aquila</b>",
+            "lat": 46.50173568725586,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101264678",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/11184820_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.945667266845703,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151157.625,
+            "y": 2715677.0,
+            "zoomlevel": 10
+          },
+          "id": 213762,
+          "weight": 1539
+        },
+        {
+          "attrs": {
+            "detail": "via pozzi-artisti 49 6874 castel san pietro 5249 castel san pietro ch ti",
+            "featureId": "11156389_0",
+            "geom_quadindex": "032300202011013331230",
+            "geom_st_box2d": "BOX(2720817.776999999 1080569.4450000003,2720817.776999999 1080569.4450000003)",
+            "label": "Via Pozzi-artisti 49 <b>6874 Castel San Pietro</b>",
+            "lat": 45.86597442626953,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102179960",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/11156389_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.994389533996582,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1080569.5,
+            "y": 2720817.75,
+            "zoomlevel": 10
+          },
+          "id": 219087,
+          "weight": 1539
+        }
+      ]
+    },
+    "Via Roma 1 Milano": {
+      "fuzzy": "true",
+      "results": [
+        {
+          "attrs": {
+            "detail": "via milano 1 6830 chiasso 5250 chiasso ch ti",
+            "featureId": "274003114_0",
+            "geom_quadindex": "032300223101133001213",
+            "geom_st_box2d": "BOX(2723257.5190000013 1076782.886,2723257.5190000013 1076782.886)",
+            "label": "Via Milano 1 <b>6830 Chiasso</b>",
+            "lat": 45.83148193359375,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101352674",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/274003114_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.024810791015625,
+            "num": 1,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1076782.875,
+            "y": 2723257.5,
+            "zoomlevel": 10
+          },
+          "id": 445425,
+          "weight": 1525
+        },
+        {
+          "attrs": {
+            "detail": "via milano 15a 6830 chiasso 5250 chiasso ch ti",
+            "featureId": "191722921_0",
+            "geom_quadindex": "032300223100120000010",
+            "geom_st_box2d": "BOX(2722930.848000001 1076814.4710000008,2722930.848000001 1076814.4710000008)",
+            "label": "Via Milano 15a <b>6830 Chiasso</b>",
+            "lat": 45.831825256347656,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102419348",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191722921_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.02061653137207,
+            "num": 15,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1076814.5,
+            "y": 2722930.75,
+            "zoomlevel": 10
+          },
+          "id": 378532,
+          "weight": 1522
+        },
+        {
+          "attrs": {
+            "detail": "via milano 15 6830 chiasso 5250 chiasso ch ti",
+            "featureId": "400016820_0",
+            "geom_quadindex": "032300223100120100301",
+            "geom_st_box2d": "BOX(2722947.2399999984 1076812.9690000005,2722947.2399999984 1076812.9690000005)",
+            "label": "Via Milano 15 <b>6830 Chiasso</b>",
+            "lat": 45.83180618286133,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101680205",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/400016820_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.020827293395996,
+            "num": 15,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1076813.0,
+            "y": 2722947.25,
+            "zoomlevel": 10
+          },
+          "id": 380777,
+          "weight": 1522
+        },
+        {
+          "attrs": {
+            "detail": "via milano 17 6830 chiasso 5250 chiasso ch ti",
+            "featureId": "11156910_0",
+            "geom_quadindex": "032300223100002313010",
+            "geom_st_box2d": "BOX(2722839.471000001 1076825.7729999982,2722839.471000001 1076825.7729999982)",
+            "label": "Via Milano 17 <b>6830 Chiasso</b>",
+            "lat": 45.83194351196289,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101250768",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/11156910_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.01944351196289,
+            "num": 17,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1076825.75,
+            "y": 2722839.5,
+            "zoomlevel": 10
+          },
+          "id": 247650,
+          "weight": 1522
+        },
+        {
+          "attrs": {
+            "detail": "via milano 19 6830 chiasso 5250 chiasso ch ti",
+            "featureId": "11156909_0",
+            "geom_quadindex": "032300223011113301120",
+            "geom_st_box2d": "BOX(2722803.739 1076828.3509999998,2722803.739 1076828.3509999998)",
+            "label": "Via Milano 19 <b>6830 Chiasso</b>",
+            "lat": 45.83197021484375,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101250767",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/11156909_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.0189847946167,
+            "num": 19,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1076828.375,
+            "y": 2722803.75,
+            "zoomlevel": 10
+          },
+          "id": 487838,
+          "weight": 1522
+        },
+        {
+          "attrs": {
+            "detail": "via remo rossi 1 6864 arzo 5254 mendrisio ch ti",
+            "featureId": "11154834_0",
+            "geom_quadindex": "032211310210321200211",
+            "geom_st_box2d": "BOX(2716867.072999999 1081368.5780000016,2716867.072999999 1081368.5780000016)",
+            "label": "Via Remo Rossi 1 <b>6864 Arzo</b>",
+            "lat": 45.87385559082031,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101270838",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/11154834_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.943727493286133,
+            "num": 1,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1081368.625,
+            "y": 2716867.0,
+            "zoomlevel": 10
+          },
+          "id": 244392,
+          "weight": 1509
+        },
+        {
+          "attrs": {
+            "detail": "via rime 1 6850 mendrisio 5254 mendrisio ch ti",
+            "featureId": "11159524_0",
+            "geom_quadindex": "032211311321332100000",
+            "geom_st_box2d": "BOX(2719487.864 1080887.1779999994,2719487.864 1080887.1779999994)",
+            "label": "Via Rime 1 <b>6850 Mendrisio</b>",
+            "lat": 45.86906814575195,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101258168",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/11159524_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.977349281311035,
+            "num": 1,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1080887.125,
+            "y": 2719487.75,
+            "zoomlevel": 10
+          },
+          "id": 361569,
+          "weight": 1509
+        },
+        {
+          "attrs": {
+            "detail": "via rom 4.1 7537 muestair 3847 val muestair ch gr",
+            "featureId": "190120088_0",
+            "geom_quadindex": "031231231002200030010",
+            "geom_st_box2d": "BOX(2830634.3139999993 1168391.0260000005,2830634.3139999993 1168391.0260000005)",
+            "label": "Via Rom 4.1 <b>7537 Müstair</b>",
+            "lat": 46.62691879272461,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101529182",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/190120088_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 10.45083999633789,
+            "num": 41,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1168391.0,
+            "y": 2830634.25,
+            "zoomlevel": 10
+          },
+          "id": 140245,
+          "weight": 1509
+        }
+      ]
+    },
+    "Rue de Rivoli 10 Paris": {
+      "fuzzy": "true",
+      "results": [
+        {
+          "attrs": {
+            "detail": "ruelle de paris 10 3966 chalais 6232 chalais ch vs",
+            "featureId": "939603_0",
+            "geom_quadindex": "023102230110110100000",
+            "geom_st_box2d": "BOX(2605346.629999999 1123749.7749999985,2605346.629999999 1123749.7749999985)",
+            "label": "Ruelle de Paris 10 <b>3966 Chalais</b>",
+            "lat": 46.26515197753906,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100652840",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/939603_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.507992267608643,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1123749.75,
+            "y": 2605346.75,
+            "zoomlevel": 10
+          },
+          "id": 729948,
+          "weight": 1533
+        },
+        {
+          "attrs": {
+            "detail": "rue de st-raphael 10 1966 signese _ayent_ 6082 ayent ch vs",
+            "featureId": "908331_0",
+            "geom_quadindex": "023013330033302330101",
+            "geom_st_box2d": "BOX(2597094.482999999 1122878.243999999,2597094.482999999 1122878.243999999)",
+            "label": "Rue de St-Raphaël 10 <b>1966 Signèse (Ayent)</b>",
+            "lat": 46.257328033447266,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100591228",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/908331_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.400964260101318,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1122878.25,
+            "y": 2597094.5,
+            "zoomlevel": 10
+          },
+          "id": 721156,
+          "weight": 1528
+        },
+        {
+          "attrs": {
+            "detail": "rue de l'ecole de ceramique 10 1022 chavannes-pres-renens 5627 chavannes-pres-renens ch vd",
+            "featureId": "794936_0",
+            "geom_quadindex": "020333302323303233333",
+            "geom_st_box2d": "BOX(2533832.147 1153809.1579999998,2533832.147 1153809.1579999998)",
+            "label": "Rue de l'Ecole de Céramique 10 <b>1022 Chavannes-près-Renens</b>",
+            "lat": 46.53229522705078,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100532687",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/794936_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.576160907745361,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1153809.125,
+            "y": 2533832.25,
+            "zoomlevel": 10
+          },
+          "id": 795117,
+          "weight": 1526
+        },
+        {
+          "attrs": {
+            "detail": "rue de l'ecole de ceramique 10.1 1022 chavannes-pres-renens 5627 chavannes-pres-renens ch vd",
+            "featureId": "280045977_1",
+            "geom_quadindex": "020333302323303203030",
+            "geom_st_box2d": "BOX(2533823 1153819,2533823 1153819)",
+            "label": "Rue de l'Ecole de Céramique 10.1 <b>1022 Chavannes-près-Renens</b>",
+            "lat": 46.53238296508789,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102759980",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/280045977_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.576040267944336,
+            "num": 101,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1153819.0,
+            "y": 2533823.0,
+            "zoomlevel": 10
+          },
+          "id": 798756,
+          "weight": 1526
+        },
+        {
+          "attrs": {
+            "detail": "rue de l'ecole de ceramique 10.2 1022 chavannes-pres-renens 5627 chavannes-pres-renens ch vd",
+            "featureId": "280035509_1",
+            "geom_quadindex": "020333302323303220212",
+            "geom_st_box2d": "BOX(2533819 1153814,2533819 1153814)",
+            "label": "Rue de l'Ecole de Céramique 10.2 <b>1022 Chavannes-près-Renens</b>",
+            "lat": 46.5323371887207,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102766306",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/280035509_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.57598876953125,
+            "num": 102,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1153814.0,
+            "y": 2533819.0,
+            "zoomlevel": 10
+          },
+          "id": 435387,
+          "weight": 1526
+        },
+        {
+          "attrs": {
+            "detail": "rue de champ-fleuri 10 1022 chavannes-pres-renens 5627 chavannes-pres-renens ch vd",
+            "featureId": "794905_0",
+            "geom_quadindex": "020333320013013223200",
+            "geom_st_box2d": "BOX(2533294.522999998 1153459.0769999996,2533294.522999998 1153459.0769999996)",
+            "label": "Rue de Champ-Fleuri 10 <b>1022 Chavannes-près-Renens</b>",
+            "lat": 46.52909469604492,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100532658",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/794905_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.569204330444336,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1153459.125,
+            "y": 2533294.5,
+            "zoomlevel": 10
+          },
+          "id": 778702,
+          "weight": 1525
+        },
+        {
+          "attrs": {
+            "detail": "rue du college 10 1562 corcelles-pres-payerne 5816 corcelles-pres-payerne ch vd",
+            "featureId": "280066215_0",
+            "geom_quadindex": "021203300120212123301",
+            "geom_st_box2d": "BOX(2563516.9310000017 1186872.1449999996,2563516.9310000017 1186872.1449999996)",
+            "label": "Rue du Collège 10 <b>1562 Corcelles-près-Payerne</b>",
+            "lat": 46.83198928833008,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101697950",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/280066215_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.960446357727051,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1186872.125,
+            "y": 2563517.0,
+            "zoomlevel": 10
+          },
+          "id": 397345,
+          "weight": 1524
+        },
+        {
+          "attrs": {
+            "detail": "rue du jura 10 1562 corcelles-pres-payerne 5816 corcelles-pres-payerne ch vd",
+            "featureId": "823200_0",
+            "geom_quadindex": "021203300203323210232",
+            "geom_st_box2d": "BOX(2562889.1369999982 1186104.9990000017,2562889.1369999982 1186104.9990000017)",
+            "label": "Rue du Jura 10 <b>1562 Corcelles-près-Payerne</b>",
+            "lat": 46.82505416870117,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100556717",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/823200_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.952280521392822,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1186105.0,
+            "y": 2562889.25,
+            "zoomlevel": 10
+          },
+          "id": 448667,
+          "weight": 1523
+        }
+      ]
+    },
+    "Bahnhofstrasse 12a Zürich": {
+      "fuzzy": "true",
+      "results": [
+        {
+          "attrs": {
+            "detail": "bahnhofstrasse 12 8001 zuerich 261 zuerich ch zh",
+            "featureId": "2372894_0",
+            "geom_quadindex": "030003300030131122202",
+            "geom_st_box2d": "BOX(2683189.784000002 1246958.8099999987,2683189.784000002 1246958.8099999987)",
+            "label": "Bahnhofstrasse 12 <b>8001 Zürich</b>",
+            "lat": 47.368221282958984,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101169008",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/2372894_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.540009498596191,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1246958.75,
+            "y": 2683189.75,
+            "zoomlevel": 10
+          },
+          "id": 2808215,
+          "weight": 1544
+        },
+        {
+          "attrs": {
+            "detail": "aubruggweg 12a 8050 zuerich 261 zuerich ch zh",
+            "featureId": "302063542_0",
+            "geom_quadindex": "030003103302003132310",
+            "geom_st_box2d": "BOX(2685367.7239999995 1251910.550999999,2685367.7239999995 1251910.550999999)",
+            "label": "Aubruggweg 12a <b>8050 Zürich</b>",
+            "lat": 47.412471771240234,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102287100",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/302063542_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.569785118103027,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1251910.5,
+            "y": 2685367.75,
+            "zoomlevel": 10
+          },
+          "id": 1837729,
+          "weight": 1540
+        },
+        {
+          "attrs": {
+            "detail": "frankengasse 12a 8001 zuerich 261 zuerich ch zh",
+            "featureId": "302020712_0",
+            "geom_quadindex": "030003300102301331100",
+            "geom_st_box2d": "BOX(2683612.4059999995 1247126.109000001,2683612.4059999995 1247126.109000001)",
+            "label": "Frankengasse 12a <b>8001 Zürich</b>",
+            "lat": 47.36967086791992,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101733942",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/302020712_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.545635223388672,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1247126.125,
+            "y": 2683612.5,
+            "zoomlevel": 10
+          },
+          "id": 1842565,
+          "weight": 1540
+        },
+        {
+          "attrs": {
+            "detail": "distelweg 12a 8048 zuerich 261 zuerich ch zh",
+            "featureId": "302019888_0",
+            "geom_quadindex": "030003023311130201130",
+            "geom_st_box2d": "BOX(2678699.1999999993 1248362.8740000017,2678699.1999999993 1248362.8740000017)",
+            "label": "Distelweg 12a <b>8048 Zürich</b>",
+            "lat": 47.38139724731445,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101727605",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/302019888_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.48081111907959,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1248362.875,
+            "y": 2678699.25,
+            "zoomlevel": 10
+          },
+          "id": 1902996,
+          "weight": 1540
+        },
+        {
+          "attrs": {
+            "detail": "zelghalde 12a 8046 zuerich 261 zuerich ch zh",
+            "featureId": "302015025_0",
+            "geom_quadindex": "030003013313000132010",
+            "geom_st_box2d": "BOX(2682289.829999998 1251941.8900000006,2682289.829999998 1251941.8900000006)",
+            "label": "Zelghalde 12a <b>8046 Zürich</b>",
+            "lat": 47.41314697265625,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101732397",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/302015025_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.529012680053711,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1251941.875,
+            "y": 2682289.75,
+            "zoomlevel": 10
+          },
+          "id": 1905535,
+          "weight": 1540
+        },
+        {
+          "attrs": {
+            "detail": "hohmoos 12a 8051 zuerich 261 zuerich ch zh",
+            "featureId": "302023858_0",
+            "geom_quadindex": "030003130211001300302",
+            "geom_st_box2d": "BOX(2686999.8900000006 1250295.1449999996,2686999.8900000006 1250295.1449999996)",
+            "label": "Hohmoos 12a <b>8051 Zürich</b>",
+            "lat": 47.39773178100586,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101726678",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/302023858_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.591094970703125,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1250295.125,
+            "y": 2687000.0,
+            "zoomlevel": 10
+          },
+          "id": 1905926,
+          "weight": 1540
+        },
+        {
+          "attrs": {
+            "detail": "huerstholzstrasse 12a 8046 zuerich 261 zuerich ch zh",
+            "featureId": "302016909_0",
+            "geom_quadindex": "030003013132032102320",
+            "geom_st_box2d": "BOX(2682107.4070000015 1252327.2149999999,2682107.4070000015 1252327.2149999999)",
+            "label": "Hürstholzstrasse 12a <b>8046 Zürich</b>",
+            "lat": 47.41663360595703,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101725275",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/302016909_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.526666641235352,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1252327.25,
+            "y": 2682107.5,
+            "zoomlevel": 10
+          },
+          "id": 1916372,
+          "weight": 1540
+        },
+        {
+          "attrs": {
+            "detail": "freihofstrasse 12a 8048 zuerich 261 zuerich ch zh",
+            "featureId": "302064111_0",
+            "geom_quadindex": "030003032130010331302",
+            "geom_st_box2d": "BOX(2680243.601 1248881.493999999,2680243.601 1248881.493999999)",
+            "label": "Freihofstrasse 12a <b>8048 Zürich</b>",
+            "lat": 47.3858757019043,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102382334",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/302064111_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 8.50135326385498,
+            "num": 12,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1248881.5,
+            "y": 2680243.5,
+            "zoomlevel": 10
+          },
+          "id": 2004901,
+          "weight": 1540
+        }
+      ]
+    },
+    "Rte de Lausanne 10 Morges": {
+      "fuzzy": "true",
+      "results": [
+        {
+          "attrs": {
+            "detail": "rue de lausanne 10 1110 morges 5642 morges ch vd",
+            "featureId": "798699_0",
+            "geom_quadindex": "020333223102101323113",
+            "geom_st_box2d": "BOX(2527980.3740000017 1151615.0529999994,2527980.3740000017 1151615.0529999994)",
+            "label": "Rue de Lausanne 10 <b>1110 Morges</b>",
+            "lat": 46.51195526123047,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100503058",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/798699_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.500234127044678,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151615.0,
+            "y": 2527980.25,
+            "zoomlevel": 10
+          },
+          "id": 692457,
+          "weight": 1547
+        },
+        {
+          "attrs": {
+            "detail": "rue de lausanne 10.1 1110 morges 5642 morges ch vd",
+            "featureId": "280121405_0",
+            "geom_quadindex": "020333223102110233222",
+            "geom_st_box2d": "BOX(2527999 1151612,2527999 1151612)",
+            "label": "Rue de Lausanne 10.1 <b>1110 Morges</b>",
+            "lat": 46.51192855834961,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102543100",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/280121405_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.500477313995361,
+            "num": 101,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151612.0,
+            "y": 2527999.0,
+            "zoomlevel": 10
+          },
+          "id": 679377,
+          "weight": 1547
+        },
+        {
+          "attrs": {
+            "detail": "rue de lausanne 10.2 1110 morges 5642 morges ch vd",
+            "featureId": "280051444_1",
+            "geom_quadindex": "020333223102113210131",
+            "geom_st_box2d": "BOX(2528028 1151596,2528028 1151596)",
+            "label": "Rue de Lausanne 10.2 <b>1110 Morges</b>",
+            "lat": 46.51178741455078,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102773425",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/280051444_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.500857830047607,
+            "num": 102,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151596.0,
+            "y": 2528028.0,
+            "zoomlevel": 10
+          },
+          "id": 805662,
+          "weight": 1547
+        },
+        {
+          "attrs": {
+            "detail": "avenue de morges 10 1004 lausanne 5586 lausanne ch vd",
+            "featureId": "884157_0",
+            "geom_quadindex": "020333330122212012001",
+            "geom_st_box2d": "BOX(2537253.6510000005 1152896.7129999995,2537253.6510000005 1152896.7129999995)",
+            "label": "Avenue de Morges 10 <b>1004 Lausanne</b>",
+            "lat": 46.524417877197266,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100501612",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/884157_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.620880126953125,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1152896.75,
+            "y": 2537253.75,
+            "zoomlevel": 10
+          },
+          "id": 759036,
+          "weight": 1546
+        },
+        {
+          "attrs": {
+            "detail": "rue de lausanne 27 1110 morges 5642 morges ch vd",
+            "featureId": "798698_0",
+            "geom_quadindex": "020333221323233122330",
+            "geom_st_box2d": "BOX(2528152.0720000006 1151890.7289999984,2528152.0720000006 1151890.7289999984)",
+            "label": "Rue de Lausanne 27 <b>1110 Morges</b>",
+            "lat": 46.51445388793945,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100503057",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/798698_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.5024285316467285,
+            "num": 27,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151890.75,
+            "y": 2528152.0,
+            "zoomlevel": 10
+          },
+          "id": 744643,
+          "weight": 1543
+        },
+        {
+          "attrs": {
+            "detail": "rue de lausanne 29 1110 morges 5642 morges ch vd",
+            "featureId": "798707_1",
+            "geom_quadindex": "020333221323320022033",
+            "geom_st_box2d": "BOX(2528165.0419999994 1151921.5610000007,2528165.0419999994 1151921.5610000007)",
+            "label": "Rue de Lausanne 29 <b>1110 Morges</b>",
+            "lat": 46.514732360839844,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102392235",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/798707_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.50259256362915,
+            "num": 29,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151921.5,
+            "y": 2528165.0,
+            "zoomlevel": 10
+          },
+          "id": 571554,
+          "weight": 1543
+        },
+        {
+          "attrs": {
+            "detail": "rue de lausanne 31 1110 morges 5642 morges ch vd",
+            "featureId": "798707_0",
+            "geom_quadindex": "020333221323212133201",
+            "geom_st_box2d": "BOX(2528131.2820000015 1151950.5909999982,2528131.2820000015 1151950.5909999982)",
+            "label": "Rue de Lausanne 31 <b>1110 Morges</b>",
+            "lat": 46.51498794555664,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100503372",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/798707_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.502148151397705,
+            "num": 31,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151950.625,
+            "y": 2528131.25,
+            "zoomlevel": 10
+          },
+          "id": 677704,
+          "weight": 1543
+        },
+        {
+          "attrs": {
+            "detail": "rue de lausanne 33c 1110 morges 5642 morges ch vd",
+            "featureId": "280095883_2",
+            "geom_quadindex": "020333221323300312213",
+            "geom_st_box2d": "BOX(2528187.0989999995 1151972.0749999993,2528187.0989999995 1151972.0749999993)",
+            "label": "Rue de Lausanne 33c <b>1110 Morges</b>",
+            "lat": 46.51518630981445,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102355567",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/280095883_2",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 6.502871990203857,
+            "num": 33,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1151972.125,
+            "y": 2528187.0,
+            "zoomlevel": 10
+          },
+          "id": 377448,
+          "weight": 1543
+        }
+      ]
     }
   },
   "gwr": {

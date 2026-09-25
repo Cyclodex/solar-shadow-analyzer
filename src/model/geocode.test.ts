@@ -12,6 +12,7 @@ import {
   clearGeocodeCaches,
   constructionPeriod,
   createRateLimiter,
+  editDistance,
   fetchBuildingInfo,
   fetchGroundHeight,
   findNearestAddress,
@@ -21,8 +22,10 @@ import {
   parseSearchResponse,
   searchSwissAddresses,
   searchTextOf,
+  streetResemblesQuery,
   stripTags,
   type GeoOptions,
+  type RateLimiter,
 } from './geocode';
 import { lv95ToWgs84, wgs84ToLv95 } from './lv95';
 
@@ -155,14 +158,52 @@ describe('parseSearchResponse (recorded responses)', () => {
     ]);
   });
 
-  it('keeps fuzzy hits only with a typed house number', () => {
+  it('keeps fuzzy hits only with a typed house number and a street spelled like the typed words', () => {
     const typo = parseSearchResponse(SEARCH['Kramgase 49 Bern'], 'Kramgase 49 Bern')!;
-    expect(typo.map((a) => [a.label, a.match])).toEqual([
-      ['Kramgasse 49, 3011 Bern', 'fuzzy'],
-      ['Bernstrasse 49, 3018 Bern', 'fuzzy'],
-    ]);
-    // Only fuzzy Swiss streets for a foreign address: nothing.
-    expect(parseSearchResponse(SEARCH['Stephansplatz 1 Wien'], 'Stephansplatz 1 Wien')).toEqual([]);
+    // Recorded: Kramgasse 49, Bernstrasse 49, Kramgasse 1, Kramgasse 2 (all fuzzy).
+    expect(typo.map((a) => [a.label, a.match])).toEqual([['Kramgasse 49, 3011 Bern', 'fuzzy']]);
+    // Without the locality, SearchServer adds number-49 streets of all Switzerland (Obergasse, Plaz Cadruvi …).
+    const bare = parseSearchResponse(SEARCH['Kramgase 49'], 'Kramgase 49')!;
+    expect((SEARCH['Kramgase 49'] as { results: unknown[] }).results).toHaveLength(8);
+    expect(bare.map((a) => a.label)).toEqual(['Kramgasse 49, 3011 Bern']);
+    // A typo in the street type: "Rte" ~ "Rue" (1 edit of 2); Avenue de Morges 10 and 10.1 are dropped.
+    const rte = parseSearchResponse(SEARCH['Rte de Lausanne 10 Morges'], 'Rte de Lausanne 10 Morges')!;
+    expect(rte.map((a) => [a.label, a.match])).toEqual([['Rue de Lausanne 10, 1110 Morges', 'fuzzy']]);
+  });
+
+  it('foreign or unknown street addresses: no Swiss look-alikes', () => {
+    // Recorded: only fuzzy Swiss hits with the typed number (Wien-Strasse, Via Milano 1, Via Rime 1, Ruelle de
+    // Paris 10, Rue du Jura 10, Aubruggweg 12a, Frankengasse 12a …).
+    for (const q of [
+      'Stephansplatz 1 Wien',
+      'Via Roma 1 Milano',
+      'Rue de Rivoli 10 Paris',
+      'Bahnhofstrasse 12a Zürich',
+    ]) {
+      const results = (SEARCH[q] as { results: { weight: number }[] }).results;
+      expect(results.length, q).toBeGreaterThan(0);
+      expect(results.every((r) => r.weight > 1000)).toBe(true);
+      expect(parseSearchResponse(SEARCH[q], q), q).toEqual([]);
+    }
+  });
+
+  it('street similarity: edits per letters, word runs split by numbers', () => {
+    expect(editDistance('kramgase', 'kramgasse')).toBe(1);
+    expect(editDistance('kramgsase', 'kramgasse')).toBe(1); // swapped letters
+    expect(editDistance('viarime', 'viaroma')).toBe(2);
+    expect(editDistance('', 'abc')).toBe(3);
+    expect(editDistance('bern', 'bern')).toBe(0);
+    expect(streetResemblesQuery('Kramgase 49 Bern', 'Kramgasse')).toBe(true);
+    expect(streetResemblesQuery('Bern Kramgase 49', 'Kramgasse')).toBe(true);
+    expect(streetResemblesQuery('Kramgase 49 Bern', 'Bernstrasse')).toBe(false);
+    expect(streetResemblesQuery('Breitenrain strase 10', 'Breitenrainstrasse')).toBe(true);
+    expect(streetResemblesQuery('Wienstrasse 2', 'Wien-Strasse')).toBe(true);
+    expect(streetResemblesQuery('Stephansplatz 1 Wien', 'Wien-Strasse')).toBe(false);
+    expect(streetResemblesQuery('Via Roma 1 Milano', 'Via Milano')).toBe(false); // "via" and "milano" not adjacent
+    expect(streetResemblesQuery('Via Roma 1 Milano', 'Via Rime')).toBe(false); // 2 edits, 7 letters allow 1
+    expect(streetResemblesQuery('Via Roma 1', 'Via Rom')).toBe(true);
+    expect(streetResemblesQuery('Städtle 1 Vadus', 'Städtle')).toBe(true); // umlaut as "ae" on both sides
+    expect(streetResemblesQuery('Kramgase 49', '')).toBe(false);
   });
 
   it('Liechtenstein: Europe/Vaduz', () => {
@@ -463,6 +504,66 @@ describe('createRateLimiter', () => {
     const waiting = limiter.acquire(ctrl.signal);
     ctrl.abort();
     await expect(waiting).rejects.toThrow();
+  });
+
+  it('every attempt takes a slot: a retry waits for the budget after its backoff', async () => {
+    const log: string[] = [];
+    const limiter: RateLimiter = {
+      acquire: async () => {
+        log.push('slot');
+      },
+    };
+    let n = 0;
+    const fetchImpl = stubFetch(() => {
+      log.push('fetch');
+      return n++ < 2 ? json({}, 503) : json(fixtures.height.kramgasse49.body);
+    });
+    const sleep = async (ms: number) => {
+      log.push(`backoff ${ms}`);
+    };
+    const res = await fetchGroundHeight(
+      { east: 2600000, north: 1200000 },
+      { limiter, fetchImpl, retry: { sleep, random: () => 0 } },
+    );
+    expect(res).toEqual({ ok: true, value: 537.7 });
+    expect(log).toEqual(['slot', 'fetch', 'backoff 1000', 'slot', 'fetch', 'backoff 2000', 'slot', 'fetch']);
+  });
+
+  it(`a budget of ${API3_BUDGET.requests} per minute also holds for retries`, async () => {
+    // Budget 2/min on a fake clock: the third attempt starts only when the first slot frees at 60 s.
+    let t = 0;
+    const clock = () => t;
+    const wait = async (ms: number) => {
+      t += ms;
+    };
+    const limiter = createRateLimiter(2, 60_000, clock, wait);
+    const started: number[] = [];
+    const fetchImpl = stubFetch(() => {
+      started.push(t);
+      return started.length < 3 ? json({}, 503) : json(fixtures.height.kramgasse49.body);
+    });
+    const res = await fetchGroundHeight(
+      { east: 2600000, north: 1200000 },
+      { limiter, fetchImpl, retry: { sleep: wait, random: () => 0, now: clock, deadlineMs: 120_000 } },
+    );
+    expect(res).toEqual({ ok: true, value: 537.7 });
+    // Backoff 1 s, then 2 s (→ 3 s), then the budget wait until the first slot is 60 s old.
+    expect(started).toEqual([0, 1000, 60_000]);
+  });
+
+  it('a retry waiting for the budget reports an abort as a typed error', async () => {
+    const ctrl = new AbortController();
+    const limiter = createRateLimiter(1, 60_000);
+    const fetchImpl = stubFetch(() => {
+      setTimeout(() => ctrl.abort(), 0);
+      return json({}, 503);
+    });
+    const res = await fetchGroundHeight(
+      { east: 2600000, north: 1200000 },
+      { limiter, fetchImpl, signal: ctrl.signal, retry: { sleep: () => Promise.resolve(), random: () => 0 } },
+    );
+    expect(res).toMatchObject({ ok: false, error: { kind: 'aborted' } });
+    expect(fetchImpl.urls).toHaveLength(1);
   });
 
   it('a search waiting for the budget reports the abort as a typed error', async () => {

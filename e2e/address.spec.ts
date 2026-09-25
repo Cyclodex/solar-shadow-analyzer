@@ -85,6 +85,9 @@ async function expectAddressApplied(page: Page): Promise<void> {
 
 test('keyboard only: search an address, pick it, see the building data', async ({ page }) => {
   const requests = await mockGeoAdmin(page);
+  // The page's timers run on Playwright's clock: while the text is typed the clock stands still, so the 300 ms
+  // debounce does not depend on the typing speed of a loaded machine.
+  await page.clock.install();
   await page.goto('./');
   const toggle = page.getByRole('button', { name: /^Standort/ });
   await toggle.focus();
@@ -92,7 +95,17 @@ test('keyboard only: search an address, pick it, see the building data', async (
   await page.keyboard.press('Tab');
   const input = page.getByRole('combobox', { name: 'Adresse oder Ort suchen' });
   await expect(input).toBeFocused();
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1000);
   await page.keyboard.type('Kramgasse 49 Bern', { delay: 40 });
+  await expect(input).toHaveValue('Kramgasse 49 Bern');
+  const searches = () => requests.filter((r) => r.includes('/SearchServer'));
+  await page.clock.runFor(299);
+  // Nothing before the debounce (the real-time wait lets a request that went out reach the route handler).
+  await page.waitForTimeout(250);
+  expect(searches()).toHaveLength(0);
+  await page.clock.runFor(1);
+  await expect.poll(searches).toHaveLength(1);
+  await page.clock.resume();
 
   const list = page.getByRole('listbox', { name: 'Suchergebnisse' });
   const group = list.getByRole('group', { name: /^Adressen/ });
@@ -104,8 +117,8 @@ test('keyboard only: search an address, pick it, see the building data', async (
   await expect(page.getByText('Übernommen: Kramgasse 49, 3011 Bern')).toBeVisible();
   await expectAddressApplied(page);
 
-  // Typed with pauses under 300 ms: one search request for the whole text, then register and height.
-  const search = requests.filter((r) => r.includes('/SearchServer'));
+  // One search request for the whole text (300 ms after the last key), then register and height.
+  const search = searches();
   expect(search).toHaveLength(1);
   expect(search[0]).toContain('searchText=Kramgasse+49+Bern');
   expect(search[0]).toContain('origins=address');
@@ -138,6 +151,24 @@ test.describe('phone', () => {
     expect(scrollWidth).toBeLessThanOrEqual(clientWidth);
     await option.tap();
     await expectAddressApplied(page);
+  });
+
+  test('a foreign street address offers no Swiss look-alikes', async ({ page }) => {
+    // Recorded SearchServer answer: only fuzzy hits with the number 1 (Via Milano 1 Chiasso, Via Rime 1 Mendrisio …).
+    const requests = await mockGeoAdmin(page);
+    await page.goto('./');
+    const toggle = page.getByRole('button', { name: /^Standort/ });
+    await toggle.scrollIntoViewIfNeeded();
+    if ((await toggle.getAttribute('aria-expanded')) !== 'true') await toggle.tap();
+    const input = page.getByRole('combobox', { name: 'Adresse oder Ort suchen' });
+    await input.tap();
+    await input.fill('Via Roma 1 Milano');
+    await expect(
+      page.getByText('Keine Treffer für «Via Roma 1 Milano» – oder die Suche ist nicht erreichbar.'),
+    ).toBeVisible();
+    await expect(page.getByRole('listbox', { name: 'Suchergebnisse' }).getByRole('option')).toHaveCount(0);
+    const search = requests.filter((r) => r.includes('/SearchServer'));
+    expect(search.at(-1)).toContain('searchText=Via+Roma+1+Milano');
   });
 
   test('"Nächste Adresse übernehmen" after the device position', async ({ page, context }) => {

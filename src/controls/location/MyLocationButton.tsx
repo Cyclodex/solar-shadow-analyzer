@@ -5,6 +5,7 @@ import { NEAREST_ADDRESS_RADIUS, findNearestAddress, type SwissAddress } from '.
 import { formatCoordinateName } from '../../model/share';
 import type { LocationConfig } from '../../model/types';
 import { roundToStep } from '../../model/units';
+import { useConfigStore } from '../../state/configStore';
 import { LocateIcon } from '../icons';
 import { deviceTimeZone } from './timeZones';
 import styles from './MyLocationButton.module.css';
@@ -77,6 +78,14 @@ export interface MyLocationButtonProps {
   location?: Pick<LocationConfig, 'latitude' | 'longitude'>;
 }
 
+/** The location still is the device fix (both as stored in the config, 1e-6°). */
+function isFix(
+  location: Pick<LocationConfig, 'latitude' | 'longitude'> | undefined,
+  fix: { latitude: number; longitude: number },
+): boolean {
+  return location?.latitude === fix.latitude && location.longitude === fix.longitude;
+}
+
 /** Geolocation error code (1 denied, 2 unavailable, 3 timeout) → message key. */
 function failureOf(error: GeolocationPositionError): Failure {
   if (error.code === 1) return 'denied';
@@ -100,12 +109,20 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
   const locateButton = useRef<HTMLButtonElement>(null);
   const offerButton = useRef<HTMLButtonElement>(null);
 
+  /** The config location is the device fix: only then is the nearest address offered (and applied). */
+  const atFix = state.status === 'done' && isFix(location, state);
+
   // A lookup still running when the section closes is dropped.
   useEffect(() => () => lookup.current?.abort(), []);
+  // … and when another location replaces the fix (search, preset, share link, edited coordinates).
+  useEffect(() => {
+    if (!atFix) lookup.current?.abort();
+  }, [atFix]);
 
   const locate = (): void => {
     const geo: Geolocation | undefined = navigator.geolocation;
     lookup.current?.abort();
+    lookup.current = null;
     setNearest({ status: 'idle' });
     if (!geo) {
       setState({ status: 'error', reason: 'unsupported' });
@@ -134,15 +151,22 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
     );
   };
 
-  const applyNearest = (latitude: number, longitude: number): void => {
+  const applyNearest = (fix: { latitude: number; longitude: number }): void => {
     if (!onAddress || nearest.status === 'searching') return;
     const hadFocus = document.activeElement === offerButton.current;
     lookup.current?.abort();
     const ctrl = new AbortController();
     lookup.current = ctrl;
     setNearest({ status: 'searching' });
-    void findNearestAddress(latitude, longitude, { signal: ctrl.signal }).then((res) => {
-      if (ctrl.signal.aborted) return;
+    void findNearestAddress(fix.latitude, fix.longitude, { signal: ctrl.signal }).then((res) => {
+      if (lookup.current !== ctrl) return; // «Mein Standort» was pressed again
+      lookup.current = null;
+      // Another location replaced the fix meanwhile: the reply must not overwrite it. The config is read here, not
+      // the `location` prop, because the store may already hold the new location before this component re-renders.
+      if (ctrl.signal.aborted || !isFix(useConfigStore.getState().config.location, fix)) {
+        setNearest({ status: 'idle' });
+        return;
+      }
       if (!res.ok) setNearest({ status: 'error' });
       else if (!res.value) setNearest({ status: 'none' });
       else {
@@ -170,12 +194,7 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
   else if (nearest.status === 'none') nearestMessage = t.nearestNone(f.unit(NEAREST_ADDRESS_RADIUS, 'm'));
   else if (nearest.status === 'error') nearestMessage = t.nearestError;
 
-  const offerNearest =
-    onAddress !== undefined &&
-    state.status === 'done' &&
-    location?.latitude === state.latitude &&
-    location.longitude === state.longitude &&
-    nearest.status !== 'done';
+  const offerNearest = onAddress !== undefined && atFix && nearest.status !== 'done';
 
   return (
     <div className={styles.root}>
@@ -198,7 +217,7 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
             <Button
               ref={offerButton}
               size="sm"
-              onClick={() => applyNearest(state.latitude, state.longitude)}
+              onClick={() => applyNearest({ latitude: state.latitude, longitude: state.longitude })}
               aria-busy={nearest.status === 'searching' || undefined}
             >
               {t.nearest}

@@ -11,17 +11,22 @@ import { roundToStep } from './units';
 // letter and the dot of house numbers ("12a" → 12, "5.1" → 51): the number comes from the label.
 // Exact match (docs.geo.admin.ch/access-data/search.html: "weight > 1000 indicates fuzzy search results"; weight
 // 100 only appears when a postcode is typed, "Kramgasse 49 Bern" has weight 7): street and house number of the
-// result appear in the typed text. Fuzzy hits are kept only when their house number was typed (a typo in the
-// street: "Kramgase 49 Bern" → Kramgasse 49), so foreign queries ("Stephansplatz 1 Wien" → "Wien-Strasse 2,
-// 4053 Basel") give no addresses. Liechtenstein: the result detail ends in "… <BFS no.> <municipality> ch"
-// without a canton, and the municipality numbers are 7001–7011 (all 11 FL municipalities checked 2026-09-25).
+// result appear in the typed text. Fuzzy hits are kept only when their house number was typed AND their street is
+// spelled like typed words (streetResemblesQuery: at most one edit per 5 letters; a typo in the street:
+// "Kramgase 49 Bern" → Kramgasse 49). SearchServer answers every query with a house number with fuzzy Swiss hits
+// of that number, so foreign or unknown addresses give no addresses ("Stephansplatz 1 Wien" → "Wien-Strasse 2,
+// 4053 Basel"; "Via Roma 1 Milano" → "Via Milano 1, 6830 Chiasso"; "Bahnhofstrasse 12a Zürich" → "Aubruggweg
+// 12a", all dropped; recorded 2026-09-25). Abbreviations ("Bahnhofstr. 1") are normal hits, not fuzzy ones.
+// Liechtenstein: the result detail ends in "… <BFS no.> <municipality> ch" without a canton, and the municipality
+// numbers are 7001–7011 (all 11 FL municipalities checked 2026-09-25).
 // Building register: …/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/<EGID>_<EDID>; codes from the GWR
 // Merkmalskatalog 4.2 (housing-stat.ch/files/881-2200.pdf). No record in Liechtenstein (HTTP 404 → null).
 // Ground height: …/rest/services/height (LV95 → "height" in m, as a string; HTTP 400 outside the model).
 // Nearest address: identify on the address layer with a tolerance circle (1 m per pixel), geometry to 0.1 m.
 // Requests: fetchRetry.ts (backoff with jitter), at most API3_BUDGET per minute from this module (FSDI terms:
-// "API Rest Services (general) | *.geo.admin.ch | 21 Mio requests / year | 40 requests / minute"), results
-// cached per query / feature / point. Nothing here throws: every call returns a GeoResult.
+// "API Rest Services (general) | *.geo.admin.ch | 21 Mio requests / year | 40 requests / minute"): every attempt
+// takes a slot, a retry after its backoff and fetchRetry's deadline check (its time limit starts once it has the
+// slot). Results cached per query / feature / point. Nothing here throws: every call returns a GeoResult.
 // ─────────────────────────────────────────────
 
 export const API3_URL = 'https://api3.geo.admin.ch/rest/services';
@@ -228,10 +233,14 @@ function toGeoError(e: unknown): GeoError {
   return { kind: 'invalid', message: e instanceof Error ? e.message : String(e) };
 }
 
-/** GET `url` as JSON within the budget, with retries; typed errors instead of exceptions. */
+/**
+ * GET `url` as JSON with retries, every attempt within the budget (the first one before fetchReadWithRetry, each
+ * retry after its backoff: fetchRetry calls `sleep` once before every retry); typed errors instead of exceptions.
+ */
 async function getJson(url: string, opts: GeoOptions, retry: RetryOptions): Promise<GeoResult<unknown>> {
   const { signal, fetchImpl } = opts;
   const limiter = opts.limiter === undefined ? api3Limiter : opts.limiter;
+  const backoff = opts.retry?.sleep ?? retry.sleep ?? sleepWithSignal;
   try {
     await limiter?.acquire(signal);
     const value = await fetchReadWithRetry(url, (res) => res.json() as Promise<unknown>, {
@@ -239,6 +248,14 @@ async function getJson(url: string, opts: GeoOptions, retry: RetryOptions): Prom
       ...opts.retry,
       signal,
       fetchImpl,
+      ...(limiter
+        ? {
+            sleep: async (ms: number, s: AbortSignal | undefined) => {
+              await backoff(ms, s);
+              await limiter.acquire(s);
+            },
+          }
+        : {}),
     });
     return { ok: true, value };
   } catch (e) {
@@ -302,6 +319,62 @@ export function searchTextOf(query: string): string {
 /** Numbers typed in a query ("Kramgasse 49 3011 Bern" → {49, 3011}), normalized like house numbers. */
 function typedNumbers(normalizedQuery: string): Set<string> {
   return new Set(normalizedQuery.split(' ').filter((w) => /^\d/.test(w)));
+}
+
+/**
+ * Edit distance of two strings: insertions, deletions, substitutions and swaps of two neighbouring letters count
+ * one each (Damerau–Levenshtein, optimal string alignment; "kramgsase" → "kramgasse" is 1).
+ */
+export function editDistance(a: string, b: string): number {
+  if (a === b) return 0;
+  if (!a || !b) return Math.max(a.length, b.length);
+  let before = new Array<number>(b.length + 1).fill(0);
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  let row = new Array<number>(b.length + 1).fill(0);
+  for (let i = 1; i <= a.length; i++) {
+    row[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let d = Math.min(prev[j] + 1, row[j - 1] + 1, prev[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1])
+        d = Math.min(d, before[j - 2] + 1);
+      row[j] = d;
+    }
+    [before, prev, row] = [prev, row, before];
+  }
+  return prev[b.length];
+}
+
+/** Letters of a street per allowed edit when a fuzzy hit is compared with the typed words (at least 1 edit). */
+export const FUZZY_LETTERS_PER_EDIT = 5;
+
+/**
+ * A fuzzy hit's street is spelled like the typed text: some consecutive typed words without a digit (house
+ * numbers and postcodes split the text), joined without spaces, are within max(1, ⌊letters / 5⌋) edits of the
+ * street without spaces (both normalized). "Kramgase 49 Bern" ~ Kramgasse (1 of 1), "Rte de Lausanne 10" ~ Rue
+ * de Lausanne (1 of 2), "Wienstrasse" ~ Wien-Strasse (0); "Via Roma 1 Milano" ≁ Via Milano, Via Rime (2 of 1).
+ */
+export function streetResemblesQuery(query: string, street: string): boolean {
+  const target = normalizeText(street).replace(/ /g, '');
+  if (!target) return false;
+  const allowed = Math.max(1, Math.floor(target.length / FUZZY_LETTERS_PER_EDIT));
+  const runs: string[][] = [[]];
+  for (const word of normalizeText(query).split(' ')) {
+    if (/\d/.test(word)) runs.push([]);
+    else if (word) runs[runs.length - 1].push(word);
+  }
+  for (const run of runs) {
+    for (let i = 0; i < run.length; i++) {
+      let gram = '';
+      for (let j = i; j < run.length && gram.length <= target.length + allowed; j++) {
+        gram += run[j];
+        if (Math.abs(gram.length - target.length) <= allowed && editDistance(gram, target) <= allowed) {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
 }
 
 /** Exact / partial / fuzzy, see the header. */
@@ -420,7 +493,10 @@ export function parseSearchResult(r: unknown, query: string): SwissAddress | nul
 
 const MATCH_ORDER: Record<AddressMatch, number> = { exact: 0, partial: 1, fuzzy: 2 };
 
-/** Results of a SearchServer response: fuzzy hits only with a typed house number, exact first, unique. */
+/**
+ * Results of a SearchServer response: fuzzy hits only with a typed house number and a street spelled like the
+ * typed words, exact first, unique.
+ */
 export function parseSearchResponse(data: unknown, query: string): SwissAddress[] | null {
   if (!isRecord(data) || !Array.isArray(data.results)) return null;
   const numbers = typedNumbers(normalizeText(query));
@@ -429,7 +505,12 @@ export function parseSearchResponse(data: unknown, query: string): SwissAddress[
   for (const r of data.results) {
     const address = parseSearchResult(r, query);
     if (!address || seen.has(address.featureId)) continue;
-    if (address.match === 'fuzzy' && !numbers.has(normalizeText(address.houseNumber))) continue;
+    if (
+      address.match === 'fuzzy' &&
+      !(numbers.has(normalizeText(address.houseNumber)) && streetResemblesQuery(query, address.street))
+    ) {
+      continue;
+    }
     seen.add(address.featureId);
     out.push(address);
   }

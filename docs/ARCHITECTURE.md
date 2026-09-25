@@ -466,14 +466,21 @@ Antworten.
   `network`, `http`, `timeout`, `invalid`), nehmen `signal`, `fetchImpl` und `limiter` und werfen nie.
   Wiederholungen über `fetchReadWithRetry` (Suche 2 mit Frist 10 s, sonst 3 mit 15 s). Höchstens 30 api3-Anfragen je
   Minute aus diesem Modul (gleitendes Fenster `API3_BUDGET`, Platz für die anderen Nutzer von geo.admin.ch unter den
-  40/min der FSDI); Ergebnisse je Suchtext, Feature und Punkt gecacht (je 50).
+  40/min der FSDI); jeder Versuch belegt einen Platz, eine Wiederholung nach ihrer Wartezeit und der Fristprüfung
+  von fetchRetry (über dessen `sleep`; die Zeitgrenze des Versuchs beginnt erst mit dem Platz). Ergebnisse je
+  Suchtext, Feature und Punkt gecacht (je 50).
 - **Treffer lesen:** Label ohne `<b>` als «Strasse Nummer, PLZ Ort» (Eingänge ohne Nummer, «#», ohne Nummer); die
   Hausnummer kommt aus dem Label, weil `attrs.num` Buchstaben und Punkt verliert («12a» → 12, «5.1» → 51). LV95 aus
   `geom_st_box2d` (mm) → `lv95ToWgs84` → 1e-6° (Kramgasse 49: ≤ 0.1 m neben REFRAME). `featureId` = `<EGID>_<EDID>`.
   `match`: `exact` (Strasse und Hausnummer stehen im Suchtext; verglichen klein, Umlaute als ae/oe/ue wie im
-  `detail`, ohne Akzente), `partial`, `fuzzy` (weight > 1000; nur behalten, wenn die Hausnummer eingetippt wurde:
-  «Kramgase 49 Bern» → Kramgasse 49, «Stephansplatz 1 Wien» → keine Adressen). Reihenfolge exakt, teilweise,
-  unscharf. **Liechtenstein:** Das `detail` endet in FL ohne Kanton («… 9490 vaduz 7001 vaduz ch»); massgebend ist
+  `detail`, ohne Akzente), `partial`, `fuzzy` (weight > 1000; nur behalten, wenn die Hausnummer eingetippt wurde
+  und die Strasse wie eingetippte Wörter geschrieben ist: aufeinanderfolgende Wörter ohne Ziffer, ohne Leerzeichen,
+  höchstens eine Änderung je 5 Buchstaben der Strasse, mindestens 1, vertauschte Nachbarbuchstaben zählen einfach).
+  SearchServer beantwortet jede Eingabe mit Hausnummer mit unscharfen Schweizer Treffern dieser Nummer; so bleibt
+  «Kramgase 49 Bern» → Kramgasse 49 und «Rte de Lausanne 10 Morges» → Rue de Lausanne 10, während «Stephansplatz 1
+  Wien», «Via Roma 1 Milano» (Via Milano 1 Chiasso, Via Rime 1 Mendrisio) und «Rue de Rivoli 10 Paris» keine Adressen
+  geben (ausserhalb von CH/FL wie bisher). Abkürzungen («Bahnhofstr. 1») sind normale Treffer. Reihenfolge exakt,
+  teilweise, unscharf. **Liechtenstein:** Das `detail` endet in FL ohne Kanton («… 9490 vaduz 7001 vaduz ch»); massgebend ist
   die Gemeindenummer 7001–7011 vor «ch» (alle 11 Gemeinden am 25.09.2026 geprüft), ersatzweise die PLZ 9485–9498 →
   `Europe/Vaduz`, sonst `Europe/Zurich`. Das GWR hat für FL keine Einträge (404).
 - **GWR-Codes** (Merkmalskatalog 4.2): GASTW Geschosse (mit Erdgeschoss; Dach- und Untergeschosse nur bewohnt oder
@@ -494,11 +501,14 @@ Antworten.
   eigenen Gebäudes) vom Eingang liegt.
 - **«Mein Standort»** bietet danach «Nächste Adresse übernehmen» an, solange der Standort die Geräteposition ist;
   erst dieser Klick sendet die Koordinaten an geo.admin.ch. Die nächste Adresse im Umkreis von 50 m wird wie eine
-  Suchwahl übernommen (Meldung mit Abstand), der Fokus geht danach an «Mein Standort».
+  Suchwahl übernommen (Meldung mit Abstand), der Fokus geht danach an «Mein Standort». Ersetzt ein anderer Standort
+  die Geräteposition, während die Adresse gesucht wird (Suche, Vorlage, Teilen-Link, Koordinaten), wird die Anfrage
+  abgebrochen und eine späte Antwort verworfen (geprüft am Config-Standort, nicht an der Prop).
 - Breiten- und Längengrad mit 6 Nachkommastellen.
 - **Tests:** `geocode.test.ts` auf aufgezeichneten Antworten (`model/geocode.fixtures.json`, 25.09.2026),
-  `LocationSection.test.tsx`, `e2e/address.spec.ts` (nur Tastatur; Handy 390 × 844 mit 16-px-Feld, 44-px-Optionen und
-  «Nächste Adresse übernehmen»; beide Basis-Pfade). `requestSurroundingsImport` prüft der Komponententest am Store,
+  `LocationSection.test.tsx`, `e2e/address.spec.ts` (nur Tastatur, die Entprellung auf der Playwright-Uhr statt
+  abhängig vom Tipptempo; Handy 390 × 844 mit 16-px-Feld, 44-px-Optionen, ausländischer Adresse ohne Schweizer
+  Doppelgänger und «Nächste Adresse übernehmen»; beide Basis-Pfade). `requestSurroundingsImport` prüft der Komponententest am Store,
   E2E den eingeschalteten Laserscan im Teilen-Hash (ohne Gebäude-Import ist der Aufruf im Browser nicht sichtbar).
 - Gemessen in der Sandbox hinter einem Proxy (nicht repräsentativ für die Schweiz): SearchServer bis 7 s, GWR und
   Höhe 3–5 s; die Ergebnisse erscheinen deshalb je Quelle, sobald sie da sind.
