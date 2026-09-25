@@ -693,7 +693,7 @@ interface MosaicData {
 const headerCache = new Lru<{ image: CogImage; bytes: number }>(32);
 const tileBytesCache = new Lru<Uint8Array>(256, TILE_CACHE_BYTES);
 const stacCache = new Lru<{ tiles: StacTile[]; bytes: number }>(16);
-const mosaicCache = new Lru<MosaicData>(2);
+const mosaicCache = new Lru<MosaicData>(3);
 const groundCache = new Lru<number>(64);
 const vectorTileCache = new Lru<{ tile: DecodedTile; bytes: number }>(16);
 const maskedCache = new Lru<{ raster: Raster; zone: OwnExclusionZone | null; extraBytes: number }>(1);
@@ -724,7 +724,8 @@ interface Ctx {
   /** Bytes to download and downloaded (progress). */
   plan: number;
   done: number;
-  report: (computeShare: number) => void;
+  /** Reports the progress so far (download, then computation). */
+  report: () => void;
 }
 
 class AbortedError extends Error {}
@@ -871,7 +872,7 @@ async function readMosaic(ctx: Ctx, grid: GridSpec, files: readonly StacTile[]):
     }
   });
   ctx.plan += plans.reduce((s, p) => s + p.ranges.reduce((q, r) => q + (r.end - r.start), 0), 0);
-  ctx.report(0);
+  ctx.report();
   const tasks = plans.flatMap((p) =>
     p.ranges.map((range) => async (): Promise<void> => {
       checkAbort(ctx);
@@ -894,7 +895,7 @@ async function readMosaic(ctx: Ctx, grid: GridSpec, files: readonly StacTile[]):
         );
       }
       ctx.stats.ms.decode += performance.now() - t0;
-      ctx.report(0);
+      ctx.report();
     }),
   );
   await timed(ctx, 'download', () => runLimited(tasks, RANGE_CONCURRENCY));
@@ -992,22 +993,42 @@ function maskKey(site: DsmSite): string {
  * The raster the rays run on: the scan with the masked cells replaced by the ground, and the own-building
  * zone from the vector tiles when they were loaded (trees off) and no own footprint was given.
  */
+/** Key of the masked raster of a site on a grid. */
+const maskedKey = (grid: GridSpec, site: DsmSite): string =>
+  `${gridKey(grid)}|${site.latitude},${site.longitude},${site.facadeAzimuth}|${maskKey(site)}`;
+
+/** True when the site needs the ground model under masked cells (masks, or trees off). */
+const needsMasks = (site: DsmSite): boolean => !site.trees || (site.masks?.polygons.length ?? 0) > 0;
+
+/** What the masks need besides the scan: the 2 m terrain and, without trees, the building vector tiles. */
+interface MaskInputs {
+  terrain: MosaicData | null;
+  vt: { tiles: DecodedTile[]; bytes: number } | null;
+}
+
+function loadMaskInputs(ctx: Ctx, site: DsmSite, grid: GridSpec): Promise<MaskInputs> {
+  const reach = site.radius + DSM_WINDOW_MARGIN_M;
+  return Promise.all([
+    readTerrain(ctx, grid),
+    site.trees ? Promise.resolve(null) : timed(ctx, 'download', () => readVectorTiles(ctx, site, reach)),
+  ]).then(([terrain, vt]) => ({ terrain, vt }));
+}
+
 async function maskedRaster(
   ctx: Ctx,
   site: DsmSite,
   mosaic: MosaicData,
+  inputs: Promise<MaskInputs> | null,
 ): Promise<{ raster: Raster; zone: OwnExclusionZone | null; extraBytes: number }> {
   const polygons = site.masks?.polygons ?? [];
-  if (site.trees && polygons.length === 0) return { raster: mosaic.raster, zone: null, extraBytes: 0 };
-  const key = `${gridKey(mosaic.raster)}|${site.latitude},${site.longitude},${site.facadeAzimuth}|${maskKey(site)}`;
+  if (!needsMasks(site)) return { raster: mosaic.raster, zone: null, extraBytes: 0 };
+  const key = maskedKey(mosaic.raster, site);
   const hit = maskedCache.get(key);
   if (hit) return hit;
   const grid: GridSpec = mosaic.raster;
   const reach = site.radius + DSM_WINDOW_MARGIN_M;
-  const [terrain, vt] = await Promise.all([
-    readTerrain(ctx, grid),
-    site.trees ? Promise.resolve(null) : timed(ctx, 'download', () => readVectorTiles(ctx, site, reach)),
-  ]);
+  const { terrain, vt } = await (inputs ?? loadMaskInputs(ctx, site, grid));
+  checkAbort(ctx);
   const t0 = performance.now();
   const mask = new Uint8Array(grid.width * grid.height);
   let zone: OwnExclusionZone | null = null;
@@ -1154,6 +1175,10 @@ export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}
       await groundPromise;
       return finish({ status: 'unavailable', stats });
     }
+    // The ground model and building tiles of the masks load alongside the scan (unless already masked).
+    const maskInputs =
+      needsMasks(site) && !maskedCache.get(maskedKey(grid, site)) ? loadMaskInputs(ctx, site, grid) : null;
+    maskInputs?.catch(() => undefined); // awaited below; a failure of the scan must not leave it unhandled
     const mosaic = await readMosaic(ctx, grid, files);
     checkAbort(ctx);
     let ground = await groundPromise;
@@ -1166,7 +1191,7 @@ export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}
       ground = { value: v, source: 'terrain-model' };
     }
     const siteGround = ground;
-    const masked = await maskedRaster(ctx, site, mosaic);
+    const masked = await maskedRaster(ctx, site, mosaic, maskInputs);
     checkAbort(ctx);
     const zone =
       masked.zone ??
@@ -1184,7 +1209,7 @@ export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}
       horizons.push(marchDsmHorizons(masked.raster, geo, group));
       stats.ms.rays += performance.now() - t0;
       computed++;
-      ctx.report(0);
+      ctx.report();
       if (computed < groups.length) await yieldToEventLoop();
       checkAbort(ctx);
     }

@@ -329,6 +329,13 @@ describe('useSurfaceModelLoader', () => {
     expect(surface()).toMatchObject({ dataYears: [2023], coverage: 0.98 });
   });
 
+  it('outside the scan extent: unavailable at once, without a job', async () => {
+    enable({ ...enabled, location: { ...enabled.location, latitude: 48.8566, longitude: 2.3522 } });
+    renderHook(() => useSurfaceModelLoader());
+    await waitFor(() => expect(surface().status).toBe('unavailable'), { timeout: 500 });
+    expect(worker.jobs).toHaveLength(0);
+  });
+
   it('outside the scan: unavailable (remembered); errors wait for a retry', async () => {
     worker.respond = (request) => ({ status: 'unavailable', stats: okResult(request).stats });
     enable();

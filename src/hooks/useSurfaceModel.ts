@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { create } from 'zustand';
 import type { Config, FloorPlacement, HorizonProfile } from '../model/types';
 import { DEFAULT_SWEEP_TILTS } from '../model/analysis';
-import { DSM_ALGORITHM_VERSION, type DsmObserverGroup, type DsmSite, type DsmSiteInfo } from '../model/dsm';
+import {
+  DSM_ALGORITHM_VERSION,
+  insideDsmExtent,
+  type DsmObserverGroup,
+  type DsmSite,
+  type DsmSiteInfo,
+} from '../model/dsm';
 import { hashString, surfaceObserverKey, surfaceSiteKey, type SurfaceHorizons } from '../model/dsmHorizon';
 import { facadeTransform } from '../model/enu';
 import { floorPlacements, panelLayout } from '../model/geometry';
@@ -412,7 +418,8 @@ export function useSurfaceModelLoader(): void {
 
     const run = async (): Promise<void> => {
       const cached = readSurfaceCache(plan.jobKey);
-      if (cached?.info?.unavailable) {
+      // Outside the scan's extent: no request (and no wait for the download gate).
+      if (cached?.info?.unavailable || !insideDsmExtent(plan.site.latitude, plan.site.longitude)) {
         setSurface({ ...INITIAL_SURFACE, status: 'unavailable', progress: 1 });
         return;
       }

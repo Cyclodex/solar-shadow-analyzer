@@ -24,7 +24,8 @@ import styles from './SurfaceModelControls.module.css';
 
 const de = {
   toggle: 'Laserscan-Umgebung (swisstopo)',
-  hint: 'Horizont aus dem Oberflächenmodell swissSURFACE3D (Gebäude und Bäume, 0.5-m-Raster) im gewählten Umkreis, je Stockwerk und Neigung. Nur in der Schweiz und Liechtenstein.',
+  hint: 'Gebäude und Bäume aus dem Oberflächenmodell swissSURFACE3D (0.5 m) als Horizont je Stockwerk. Nur Schweiz und Liechtenstein.',
+  starting: 'Laserscan wird geladen …',
   loading: (mb: string, pct: string) => `Laserscan wird geladen … ${mb} (${pct})`,
   progress: 'Fortschritt Laserscan',
   ready: 'Laserscan geladen',
@@ -51,7 +52,8 @@ const messages: Messages<typeof de> = {
   de,
   en: {
     toggle: 'Laser-scan surroundings (swisstopo)',
-    hint: 'Horizon from the swissSURFACE3D surface model (buildings and trees, 0.5 m grid) within the chosen radius, per floor and tilt. Switzerland and Liechtenstein only.',
+    hint: 'Buildings and trees from the swissSURFACE3D surface model (0.5 m) as horizon per floor. Switzerland and Liechtenstein only.',
+    starting: 'Loading laser scan …',
     loading: (mb, pct) => `Loading laser scan … ${mb} (${pct})`,
     progress: 'Laser scan progress',
     ready: 'Laser scan loaded',
@@ -97,7 +99,7 @@ function SurfaceStatus({ hasBuildings }: { hasBuildings: boolean }) {
     return (
       <div className={styles.loading}>
         <span className={styles.label} aria-hidden="true">
-          {t.loading(mb(surface.bytes), f.pct(pct))}
+          {surface.bytes > 0 ? t.loading(mb(surface.bytes), f.pct(pct)) : t.starting}
         </span>
         <div
           className={styles.bar}
