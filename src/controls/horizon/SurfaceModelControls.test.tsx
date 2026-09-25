@@ -1,10 +1,18 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { SurfaceRefresh } from '../../hooks/useSurfaceModel';
 import { useConfigStore } from '../../state/configStore';
 import { useDataStore } from '../../state/dataStore';
 import { useUiStore } from '../../state/uiStore';
 import { resetStores } from '../../test/utils';
 import { SurfaceModelControls } from './SurfaceModelControls';
+
+/** The loader's refresh state (a download for new tilts or floors while the site's horizons stay shown). */
+const refresh = vi.hoisted(() => ({ value: null as SurfaceRefresh | null }));
+vi.mock('../../hooks/useSurfaceModel', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../hooks/useSurfaceModel')>()),
+  useSurfaceRefresh: () => refresh.value,
+}));
 
 const model = () => useConfigStore.getState().config.horizon.surfaceModel;
 /** Text with non-breaking spaces as plain spaces (units and percentages use U+00A0). */
@@ -13,7 +21,10 @@ const enable = (): void =>
   act(() => useConfigStore.getState().patch('horizon', { surfaceModel: { ...model(), enabled: true } }));
 
 describe('SurfaceModelControls', () => {
-  beforeEach(resetStores);
+  beforeEach(() => {
+    resetStores();
+    refresh.value = null;
+  });
 
   it('offers the laser scan; the settings appear once it is on', () => {
     render(<SurfaceModelControls />);
@@ -113,6 +124,40 @@ describe('SurfaceModelControls', () => {
       'Der Laserscan konnte nicht geladen werden. Es wird ohne Laserscan gerechnet.',
     );
     expect(alert).toHaveTextContent('Der Server hat mit Fehler 503 geantwortet.');
+    fireEvent.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
+    expect(useDataStore.getState().surfaceAttempt).toBe(1);
+  });
+
+  it('a reload of the data for new tilts or floors shows its own progress, then an error with retry', () => {
+    enable();
+    act(() =>
+      useDataStore
+        .getState()
+        .setSurface({ status: 'ready', dataYears: [2023], bytes: 5_010_000, horizons: {} }),
+    );
+    refresh.value = { status: 'loading', progress: 0, bytes: 0 };
+    const { rerender } = render(<SurfaceModelControls />);
+    expect(screen.getByText('Laserscan wird nachgeladen …')).toBeInTheDocument();
+    refresh.value = { status: 'loading', progress: 0.43, bytes: 2_150_000 };
+    rerender(<SurfaceModelControls />);
+    const bar = screen.getByRole('progressbar', { name: 'Fortschritt Laserscan' });
+    expect(bar).toHaveAttribute('aria-valuenow', '43');
+    expect(plain(bar.previousElementSibling?.textContent ?? '')).toBe(
+      'Laserscan wird nachgeladen … 2.2 MB (43 %)',
+    );
+    expect(
+      screen.getByText(
+        'Für neue Neigungen oder Stockwerke gilt bis dahin der Horizont der nächstgelegenen berechneten Panelreihe.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText('Laserscan geladen')).not.toBeInTheDocument();
+    refresh.value = { status: 'error', error: 'Failed to fetch' };
+    rerender(<SurfaceModelControls />);
+    expect(screen.getByRole('status')).toHaveTextContent('Laserscan geladen');
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent(
+      'Der Laserscan konnte nicht nachgeladen werden. Für neue Neigungen oder Stockwerke gilt der Horizont der nächstgelegenen berechneten Panelreihe.',
+    );
     fireEvent.click(within(alert).getByRole('button', { name: 'Erneut versuchen' }));
     expect(useDataStore.getState().surfaceAttempt).toBe(1);
   });

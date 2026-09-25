@@ -5,11 +5,12 @@ import { cssVars } from '../../components/cssVars';
 import { ResetIcon } from '../../components/icons';
 import { useFormat, useMessages, type Messages } from '../../i18n';
 import { LIMITS } from '../../model/defaults';
-import { estimateDsmBytes } from '../../model/dsm';
+import { estimateDsmBytes } from '../../model/dsmEstimate';
 import { dsmMaskPolygons } from '../../model/surroundings';
 import type { SurfaceModelConfig } from '../../model/types';
 import { useConfigSection, usePatch } from '../../state/configStore';
 import { useDataStore } from '../../state/dataStore';
+import { useSurfaceRefresh } from '../../hooks/useSurfaceModel';
 import { LoadErrorDetails } from '../LoadErrorDetails';
 import sections from '../sections.module.css';
 import styles from './SurfaceModelControls.module.css';
@@ -18,8 +19,9 @@ import styles from './SurfaceModelControls.module.css';
 // LASER-SCAN SETTINGS
 // docs/ARCHITECTURE.md, "Umgebung": toggle «Laserscan-Umgebung (swisstopo)», load state (progress with MB,
 // data year, error with retry, «nur in der Schweiz und Liechtenstein verfügbar», partial coverage at the
-// border), «Bäume berücksichtigen» (trees opaque all year) and the traced radius with its estimated download
-// (model/dsm.ts estimateDsmBytes). Reads config.horizon.surfaceModel and dataStore.surface itself.
+// border, a reload of the data for new tilts or floors with its own progress or error), «Bäume berücksichtigen»
+// (trees opaque all year) and the traced radius with its estimated download (model/dsmEstimate.ts
+// estimateDsmBytes). Reads config.horizon.surfaceModel, dataStore.surface and useSurfaceRefresh itself.
 // ─────────────────────────────────────────────
 
 const de = {
@@ -39,6 +41,12 @@ const de = {
     'Es wird ohne Laserscan gerechnet, mit den Umgebungsgebäuden als Körper mit flachem Dach.',
   fallbackNone: 'Es wird ohne Laserscan gerechnet.',
   retry: 'Erneut versuchen',
+  refreshStarting: 'Laserscan wird nachgeladen …',
+  refreshing: (mb: string, pct: string) => `Laserscan wird nachgeladen … ${mb} (${pct})`,
+  refreshHint:
+    'Für neue Neigungen oder Stockwerke gilt bis dahin der Horizont der nächstgelegenen berechneten Panelreihe.',
+  refreshError:
+    'Der Laserscan konnte nicht nachgeladen werden. Für neue Neigungen oder Stockwerke gilt der Horizont der nächstgelegenen berechneten Panelreihe.',
   trees: 'Bäume berücksichtigen',
   treesHint: 'Bäume werden ganzjährig als blickdicht angenommen (Befliegung meist ohne Laub).',
   buildingsOnly: 'Aus: nur Gebäude; alles ausserhalb der Gebäudegrundrisse wird zu Boden.',
@@ -67,6 +75,11 @@ const messages: Messages<typeof de> = {
       'Calculating without the laser scan, with the surrounding buildings as flat-roofed blocks.',
     fallbackNone: 'Calculating without the laser scan.',
     retry: 'Try again',
+    refreshStarting: 'Reloading the laser scan …',
+    refreshing: (mb, pct) => `Reloading the laser scan … ${mb} (${pct})`,
+    refreshHint: 'Until then, new tilts or floors use the horizon of the nearest computed panel row.',
+    refreshError:
+      'The laser scan could not be reloaded. New tilts or floors use the horizon of the nearest computed panel row.',
     trees: 'Include trees',
     treesHint: 'Trees are assumed to be opaque all year (scans are mostly flown without leaves).',
     buildingsOnly: 'Off: buildings only; everything outside building footprints becomes ground.',
@@ -86,35 +99,58 @@ const RADII = (() => {
   return out;
 })();
 
-/** Load state of the laser scan: progress, error with retry, outside coverage, or data year and size. */
+/** Progress of a laser-scan download: label with MB and percent, and the bar. */
+function LoadProgress({ progress, bytes, refresh }: { progress: number; bytes: number; refresh: boolean }) {
+  const t = useMessages(messages);
+  const f = useFormat();
+  const pct = Math.round(progress * 100);
+  const mb = f.unit(bytes / 1e6, 'MB', 1);
+  const label = refresh
+    ? bytes > 0
+      ? t.refreshing(mb, f.pct(pct))
+      : t.refreshStarting
+    : bytes > 0
+      ? t.loading(mb, f.pct(pct))
+      : t.starting;
+  return (
+    <div className={styles.loading}>
+      <span className={styles.label} aria-hidden="true">
+        {label}
+      </span>
+      <div
+        className={styles.bar}
+        role="progressbar"
+        aria-label={t.progress}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={pct}
+        aria-valuetext={`${f.pct(pct)}, ${mb}`}
+        style={cssVars({ '--progress': progress })}
+      >
+        <span className={styles.fill} />
+      </div>
+      {refresh && <p className={styles.note}>{t.refreshHint}</p>}
+    </div>
+  );
+}
+
+/**
+ * Load state of the laser scan: progress, error with retry, outside coverage, or data year and size; while
+ * the shown site's data loads again for new tilts or floors (useSurfaceRefresh), that progress or its error.
+ */
 function SurfaceStatus({ hasBuildings }: { hasBuildings: boolean }) {
   const t = useMessages(messages);
   const f = useFormat();
   const surface = useDataStore((s) => s.surface);
   const retry = useDataStore((s) => s.retrySurface);
+  const refresh = useSurfaceRefresh();
   const mb = (bytes: number): string => f.unit(bytes / 1e6, 'MB', 1);
 
   if (surface.status === 'loading') {
-    const pct = Math.round(surface.progress * 100);
-    return (
-      <div className={styles.loading}>
-        <span className={styles.label} aria-hidden="true">
-          {surface.bytes > 0 ? t.loading(mb(surface.bytes), f.pct(pct)) : t.starting}
-        </span>
-        <div
-          className={styles.bar}
-          role="progressbar"
-          aria-label={t.progress}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          aria-valuenow={pct}
-          aria-valuetext={`${f.pct(pct)}, ${mb(surface.bytes)}`}
-          style={cssVars({ '--progress': surface.progress })}
-        >
-          <span className={styles.fill} />
-        </div>
-      </div>
-    );
+    return <LoadProgress progress={surface.progress} bytes={surface.bytes} refresh={false} />;
+  }
+  if (refresh?.status === 'loading') {
+    return <LoadProgress progress={refresh.progress} bytes={refresh.bytes} refresh />;
   }
   if (surface.status === 'error') {
     return (
@@ -141,16 +177,29 @@ function SurfaceStatus({ hasBuildings }: { hasBuildings: boolean }) {
   if (surface.status === 'ready') {
     const partial = surface.coverage !== null && surface.coverage < 0.999;
     return (
-      <div className={styles.ready} role="status">
-        <p className={styles.facts}>
-          <span className={styles.ok}>{t.ready}</span>
-          {surface.dataYears.length > 0 && <span>{t.years(surface.dataYears.join(', '))}</span>}
-          {surface.bytes > 0 && <span>{t.size(mb(surface.bytes))}</span>}
-        </p>
-        {partial && (
-          <p className={styles.note}>{t.coverage(f.pct(Math.round((surface.coverage ?? 0) * 100)))}</p>
+      <>
+        <div className={styles.ready} role="status">
+          <p className={styles.facts}>
+            <span className={styles.ok}>{t.ready}</span>
+            {surface.dataYears.length > 0 && <span>{t.years(surface.dataYears.join(', '))}</span>}
+            {surface.bytes > 0 && <span>{t.size(mb(surface.bytes))}</span>}
+          </p>
+          {partial && (
+            <p className={styles.note}>{t.coverage(f.pct(Math.round((surface.coverage ?? 0) * 100)))}</p>
+          )}
+        </div>
+        {refresh?.status === 'error' && (
+          <div className={styles.error} role="alert">
+            <p>{t.refreshError}</p>
+            <LoadErrorDetails error={refresh.error} />
+            <div>
+              <Button size="sm" icon={<ResetIcon />} onClick={retry}>
+                {t.retry}
+              </Button>
+            </div>
+          </div>
         )}
-      </div>
+      </>
     );
   }
   return null;

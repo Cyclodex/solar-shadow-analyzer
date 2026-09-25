@@ -29,6 +29,20 @@ import { lv95LocalFrame, lv95ToWgs84, wgs84ToLv95, type Lv95Point } from './lv95
 import { pointInRing, ringBounds, ringDistance, type ReadonlyVertex } from './polygon';
 import { OWN_BUILDING_EXCLUSION, ownExclusionZone, type OwnExclusionZone } from './surroundings';
 import { toRad } from './units';
+import { DSM_WINDOW_MARGIN_M, dsmNeedsMasks, insideDsmExtent } from './dsmEstimate';
+
+export {
+  DSM_ALGORITHM_VERSION,
+  DSM_COLLECTION_BBOX,
+  DSM_WINDOW_MARGIN_M,
+  MEAN_DSM_TILE_BYTES,
+  MEAN_DTM_TILE_BYTES,
+  MEAN_VECTOR_TILE_BYTES,
+  dsmDataKey,
+  dsmNeedsMasks,
+  estimateDsmBytes,
+  insideDsmExtent,
+} from './dsmEstimate';
 
 // ─────────────────────────────────────────────
 // LASER-SCAN (swissSURFACE3D) HORIZON
@@ -55,7 +69,10 @@ import { toRad } from './units';
 // the footprints are missing (DecodedTile.outside).
 // Worker memory: parsed headers, compressed tiles (for small site moves and aborted loads), the window mosaic,
 // the ground model and the masked raster of the last site stay in memory, so new observers (tilt, floors) and
-// new masks are recomputed without refetching. Nothing here throws: jobs return typed results.
+// new masks are recomputed without refetching; the own-building zone is derived per job (never kept with the
+// raster). A `memoryOnly` job computes from that memory or returns 'miss' without a request, so the page
+// decides when a download happens (hooks/useSurfaceModel.ts). Nothing here throws: jobs return typed results.
+// The page's light helpers (extent, estimate, keys) live in model/dsmEstimate.ts and are re-exported here.
 // ─────────────────────────────────────────────
 
 /** STAC v1 items endpoint of a collection. */
@@ -70,19 +87,10 @@ export const DTM_COLLECTION = 'ch.swisstopo.swissalti3d';
 export const DTM_ASSET_SUFFIX = '_2_2056_5728.tif';
 /** Point height (ground at the site). */
 export const HEIGHT_SERVICE_URL = 'https://api3.geo.admin.ch/rest/services/height';
-/** Extent of the swissSURFACE3D Raster collection [west, south, east, north] (STAC, 2026-09-25). */
-export const DSM_COLLECTION_BBOX: readonly [number, number, number, number] = [
-  5.9503666, 45.7213375, 10.4998461, 47.8216742,
-];
 /** Distance between samples along a ray, m. */
 export const DSM_RAY_STEP_M = 0.25;
 /** Ray intervals per output azimuth step (the bin max takes DSM_SUB_RAYS + 1 rays, the edges shared). */
 export const DSM_SUB_RAYS = 4;
-/**
- * Window margin around radius, m: observers sit up to balcony depth (≤ 4 m) + half a panel (≤ 1.25 m) in front
- * of the site, and their rays reach `radius` from there.
- */
-export const DSM_WINDOW_MARGIN_M = 8;
 /**
  * Ground masks of removed/edited buildings reach this far beyond the footprint, m: the vector-tile footprints
  * leave roof edges outside (see ARCHITECTURE, measured at Breitenrain), which would otherwise stay as a rim
@@ -91,8 +99,6 @@ export const DSM_WINDOW_MARGIN_M = 8;
 export const DSM_REMOVE_BUFFER_M = 1;
 /** Without trees, cells up to this far outside a building footprint keep the scan (roof edges), m. */
 export const DSM_KEEP_BUFFER_M = 1;
-/** Bump when the computation changes: cached horizons of older versions are ignored. */
-export const DSM_ALGORITHM_VERSION = 1;
 
 /** Largest pages followed per STAC query. */
 const STAC_MAX_PAGES = 10;
@@ -161,7 +167,13 @@ export interface DsmObserverGroup {
 
 export interface DsmJobRequest {
   site: DsmSite;
+  /** Observers to compute; none: the job only loads the site's data into memory (and checks the site). */
   groups: DsmObserverGroup[];
+  /**
+   * Compute from the worker's memory only: when anything would have to be requested, nothing is and the job
+   * returns 'miss' at once (the page then decides when to download, see hooks/useSurfaceModel.ts).
+   */
+  memoryOnly?: boolean;
 }
 
 export interface DsmSiteInfo {
@@ -206,12 +218,17 @@ export type DsmJobResult =
     }
   /** No scan data at the site (outside CH/FL). */
   | { status: 'unavailable'; stats: DsmStats }
+  /** memoryOnly: the site's data is not (or no longer) in memory; nothing was requested. */
+  | { status: 'miss'; stats: DsmStats }
   | { status: 'error'; error: DsmError; stats: DsmStats };
 
 export interface DsmProgress {
   /** 0…1 over download and computation. */
   fraction: number;
-  /** Bytes downloaded so far and in total (0 when nothing needs downloading). */
+  /**
+   * Bytes of the scan and ground tiles the site needs: loaded so far and in total. Tiles already in memory
+   * count as loaded, so a download resumed after an abort goes on from where it stopped.
+   */
   bytes: number;
   totalBytes: number;
 }
@@ -576,74 +593,6 @@ export function marchDsmHorizons(
   return out;
 }
 
-// ── Download estimate (UI) ───────────────────
-
-/**
- * Mean size of a full-resolution DSM tile (512 × 512 px, LZW), bytes: the 16 tiles of swisssurface3d-raster
- * 2023 2601-1200 (Bern), research 2026-09-25. Built-up areas; forests and fields compress differently.
- */
-export const MEAN_DSM_TILE_BYTES = 543_487;
-/** Mean 2 m DTM tile (128 × 128 px): swissalti3d 2025 2601-1200, 763,208 B / 16 tiles (2026-09-25). */
-export const MEAN_DTM_TILE_BYTES = 47_700;
-/** Mean swisstopo vector tile (z14): Kramgasse 49, Bern, 694 kB / 4 tiles (2026-09-25). */
-export const MEAN_VECTOR_TILE_BYTES = 173_500;
-/** Header range per COG file. */
-const HEADER_BYTES = 16_384;
-
-/** Tile edges within one km of the scan and 2 m terrain files (2000 / 500 px in 512 / 128 px tiles). */
-const KM_TILE_EDGES = [0, 256, 512, 768, 1000];
-
-/** Mean number of intervals of a periodic partition (period, edges) hit by a random interval of `length`. */
-function meanIntervalsHit(length: number, edges: readonly number[], period: number): number {
-  const samples = 4000;
-  let sum = 0;
-  for (let k = 0; k < samples; k++) {
-    const s = ((k + 0.5) / samples) * period;
-    const e = s + length;
-    let n = 0;
-    for (let base = 0; base < e; base += period) {
-      for (let q = 0; q + 1 < edges.length; q++) {
-        const lo = base + edges[q];
-        const hi = base + edges[q + 1];
-        if (hi > s && lo < e) n++;
-      }
-    }
-    sum += n;
-  }
-  return sum / samples;
-}
-
-/**
- * Expected download for a site (bytes): scan tiles of the square window (radius + margin) at a random
- * position on the swisstopo tile grid × MEAN_DSM_TILE_BYTES, plus the headers; with `ground` (masks or trees
- * off) the 2 m terrain tiles, with `vectorTiles` (trees off) the building tiles (z14, 1.67 km at 47° N).
- * An estimate: real sites vary (research: 4.9–8.8 MB at 300 m for six sites).
- */
-export function estimateDsmBytes(
-  radius: number,
-  opts: { ground?: boolean; vectorTiles?: boolean } = {},
-): number {
-  const key = `${radius}|${opts.ground === true}|${opts.vectorTiles === true}`;
-  let bytes = estimates.get(key);
-  if (bytes === undefined) {
-    bytes = estimate(radius, opts);
-    estimates.set(key, bytes);
-  }
-  return bytes;
-}
-
-const estimates = new Map<string, number>();
-
-function estimate(radius: number, opts: { ground?: boolean; vectorTiles?: boolean }): number {
-  const side = 2 * (radius + DSM_WINDOW_MARGIN_M);
-  const tiles = meanIntervalsHit(side, KM_TILE_EDGES, 1000) ** 2;
-  const files = meanIntervalsHit(side, [0, 1000], 1000) ** 2;
-  let bytes = tiles * MEAN_DSM_TILE_BYTES + files * HEADER_BYTES;
-  if (opts.ground) bytes += tiles * MEAN_DTM_TILE_BYTES + files * HEADER_BYTES;
-  if (opts.vectorTiles) bytes += meanIntervalsHit(side, [0, 1670], 1670) ** 2 * MEAN_VECTOR_TILE_BYTES;
-  return bytes;
-}
-
 // ── Worker memory ────────────────────────────
 
 /** Least-recently-used map with a size budget. */
@@ -695,8 +644,21 @@ const tileBytesCache = new Lru<Uint8Array>(256, TILE_CACHE_BYTES);
 const stacCache = new Lru<{ tiles: StacTile[]; bytes: number }>(16);
 const mosaicCache = new Lru<MosaicData>(3);
 const groundCache = new Lru<number>(64);
+/** Ground of a site as used (height service, or the terrain model after it failed): later jobs reuse it. */
+const siteGroundCache = new Lru<{ value: number; source: DsmSiteInfo['groundSource'] }>(16);
 const vectorTileCache = new Lru<{ tile: DecodedTile; bytes: number }>(16);
-const maskedCache = new Lru<{ raster: Raster; zone: OwnExclusionZone | null; extraBytes: number }>(1);
+
+/**
+ * The masked raster of a site and, when the building vector tiles were loaded (trees off), their parts (ENU
+ * around the site): the own-building zone is derived from them per job (it depends on the facade, balcony
+ * depth, row width and own footprint, none of which change the raster).
+ */
+interface MaskedData {
+  raster: Raster;
+  parts: BuildingPart[] | null;
+  extraBytes: number;
+}
+const maskedCache = new Lru<MaskedData>(1);
 
 /** Forgets everything kept in memory (tests). */
 export function clearDsmCaches(): void {
@@ -706,6 +668,7 @@ export function clearDsmCaches(): void {
     stacCache,
     mosaicCache,
     groundCache,
+    siteGroundCache,
     vectorTileCache,
     maskedCache,
   ]) {
@@ -721,7 +684,7 @@ interface Ctx {
   signal: AbortSignal | undefined;
   fetchImpl: typeof fetch;
   stats: DsmStats;
-  /** Bytes to download and downloaded (progress). */
+  /** Tile bytes the site needs and those loaded (progress; tiles already in memory count as loaded). */
   plan: number;
   done: number;
   /** Reports the progress so far (download, then computation). */
@@ -843,6 +806,7 @@ async function readMosaic(ctx: Ctx, grid: GridSpec, files: readonly StacTile[]):
   const data = new Float32Array(grid.width * grid.height).fill(NaN);
   let bytes = headers.reduce((s, h) => s + h.bytes, 0);
   let cogTiles = 0;
+  let inMemory = 0;
   const plans: { href: string; image: CogImage; col0: number; row0: number; ranges: CogRange[] }[] = [];
   files.forEach((f, i) => {
     const image = headers[i].image;
@@ -866,12 +830,15 @@ async function readMosaic(ctx: Ctx, grid: GridSpec, files: readonly StacTile[]):
     for (const t of tiles) {
       const cached = tileBytesCache.get(`${f.href}#${t.index}`);
       if (!cached) continue;
+      inMemory += cached.length;
       const t0 = performance.now();
       copyTileInto(image, t, decodeCogTile(image, cached), data, grid.width, grid.height, col0, row0);
       ctx.stats.ms.decode += performance.now() - t0;
     }
   });
-  ctx.plan += plans.reduce((s, p) => s + p.ranges.reduce((q, r) => q + (r.end - r.start), 0), 0);
+  // Progress over the site's tiles: those in memory (e.g. from a load that was aborted) are already loaded.
+  ctx.plan += inMemory + plans.reduce((s, p) => s + p.ranges.reduce((q, r) => q + (r.end - r.start), 0), 0);
+  ctx.done += inMemory;
   ctx.report();
   const tasks = plans.flatMap((p) =>
     p.ranges.map((range) => async (): Promise<void> => {
@@ -975,13 +942,22 @@ async function readVectorTiles(
   return { tiles, bytes };
 }
 
-/** Own-building zone from the vector-tile parts (location ENU) containing the probe point, else null. */
-function zoneFromParts(parts: readonly BuildingPart[], site: DsmSite): OwnExclusionZone | null {
-  const [pe, pn] = facadeToEnu([0, OWN_BUILDING_EXCLUSION.probeN], site.facadeAzimuth);
+/** Own footprint in the facade frame: the vector-tile parts (site ENU) containing the probe point, else null. */
+function ownRingFromParts(parts: readonly BuildingPart[], facadeAzimuth: number): [number, number][] | null {
+  const [pe, pn] = facadeToEnu([0, OWN_BUILDING_EXCLUSION.probeN], facadeAzimuth);
   const own = parts.filter((p) => pointInRing(p.footprint, pe, pn));
   if (own.length === 0) return null;
-  const ring = own.flatMap((p) => p.footprint.map((q) => enuToFacade(q, site.facadeAzimuth)));
-  return ownExclusionZone(site.exclusion.balconyDepthM, site.exclusion.rowWidthM, ring);
+  return own.flatMap((p) => p.footprint.map((q) => enuToFacade(q, facadeAzimuth)));
+}
+
+/**
+ * Own-building zone of a job: from the own footprint of the config, else from the vector-tile parts when they
+ * were loaded (trees off), else ± (row width / 2 + 2 m). Derived per job, never kept with the raster.
+ */
+export function dsmExclusionZone(site: DsmSite, parts: readonly BuildingPart[] | null): OwnExclusionZone {
+  const { balconyDepthM, rowWidthM, ownFootprint } = site.exclusion;
+  const ring = ownFootprint ?? (parts ? ownRingFromParts(parts, site.facadeAzimuth) : null);
+  return ownExclusionZone(balconyDepthM, rowWidthM, ring);
 }
 
 /** Stable key of the masks of a site (anchor + polygons + trees). */
@@ -990,15 +966,11 @@ function maskKey(site: DsmSite): string {
 }
 
 /**
- * The raster the rays run on: the scan with the masked cells replaced by the ground, and the own-building
- * zone from the vector tiles when they were loaded (trees off) and no own footprint was given.
+ * Key of the masked raster of a site on a grid: the raster depends on the site (vector tiles in its ENU frame)
+ * and the masks only; the facade and the own-building exclusion are applied per job (dsmExclusionZone).
  */
-/** Key of the masked raster of a site on a grid. */
 const maskedKey = (grid: GridSpec, site: DsmSite): string =>
-  `${gridKey(grid)}|${site.latitude},${site.longitude},${site.facadeAzimuth}|${maskKey(site)}`;
-
-/** True when the site needs the ground model under masked cells (masks, or trees off). */
-const needsMasks = (site: DsmSite): boolean => !site.trees || (site.masks?.polygons.length ?? 0) > 0;
+  `${gridKey(grid)}|${site.latitude},${site.longitude}|${maskKey(site)}`;
 
 /** What the masks need besides the scan: the 2 m terrain and, without trees, the building vector tiles. */
 interface MaskInputs {
@@ -1014,14 +986,18 @@ function loadMaskInputs(ctx: Ctx, site: DsmSite, grid: GridSpec): Promise<MaskIn
   ]).then(([terrain, vt]) => ({ terrain, vt }));
 }
 
+/**
+ * The raster the rays run on: the scan with the masked cells replaced by the ground; with the building parts
+ * of the vector tiles when they were loaded (trees off).
+ */
 async function maskedRaster(
   ctx: Ctx,
   site: DsmSite,
   mosaic: MosaicData,
   inputs: Promise<MaskInputs> | null,
-): Promise<{ raster: Raster; zone: OwnExclusionZone | null; extraBytes: number }> {
+): Promise<MaskedData> {
   const polygons = site.masks?.polygons ?? [];
-  if (!needsMasks(site)) return { raster: mosaic.raster, zone: null, extraBytes: 0 };
+  if (!dsmNeedsMasks(site)) return { raster: mosaic.raster, parts: null, extraBytes: 0 };
   const key = maskedKey(mosaic.raster, site);
   const hit = maskedCache.get(key);
   if (hit) return hit;
@@ -1031,11 +1007,11 @@ async function maskedRaster(
   checkAbort(ctx);
   const t0 = performance.now();
   const mask = new Uint8Array(grid.width * grid.height);
-  let zone: OwnExclusionZone | null = null;
+  let parts: BuildingPart[] | null = null;
   if (vt) {
     // Building footprints (courtyards left out) widened by DSM_KEEP_BUFFER_M for the roof edges keep the scan;
     // outside CH/FL (no footprints there) the scan stays too; everything else becomes ground.
-    const { parts } = assembleBuildingParts(vt.tiles, site.latitude, site.longitude, reach);
+    parts = assembleBuildingParts(vt.tiles, site.latitude, site.longitude, reach).parts;
     const frame = lv95LocalFrame({ latitude: site.latitude, longitude: site.longitude });
     const toLv = (p: readonly [number, number]): [number, number] => {
       const q = frame.toLv95(p[0], p[1]);
@@ -1059,7 +1035,6 @@ async function maskedRaster(
       }
     }
     for (let k = 0; k < mask.length; k++) mask[k] = keep[k] ? 0 : 1;
-    if (!site.exclusion.ownFootprint) zone = zoneFromParts(parts, site);
   }
   if (polygons.length > 0 && site.masks) {
     const frame = lv95LocalFrame(site.masks.anchor);
@@ -1082,9 +1057,9 @@ async function maskedRaster(
       : NaN;
   }
   ctx.stats.ms.mask += performance.now() - t0;
-  const entry = {
+  const entry: MaskedData = {
     raster: { ...grid, data },
-    zone,
+    parts,
     extraBytes: (terrain?.bytes ?? 0) + (vt?.bytes ?? 0),
   };
   maskedCache.set(key, entry);
@@ -1107,28 +1082,35 @@ function newStats(): DsmStats {
   return { requests: 0, downloaded: 0, ms: { stac: 0, download: 0, decode: 0, mask: 0, rays: 0, total: 0 } };
 }
 
-/** True when the site lies within the collection's extent (else there is no scan data: no request). */
-export function insideDsmExtent(latitude: number, longitude: number): boolean {
-  const [w, s, e, n] = DSM_COLLECTION_BBOX;
-  return latitude >= s && latitude <= n && longitude >= w && longitude <= e;
-}
-
 const yieldToEventLoop = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 /**
  * The laser-scan horizons of a job: every height of every observer group (see the module header). Loads what
  * is not in memory yet (STAC, headers, scan tiles, ground, and for masks the 2 m terrain and, without trees,
- * the building vector tiles), with retries (fetchRetry.ts). Yields to the event loop between groups (a worker
- * keeps answering other jobs). Never throws: aborted, failed and uncovered sites come back as results.
+ * the building vector tiles), with retries (fetchRetry.ts); with `memoryOnly` nothing: the first request it
+ * would make ends the job with 'miss'. Yields to the event loop between groups (a worker keeps answering other
+ * jobs). Never throws: aborted, failed, uncovered and missed sites come back as results.
  */
 export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}): Promise<DsmJobResult> {
   const stats = newStats();
   const started = performance.now();
   const baseFetch = opts.fetchImpl ?? ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init));
+  // The job's own signal: the caller's abort, or (memoryOnly) the first request that would be needed.
+  const inner = new AbortController();
+  const outer = opts.signal;
+  const forward = (): void => inner.abort();
+  if (outer?.aborted) inner.abort();
+  else outer?.addEventListener('abort', forward, { once: true });
+  let missed = false;
   const ctx: Ctx = {
     opts,
-    signal: opts.signal,
+    signal: inner.signal,
     fetchImpl: ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (req.memoryOnly) {
+        missed = true;
+        inner.abort();
+        return Promise.reject(new DOMException('The laser-scan data is not in memory.', 'AbortError'));
+      }
       stats.requests++;
       return baseFetch(input, init);
     }) as typeof fetch,
@@ -1165,11 +1147,19 @@ export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}
     const frame = lv95LocalFrame({ latitude: site.latitude, longitude: site.longitude });
     // The scan's own lattice (0.5 m; checked against every file's header).
     const grid = gridAround(center, site.radius + DSM_WINDOW_MARGIN_M, 0.5);
-    // Never rejects (a failure falls back to the terrain model below; an abort is checked after it).
-    const groundPromise = heightService(ctx, center).then(
-      (v): { value: number; source: DsmSiteInfo['groundSource'] } => ({ value: v, source: 'height-service' }),
-      () => null,
-    );
+    // The ground of the site as an earlier job used it, else the height service. Never rejects (a failure
+    // falls back to the terrain model below; an abort is checked after it).
+    const groundKey = `${center.east.toFixed(2)},${center.north.toFixed(2)}`;
+    const knownGround = siteGroundCache.get(groundKey);
+    const groundPromise = knownGround
+      ? Promise.resolve(knownGround)
+      : heightService(ctx, center).then(
+          (v): { value: number; source: DsmSiteInfo['groundSource'] } => ({
+            value: v,
+            source: 'height-service',
+          }),
+          () => null,
+        );
     const files = await timed(ctx, 'stac', () => stacTiles(ctx, DSM_COLLECTION, DSM_ASSET_SUFFIX, grid));
     if (files.length === 0) {
       await groundPromise;
@@ -1177,7 +1167,7 @@ export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}
     }
     // The ground model and building tiles of the masks load alongside the scan (unless already masked).
     const maskInputs =
-      needsMasks(site) && !maskedCache.get(maskedKey(grid, site)) ? loadMaskInputs(ctx, site, grid) : null;
+      dsmNeedsMasks(site) && !maskedCache.get(maskedKey(grid, site)) ? loadMaskInputs(ctx, site, grid) : null;
     maskInputs?.catch(() => undefined); // awaited below; a failure of the scan must not leave it unhandled
     const mosaic = await readMosaic(ctx, grid, files);
     checkAbort(ctx);
@@ -1191,17 +1181,15 @@ export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}
       ground = { value: v, source: 'terrain-model' };
     }
     const siteGround = ground;
+    siteGroundCache.set(groundKey, siteGround);
     const masked = await maskedRaster(ctx, site, mosaic, maskInputs);
     checkAbort(ctx);
-    const zone =
-      masked.zone ??
-      ownExclusionZone(site.exclusion.balconyDepthM, site.exclusion.rowWidthM, site.exclusion.ownFootprint);
     const geo: MarchGeometry = {
       toLv95: frame.toLv95,
       facadeAzimuth: site.facadeAzimuth,
       ground: siteGround.value,
       radius: site.radius,
-      zone,
+      zone: dsmExclusionZone(site, masked.parts),
     };
     const horizons: HorizonProfile[][] = [];
     for (const group of groups) {
@@ -1232,6 +1220,9 @@ export async function computeDsmJob(req: DsmJobRequest, opts: DsmJobOptions = {}
       stats,
     });
   } catch (e) {
+    if (missed && !outer?.aborted) return finish({ status: 'miss', stats });
     return finish({ status: 'error', error: toDsmError(e, ctx.signal), stats });
+  } finally {
+    outer?.removeEventListener('abort', forward);
   }
 }

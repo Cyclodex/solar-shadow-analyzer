@@ -531,6 +531,163 @@ describe('computeDsmJob', () => {
     expect(r.status).toBe('ok');
   });
 
+  it('derives the own-building zone per job: the kept raster never carries another balcony or footprint', async () => {
+    // Vector tiles (trees off): the own house |u| < 7 m behind the facade and an annex part 1.8–3.2 m out at
+    // u = 2…5 m, 8 m high. Observer 1.3 m out, 3 m up: the annex lies in the balcony zone (n ≤ depth + 0.5 m
+    // within the own extent) for a 3 m balcony, not for a 1 m one.
+    const site = siteAt(2600480.3, 1200520.7, 180);
+    const extra = (u: number, n: number): number => {
+      if (n < 0 && n > -12 && Math.abs(u) < 7) return 15;
+      if (u >= 2 && u < 5 && n >= 1.8 && n < 3.2) return 8;
+      return 0;
+    };
+    const world = worldFor(site, extra);
+    const lonLat = (u: number, n: number): [number, number] => {
+      const ll = enuToLonLat(site, u, -n); // south facade: east = u, north = −n
+      return [ll.longitude, ll.latitude];
+    };
+    world.buildings = [
+      {
+        rings: [[lonLat(-7, 0), lonLat(-7, -12), lonLat(7, -12), lonLat(7, 0)]],
+        props: { render_height: 15 },
+      },
+      {
+        rings: [[lonLat(2, 3.2), lonLat(2, 1.8), lonLat(5, 1.8), lonLat(5, 3.2)]],
+        props: { render_height: 8 },
+      },
+    ];
+    const { fetchImpl } = fakeFetch(syntheticSwisstopo(world));
+    const run = async (balconyDepthM: number, ownFootprint: [number, number][] | null = null) =>
+      ok(
+        await computeDsmJob(
+          {
+            site: dsmSite(site, { trees: false, exclusion: { balconyDepthM, rowWidthM: 2, ownFootprint } }),
+            groups: [{ n: 1.3, heights: [3] }],
+          },
+          { fetchImpl, retry: FAST },
+        ),
+      ).horizons[0][0];
+    const annex = (h: HorizonProfile): number =>
+      Math.max(...[100, 105, 110, 115].map((a) => horizonAt(h, a)));
+    const narrow: [number, number][] = [
+      [-1.5, -10],
+      [1.5, -10],
+      [1.5, 0],
+      [-1.5, 0],
+    ];
+    // One after the other on the same raster in memory …
+    const deep = await run(3);
+    const shallow = await run(1);
+    const deepNarrow = await run(3, narrow);
+    const deepAgain = await run(3);
+    // … equal fresh runs.
+    const fresh = async (balconyDepthM: number, own: [number, number][] | null = null) => {
+      clearDsmCaches();
+      return run(balconyDepthM, own);
+    };
+    expect(shallow).toEqual(await fresh(1));
+    expect(deepNarrow).toEqual(await fresh(3, narrow));
+    expect(deepAgain).toEqual(await fresh(3));
+    expect(deep).toEqual(deepAgain);
+    // The annex: skipped as own balcony (3 m, extent of the tiles' own house), seen otherwise (≥ 5 m higher,
+    // at most 4 m away).
+    expect(annex(deep)).toBe(0);
+    expect(annex(shallow)).toBeGreaterThan(atanDeg(5, 4));
+    expect(annex(deepNarrow)).toBeGreaterThan(atanDeg(5, 4)); // the config's narrower own footprint
+  });
+
+  it('memoryOnly: computes from memory without a request, or misses at once', async () => {
+    const site = siteAt(2600480.3, 1200520.7, 180);
+    const world = worldFor(site, wall);
+    world.ground = null; // the terrain model's ground is kept for later jobs
+    world.dtm = () => GROUND;
+    const { fetchImpl, requests } = fakeFetch(syntheticSwisstopo(world));
+    const group = [{ n: 1, heights: [0] }];
+    const empty = await computeDsmJob(
+      { site: dsmSite(site), groups: group, memoryOnly: true },
+      { fetchImpl, retry: FAST },
+    );
+    expect(empty).toMatchObject({ status: 'miss', stats: { requests: 0 } });
+    expect(requests).toHaveLength(0);
+    // A load with no observers fills the memory ('prepare').
+    const prepared = ok(await computeDsmJob({ site: dsmSite(site), groups: [] }, { fetchImpl, retry: FAST }));
+    expect(prepared.horizons).toEqual([]);
+    const before = requests.length;
+    const fromMemory = ok(
+      await computeDsmJob(
+        {
+          site: dsmSite(site, { exclusion: { balconyDepthM: 2, rowWidthM: 3, ownFootprint: null } }),
+          groups: group,
+          memoryOnly: true,
+        },
+        { fetchImpl, retry: FAST },
+      ),
+    );
+    expectFace(fromMemory.horizons[0][0], 180, 10, 20);
+    expect(fromMemory.info.groundSource).toBe('terrain-model');
+    expect(requests.length).toBe(before);
+    // Without trees the building tiles are needed: not in memory yet.
+    const noTrees = await computeDsmJob(
+      { site: dsmSite(site, { trees: false }), groups: group, memoryOnly: true },
+      { fetchImpl, retry: FAST },
+    );
+    expect(noTrees.status).toBe('miss');
+    expect(requests.length).toBe(before);
+    // The caller's abort is still an abort.
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const aborted = await computeDsmJob(
+      { site: dsmSite(site), groups: group, memoryOnly: true },
+      { fetchImpl, retry: FAST, signal: ctrl.signal },
+    );
+    expect(aborted).toMatchObject({ status: 'error', error: { kind: 'aborted' } });
+  });
+
+  it('progress counts the tiles already in memory: an aborted load resumes where it stopped', async () => {
+    // Next to a km edge: two files, one range each; the load is aborted once the first range has arrived.
+    const site = siteAt(2601000.3, 1200520.2, 180);
+    const route = syntheticSwisstopo(worldFor(site, wall));
+    const ctrl = new AbortController();
+    const first = fakeFetch(route);
+    // The second file's data range is slow: still in flight when the first one has arrived.
+    const slowSecond = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const range = new Headers(init?.headers).get('range');
+      if (String(input).includes('_2601-') && range !== 'bytes=0-16383') {
+        await new Promise((r) => setTimeout(r, 30));
+      }
+      return first.fetchImpl(input, init);
+    }) as typeof fetch;
+    const aborted = await computeDsmJob(
+      { site: dsmSite(site), groups: [] },
+      {
+        fetchImpl: slowSecond,
+        retry: FAST,
+        signal: ctrl.signal,
+        onProgress: (p) => {
+          if (p.bytes > 0) ctrl.abort();
+        },
+      },
+    );
+    expect(aborted).toMatchObject({ status: 'error', error: { kind: 'aborted' } });
+    const progress: { bytes: number; totalBytes: number }[] = [];
+    const again = fakeFetch(route);
+    ok(
+      await computeDsmJob(
+        { site: dsmSite(site), groups: [] },
+        { fetchImpl: again.fetchImpl, retry: FAST, onProgress: (p) => progress.push(p) },
+      ),
+    );
+    // Only the missing file's range is fetched again.
+    expect(again.requests.filter((q) => q.url.endsWith('.tif') && q.range !== 'bytes=0-16383')).toHaveLength(
+      1,
+    );
+    // The first report already counts the tile kept from the aborted load; bytes only grow.
+    expect(progress[0].bytes).toBeGreaterThan(0);
+    expect(progress[0].bytes).toBeLessThan(progress[0].totalBytes);
+    expect(progress.every((p, i) => i === 0 || p.bytes >= progress[i - 1].bytes)).toBe(true);
+    expect(progress.at(-1)?.bytes).toBe(progress.at(-1)?.totalBytes);
+  });
+
   it('is unavailable outside the scan (no STAC items, or outside its extent without a request)', async () => {
     const site = siteAt(2600480.3, 1200520.7, 180);
     const world = worldFor(site, wall);

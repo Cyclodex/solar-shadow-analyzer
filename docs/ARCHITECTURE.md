@@ -460,10 +460,12 @@ Antworten.
 ### B: Laserscan-Horizont (umgesetzt)
 
 - **Dateien:** `model/cog.ts` (COG-Leser), `model/dsm.ts` (STAC, Mosaik, Boden, Masken, Strahlengang, Speicher des
-  Workers, Schätzung der Datenmenge), `workers/*` (Auftrag `dsm`), `hooks/useSurfaceModel.ts` (Loader,
-  Ergebnis-Cache, Leser), `controls/horizon/SurfaceModelControls.tsx`, `controls/horizon/provisional.ts` (Text der
-  Hinweise «vorläufig» in KpiBar, TiltControl und ShadeHeatmap), `test/cogFixture.ts` (synthetische COGs, STAC,
-  Höhendienst und Vektorkacheln für Tests und E2E), `scripts/validate-dsm.ts`, `e2e/surface.spec.ts`.
+  Workers), `model/dsmEstimate.ts` (was die Seite braucht: Ausdehnung, Algorithmusversion, Datenschlüssel,
+  Schätzung der Datenmenge; von `dsm.ts` wieder exportiert), `workers/*` (Auftrag `dsm`),
+  `hooks/useSurfaceModel.ts` (Loader, Ergebnis-Cache, Leser), `controls/horizon/SurfaceModelControls.tsx`,
+  `controls/horizon/provisional.ts` (Text der Hinweise «vorläufig» in KpiBar, TiltControl und ShadeHeatmap),
+  `test/cogFixture.ts` (synthetische COGs, STAC, Höhendienst und Vektorkacheln für Tests und E2E),
+  `scripts/validate-dsm.ts`, `e2e/surface.spec.ts`.
 - **COG-Leser:** klassisches TIFF, float32, LZW oder unkomprimiert, Prädiktor 1, gekachelt, nur IFD0 (volle
   Auflösung). Eine Kopfzeilen-Anfrage `bytes=0-16383` (IFD0 endet bei Byte 1'148, im 2-m-DTM bei 1'564), die bei
   Bedarf wächst; dann nur die Kacheln des Fensters, Kacheln im Abstand von höchstens 1 kB (GDAL: 8 Byte) bis
@@ -478,8 +480,16 @@ Antworten.
   gleichzeitig mit STAC angefragt; schlägt er fehl, bilinear aus swissALTI3D 2 m. Abdeckung = Anteil der Zellen des
   Kreises mit Daten (`dataStore.surface.coverage`). Im Speicher des Workers bleiben die Kopfzeilen (32), die
   komprimierten Kacheln (bis 24 MB: kleine Standortverschiebungen und abgebrochene Downloads laden nur Fehlendes),
-  die letzten Mosaike (3), der maskierte Raster und die Vektorkacheln; neue Beobachter und neue Masken rechnen ohne
-  Download. Zwischen den Beobachtergruppen gibt der Worker die Ereignisschleife frei (andere Aufträge kommen dran).
+  die letzten Mosaike (3), der maskierte Raster (mit den Teilen der Vektorkacheln) und die Vektorkacheln, der Boden
+  am Standort (auch der aus dem Geländemodell); neue Beobachter und neue Masken rechnen ohne Download. Der
+  Eigenbereich (`dsmExclusionZone`: Balkontiefe, Reihenbreite, eigener Grundriss, sonst der Teil der Vektorkacheln)
+  entsteht je Auftrag, nie im Speicher: Der Schlüssel des maskierten Rasters enthält ihn nicht (vor dem Review
+  rechnete ein zweiter Auftrag mit anderer Balkontiefe mit der alten Zone, ein Anbau vor der Fassade fehlte dann
+  im Horizont; `dsm.test.ts` vergleicht aufeinanderfolgende Aufträge mit frischen; `DSM_ALGORITHM_VERSION` 2
+  verwirft so entstandene Cache-Einträge). `memoryOnly`: Der Auftrag rechnet nur aus dem Speicher; bräuchte er
+  eine Anfrage, endet er sofort mit `'miss'` (keine Anfrage). Der Fortschritt zählt die Kacheln im Speicher als
+  geladen, ein abgebrochener Download läuft beim nächsten dort weiter. Zwischen den Beobachtergruppen gibt der
+  Worker die Ereignisschleife frei (andere Aufträge kommen dran).
 - **Masken:** Gemessen an Breitenrain und Kramgasse (je 150 m, Gebäude ab 8 m): Zellen 0–0.5 m ausserhalb der
   Grundrisse der Vektorkacheln liegen zu 69–70 % mehr als 2.5 m über Boden, 0.5–1 m ausserhalb zu 36–39 %,
   1–1.5 m zu 28 %, 2–3 m (Hintergrund: Bäume, andere Objekte) zu 22 %: Die Grundrisse lassen einen Dachrand von etwa
@@ -500,15 +510,27 @@ Antworten.
   unter dem Maximum über die Zellmitten des Azimuts; ein Strahl je Azimut liegt dort an 9 Azimuten darunter (bis
   15.9°). RMS zur oberen Grenze 1.08° (ein Strahl: 3.26°).
 - **Loader** (`useSurfaceModelLoader`): Standort, Fassade, Balkon, Reihenbreite, Bäume, Radius, Masken und eigener
-  Grundriss ergeben den Auftrag (`surfacePlan`); ein neuer wartet 800 ms, zeigt `'loading'` (Fortschritt, geladene
-  Bytes) und wartet auf `terrainDownloadGate`. Neue Beobachter desselben Standorts (Neigung, Stockwerke) rechnen
-  nach 250 ms aus dem Speicher des Workers, die übrigen Horizonte bleiben aktiv (`dsmFloorHorizons` nimmt den
-  nächsten Beobachter). Nach `'ready'` folgen die Neigungen des Sweeps (0–90° in 5°-Schritten) in einem Auftrag;
-  dauert das länger als 1.5 s, zeigt die Neigungskarte das Optimum als vorläufig (`useSurfaceSweepPending`). Nach
-  einem Fehler oder ausserhalb CH/FL lädt erst «Erneut versuchen» bzw. ein neuer Standort. Ergebnis-Cache
-  `ssa.surface.v1:*`: je Auftrag ein Eintrag (Datenstand, Bytes, Abdeckung; Horizonte in 0.01° als Uint16, die
-  Nullhälfte hinter der Fassade weggelassen, ≈ 1 kB je Beobachter), 3 Standorte; ein Standort ausserhalb CH/FL wird
-  ebenfalls gemerkt.
+  Grundriss ergeben den Auftrag (`surfacePlan`, `jobKey`); was geladen werden muss, nur Standort, Radius, Bäume und
+  ob es Masken gibt (`dataKey`, `dsmDataKey`). Rechnen und Laden sind getrennt: Ein neuer Auftrag wartet 800 ms
+  und zeigt `'loading'`, neue Beobachter desselben Standorts (Neigung, Stockwerke) warten 250 ms, die übrigen
+  Horizonte bleiben aktiv (`dsmFloorHorizons` nimmt den nächsten Beobachter). Gerechnet wird aus dem Ergebnis-Cache
+  oder mit `memoryOnly` im Worker. Erst ein `'miss'` (neuer Standort, oder der Speicher des Workers ist nach einem
+  Reload leer) startet den Download des `dataKey`: nach `terrainDownloadGate`, mit Fortschritt und MB, als
+  `'loading'` oder, solange die Horizonte des Standorts gezeigt werden, als Nachladen (`useSurfaceRefresh`:
+  «Laserscan wird nachgeladen …», die Jahreswerte gelten als vorläufig, solange einem aktuellen Beobachter der
+  eigene Horizont fehlt). Nur ein anderer `dataKey` oder das Ausschalten bricht den Download ab; Neigung, Stockwerke,
+  Fassade, Balkon, Reihenbreite oder Masken rechnen danach aus dem Speicher (vor dem Review brach jede
+  Neigungsänderung die laufenden Bereiche ab, im Browser 4 × `net::ERR_ABORTED` und dieselben Bereiche erneut; und
+  nach einem Reload lud eine Neigung um 1° die 5 MB ohne Anzeige). Ein fehlgeschlagenes Nachladen wird gemeldet
+  (mit «Erneut versuchen»), die Horizonte bleiben; bis dahin rechnen neue Beobachter mit dem nächsten. Nach
+  `'ready'` folgen die Neigungen des Sweeps (0–90° in 5°-Schritten) in einem Auftrag aus dem Speicher (fehlt er,
+  ebenfalls Nachladen); dauert das länger als 1.5 s, zeigt die Neigungskarte das Optimum als vorläufig
+  (`useSurfaceSweepPending`). `useSurfacePending` ist auch wahr, solange frisch angekommene Horizonte die
+  verzögerten Jahreswerte noch nicht erreicht haben (wie beim Gelände), damit kein Bild mit dem Prismen-Ersatz als
+  endgültig gilt. Nach einem Fehler oder ausserhalb CH/FL lädt erst «Erneut versuchen» bzw. ein neuer Standort.
+  Ergebnis-Cache `ssa.surface.v1:*`: je Auftrag ein Eintrag (Datenstand, Bytes, Abdeckung; Horizonte in 0.01° als
+  Uint16, die Nullhälfte hinter der Fassade weggelassen, ≈ 1 kB je Beobachter), 3 Standorte; ein Standort
+  ausserhalb CH/FL wird ebenfalls gemerkt.
 - **Fundament, additiv:** `dataStore.surface.coverage` (0–1, null solange unbekannt).
 - **Validierung** (`npm run validate:dsm`, 25.09.2026): Breitenrainstrasse 10, Beobachter 1 m vor der Fassade
   (Normale 153.4° im LV95-Gitter), 8 m / 14 m über Boden: 32.52° / 17.92° auf der Normalen (Prototyp 32.54° /
@@ -520,7 +542,14 @@ Antworten.
   zusätzlich 0.85 MB in 12 Anfragen, Masken 156–196 ms. Chromium (Dev-Server, Worker, derselbe Proxy, 4 Stockwerke):
   15 Anfragen, 5.01 MB, bereit nach 41–50 s, dominiert vom Proxy (≈ 1 Mbit/s je Verbindung, STAC 4.8 s,
   einzelne Anfragen mit `net::ERR_TOO_MANY_RETRIES`, von den Wiederholungen aufgefangen); die 76 Beobachter des
-  Sweeps folgten 1.0–1.1 s danach. Der Worker-Chunk wächst von ~31 kB auf 76 kB (Vektorkacheln, COG, DSM).
+  Sweeps folgten 1.0–1.1 s danach. Der Worker-Chunk wächst von ~31 kB auf 76 kB (Vektorkacheln, COG, DSM). Nach
+  dem Review (Chromium, Telefon- und Desktop-Ansicht, Breitenrainstrasse 10, 4 Stockwerke): eine Neigungsänderung
+  während des Downloads bricht nichts ab (9 Bereiche, 9 verschiedene; Wiederholungen nur nach
+  `ERR_TOO_MANY_RETRIES` des Proxys); nach einem Reload 0 Anfragen, eine neue Neigung (42°) lädt sichtbar nach
+  (16–20 Anfragen, 33–45 s bis «Laserscan geladen»). Haupt-Chunk: Die Pipeline (`dsm.ts`, `cog.ts`,
+  Vektorkacheln, pbf) liegt nur noch im Worker und für den Ersatz ohne Worker in einem nachgeladenen Chunk (42 kB);
+  Einstieg mit den beiden vorgeladenen gemeinsamen Chunks 638 kB (gzip 216 kB), vor dem Review 674 kB (227 kB),
+  Fundament 616 kB (207 kB).
 - **Offen:** Safari/iOS und Firefox ungeprüft (CORS mit Range); ob die 40 Anfragen/Minute auch für
   `data.geo.admin.ch` gelten, ist unbekannt (ein Standort: 15 Anfragen, ohne Bäume 27).
 

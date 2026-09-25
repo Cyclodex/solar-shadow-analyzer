@@ -1,4 +1,4 @@
-import { computeDsmJob, type DsmJobRequest, type DsmJobResult, type DsmProgress } from '../model/dsm';
+import type { DsmJobRequest, DsmJobResult, DsmProgress } from '../model/dsm';
 import { computeTerrainHorizons, type TerrainComputer, type TerrainHorizonResult } from '../model/terrain';
 import type { TerrainWorkerRequest, TerrainWorkerResponse } from './terrainProtocol';
 
@@ -143,31 +143,37 @@ export interface DsmWorkerOptions {
   fetchImpl?: typeof fetch;
 }
 
-/** computeDsmJob here, rejecting with the signal's reason when it aborts (like the worker path). */
+/**
+ * computeDsmJob here, rejecting with the signal's reason when it aborts (like the worker path). The scan
+ * pipeline (model/dsm.ts: COG reader, LZW, vector tiles) is loaded on demand: the page's main chunk leaves it
+ * to the worker.
+ */
 function dsmHere(request: DsmJobRequest, opts: DsmWorkerOptions): Promise<DsmJobResult> {
   const { signal } = opts;
   if (signal?.aborted) return Promise.reject(abortReason(signal));
   return new Promise<DsmJobResult>((resolve, reject) => {
     const onAbort = (): void => reject(abortReason(signal as AbortSignal));
     signal?.addEventListener('abort', onAbort, { once: true });
-    computeDsmJob(request, opts).then(
-      (r) => {
-        signal?.removeEventListener('abort', onAbort);
-        if (signal?.aborted) reject(abortReason(signal));
-        else resolve(r);
-      },
-      (e: unknown) => {
-        signal?.removeEventListener('abort', onAbort);
-        reject(e instanceof Error ? e : new Error(String(e)));
-      },
-    );
+    import('../model/dsm')
+      .then(({ computeDsmJob }) => computeDsmJob(request, opts))
+      .then(
+        (r) => {
+          signal?.removeEventListener('abort', onAbort);
+          if (signal?.aborted) reject(abortReason(signal));
+          else resolve(r);
+        },
+        (e: unknown) => {
+          signal?.removeEventListener('abort', onAbort);
+          reject(e instanceof Error ? e : new Error(String(e)));
+        },
+      );
   });
 }
 
 /**
  * Laser-scan horizons (model/dsm.ts computeDsmJob) in the terrain worker, whose memory keeps the site's
- * rasters between jobs. Resolves with the typed result (ok / unavailable / error); rejects with the signal's
- * reason as soon as it aborts. In this thread where no worker is available or a fetch is injected.
+ * rasters between jobs. Resolves with the typed result (ok / unavailable / miss / error); rejects with the
+ * signal's reason as soon as it aborts. In this thread where no worker is available or a fetch is injected.
  */
 export function computeDsmInWorker(
   request: DsmJobRequest,

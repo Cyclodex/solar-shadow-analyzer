@@ -67,7 +67,9 @@ Die Phasen des alten Plans und ihre Umsetzung:
     Druckbericht.
   - Erledigt, Laserscan: swissSURFACE3D-Horizont je Stockwerk und Neigung im Web Worker (eigener COG-Leser, STAC,
     Masken für entfernte Gebäude und «nur Gebäude», Ergebnis-Cache), Einstellungen mit Status, Datenstand und
-    geschätzter Datenmenge; `npm run validate:dsm` (Breitenrainstrasse 10: 32.52° / 17.92°).
+    geschätzter Datenmenge; `npm run validate:dsm` (Breitenrainstrasse 10: 32.52° / 17.92°). Nach dem Review:
+    Rechnen und Laden getrennt (Neigung und Fassade brechen keinen Download mehr ab, Nachladen nach einem Reload
+    sichtbar und gemeldet), Eigenbereich je Auftrag, Pipeline aus dem Haupt-Chunk.
 
 ## Offen
 
