@@ -457,6 +457,52 @@ Jedes Feature ergänzt diesen Abschnitt nur in seinem eigenen Unterabschnitt (ne
 nur in seiner eigenen Zeile. Die E2E-Specs blockieren `geo.admin.ch` bereits (`page.route`); eigene Specs mocken die
 Antworten.
 
+### A: Adresssuche und Gebäudeangaben (umgesetzt)
+
+- **`model/geocode.ts`:** `searchSwissAddresses` (SearchServer, `origins=address`, `sr=2056`, 8 Treffer, höchstens
+  10 Wörter, sonst HTTP 400), `fetchBuildingInfo` (GWR-Feature, 404 → `null`), `fetchGroundHeight` (Höhendienst,
+  0.1 m), `findNearestAddress` (identify auf `ch.swisstopo.amtliches-gebaeudeadressverzeichnis`, CH und FL,
+  Toleranzkreis 50 m bei 1 m je Pixel, Punkt auf 0.1 m). Alle geben ein `GeoResult` zurück (`error.kind`: `aborted`,
+  `network`, `http`, `timeout`, `invalid`), nehmen `signal`, `fetchImpl` und `limiter` und werfen nie.
+  Wiederholungen über `fetchReadWithRetry` (Suche 2 mit Frist 10 s, sonst 3 mit 15 s). Höchstens 30 api3-Anfragen je
+  Minute aus diesem Modul (gleitendes Fenster `API3_BUDGET`, Platz für die anderen Nutzer von geo.admin.ch unter den
+  40/min der FSDI); Ergebnisse je Suchtext, Feature und Punkt gecacht (je 50).
+- **Treffer lesen:** Label ohne `<b>` als «Strasse Nummer, PLZ Ort» (Eingänge ohne Nummer, «#», ohne Nummer); die
+  Hausnummer kommt aus dem Label, weil `attrs.num` Buchstaben und Punkt verliert («12a» → 12, «5.1» → 51). LV95 aus
+  `geom_st_box2d` (mm) → `lv95ToWgs84` → 1e-6° (Kramgasse 49: ≤ 0.1 m neben REFRAME). `featureId` = `<EGID>_<EDID>`.
+  `match`: `exact` (Strasse und Hausnummer stehen im Suchtext; verglichen klein, Umlaute als ae/oe/ue wie im
+  `detail`, ohne Akzente), `partial`, `fuzzy` (weight > 1000; nur behalten, wenn die Hausnummer eingetippt wurde:
+  «Kramgase 49 Bern» → Kramgasse 49, «Stephansplatz 1 Wien» → keine Adressen). Reihenfolge exakt, teilweise,
+  unscharf. **Liechtenstein:** Das `detail` endet in FL ohne Kanton («… 9490 vaduz 7001 vaduz ch»); massgebend ist
+  die Gemeindenummer 7001–7011 vor «ch» (alle 11 Gemeinden am 25.09.2026 geprüft), ersatzweise die PLZ 9485–9498 →
+  `Europe/Vaduz`, sonst `Europe/Zurich`. Das GWR hat für FL keine Einträge (404).
+- **GWR-Codes** (Merkmalskatalog 4.2): GASTW Geschosse (mit Erdgeschoss; Dach- und Untergeschosse nur bewohnt oder
+  beheizt; ohne Keller), GBAUJ Baujahr, GBAUP Bauperiode (8011 «vor 1919» … 8023 «ab 2016»; angezeigt, wenn das
+  Baujahr fehlt, etwa Kramgasse 49), GAREA Grundfläche, GKAT Kategorie (1010 … 1080).
+- **Suche (`location/PlaceSearch.tsx`):** Adressen und Orte parallel, je Quelle eine Anfrage 300 ms nach der letzten
+  Eingabe, eine neue Eingabe bricht beide ab. Eine Combobox mit den Gruppen «Adressen» (swisstopo) und «Orte»
+  (Open-Meteo, 6 Treffer); mit einer Ziffer im Suchtext (Hausnummer) stehen die Adressen oben, sonst die Orte.
+  Ergebnisse erscheinen je Quelle; die aktive Option hängt an ihrem Schlüssel, später eintreffende Treffer
+  verschieben sie nicht. Ist nur die Adresssuche nicht erreichbar, steht das in einer eigenen Zeile, die Orte
+  bleiben. Eine Ortswahl verhält sich wie bisher.
+- **Adresswahl (`location/addressSession.ts`, `applyAddress`):** Standort = Label, 1e-6°, Zeitzone (Höhe vorerst
+  unverändert); `surfaceModel.enabled = true` (Bäume und Radius bleiben); `requestSurroundingsImport(lat, lon)`; danach
+  im Hintergrund Höhe (→ `location.elevation`, auf 1 m; bei einem Fehler bleibt die alte) und GWR. Die GWR-Angaben
+  leben nur in der Sitzung (`useAddressSession`, keine Config-Felder: nach dem Neuladen bräuchte es sonst eine
+  Anfrage ohne Nutzeraktion) und stehen im Block «Gebäude an der Adresse», solange `location.name` das Label ist und
+  der Standort höchstens 500 m (`LIMITS.surfaceModel.radius.max`, der Lageplan verschiebt ihn auf die Fassade des
+  eigenen Gebäudes) vom Eingang liegt.
+- **«Mein Standort»** bietet danach «Nächste Adresse übernehmen» an, solange der Standort die Geräteposition ist;
+  erst dieser Klick sendet die Koordinaten an geo.admin.ch. Die nächste Adresse im Umkreis von 50 m wird wie eine
+  Suchwahl übernommen (Meldung mit Abstand), der Fokus geht danach an «Mein Standort».
+- Breiten- und Längengrad mit 6 Nachkommastellen.
+- **Tests:** `geocode.test.ts` auf aufgezeichneten Antworten (`model/geocode.fixtures.json`, 25.09.2026),
+  `LocationSection.test.tsx`, `e2e/address.spec.ts` (nur Tastatur; Handy 390 × 844 mit 16-px-Feld, 44-px-Optionen und
+  «Nächste Adresse übernehmen»; beide Basis-Pfade). `requestSurroundingsImport` prüft der Komponententest am Store,
+  E2E den eingeschalteten Laserscan im Teilen-Hash (ohne Gebäude-Import ist der Aufruf im Browser nicht sichtbar).
+- Gemessen in der Sandbox hinter einem Proxy (nicht repräsentativ für die Schweiz): SearchServer bis 7 s, GWR und
+  Höhe 3–5 s; die Ergebnisse erscheinen deshalb je Quelle, sobald sie da sind.
+
 ## i18n
 
 Jede Komponente definiert ihre Texte lokal:

@@ -426,10 +426,15 @@ describe('LocationSection', () => {
       expect(screen.queryByRole('button', { name: 'Nächste Adresse übernehmen' })).not.toBeInTheDocument();
       fireEvent.click(screen.getByRole('button', { name: 'Mein Standort' }));
       expect(calls('geo.admin.ch')).toHaveLength(0); // nothing is sent without the second click
-      fireEvent.click(screen.getByRole('button', { name: 'Nächste Adresse übernehmen' }));
+      const offer = screen.getByRole('button', { name: 'Nächste Adresse übernehmen' });
+      offer.focus();
+      fireEvent.click(offer);
+      expect(screen.getByText('Nächste Adresse wird gesucht …')).toBeInTheDocument();
       expect(
         await screen.findByText('Übernommen: Breitenrainplatz 42, 3014 Bern (7 m von der Position).'),
       ).toBeInTheDocument();
+      // The offer is gone with the new location; the focus stays in the group.
+      expect(screen.getByRole('button', { name: 'Mein Standort' })).toHaveFocus();
       expect(location()).toMatchObject({ name: 'Breitenrainplatz 42, 3014 Bern', timezone: 'Europe/Zurich' });
       expect(useUiStore.getState().surroundingsImport).not.toBeNull();
       expect(useConfigStore.getState().config.horizon.surfaceModel.enabled).toBe(true);

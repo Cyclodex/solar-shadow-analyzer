@@ -36,7 +36,7 @@ const de = {
     1060: 'Gebäude ohne Wohnnutzung',
     1080: 'Sonderbau',
   } satisfies Record<BuildingCategory, string>,
-  source: 'Quelle: Gebäude- und Wohnungsregister (BFS) über geo.admin.ch, © swisstopo.',
+  source: 'Quelle: Gebäude- und Wohnungsregister (BFS) über geo.admin.ch, ©\u00a0swisstopo.',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -68,7 +68,7 @@ const messages: Messages<typeof de> = {
       1060: 'Non-residential',
       1080: 'Special structure',
     },
-    source: 'Source: Federal Register of Buildings and Dwellings (FSO) via geo.admin.ch, © swisstopo.',
+    source: 'Source: Federal Register of Buildings and Dwellings (FSO) via geo.admin.ch, ©\u00a0swisstopo.',
   },
 };
 
@@ -87,19 +87,23 @@ function Facts({ info }: { info: BuildingInfo }) {
   let year = t.unknown;
   if (info.year !== null) year = String(info.year);
   else if (info.period) year = t.period(periodText(info.period, t));
-  const rows: [string, string, string?][] = [
-    [t.storeys, info.storeys === null ? t.unknown : f.int(info.storeys), t.storeysInfo],
-    [t.year, year],
-    [t.area, info.area === null ? t.unknown : f.unit(info.area, 'm²')],
-    [t.category, info.category === null ? t.unknown : t.categories[info.category]],
+  const rows: { term: string; value: string; tip?: string; wide?: boolean }[] = [
+    { term: t.storeys, value: info.storeys === null ? t.unknown : f.int(info.storeys), tip: t.storeysInfo },
+    { term: t.year, value: year },
+    { term: t.area, value: info.area === null ? t.unknown : f.unit(info.area, 'm²') },
+    {
+      term: t.category,
+      value: info.category === null ? t.unknown : t.categories[info.category],
+      wide: true,
+    },
   ];
   return (
     <dl className={styles.facts}>
-      {rows.map(([term, value, info]) => (
-        <div key={term} className={styles.fact}>
+      {rows.map(({ term, value, tip, wide }) => (
+        <div key={term} className={wide ? `${styles.fact} ${styles.wide}` : styles.fact}>
           <dt className={styles.term}>
             {term}
-            {info && <InfoTip label={term}>{info}</InfoTip>}
+            {tip && <InfoTip label={term}>{tip}</InfoTip>}
           </dt>
           <dd className={styles.value}>{value}</dd>
         </div>

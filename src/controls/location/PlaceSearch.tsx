@@ -35,7 +35,7 @@ const de = {
   address: 'Gebäudeadresse',
   similar: 'ähnliche Schreibweise',
   source:
-    'Adressen: amtliches Gebäudeadressverzeichnis (© swisstopo), nur Schweiz und Liechtenstein. Orte: Open-Meteo Geocoding (Daten: GeoNames).',
+    'Adressen: amtliches Gebäudeadressverzeichnis (©\u00a0swisstopo), nur Schweiz und Liechtenstein. Orte: Open-Meteo Geocoding (Daten: GeoNames).',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -59,7 +59,7 @@ const messages: Messages<typeof de> = {
     address: 'Building address',
     similar: 'similar spelling',
     source:
-      'Addresses: official directory of building addresses (© swisstopo), Switzerland and Liechtenstein only. Places: Open-Meteo Geocoding (data: GeoNames).',
+      'Addresses: official directory of building addresses (©\u00a0swisstopo), Switzerland and Liechtenstein only. Places: Open-Meteo Geocoding (data: GeoNames).',
   },
 };
 

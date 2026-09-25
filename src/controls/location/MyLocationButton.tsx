@@ -96,6 +96,9 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
   const [state, setState] = useState<State>({ status: 'idle' });
   const [nearest, setNearest] = useState<Nearest>({ status: 'idle' });
   const lookup = useRef<AbortController | null>(null);
+  /** «Mein Standort»: takes the focus when the offer button disappears after it was used. */
+  const locateButton = useRef<HTMLButtonElement>(null);
+  const offerButton = useRef<HTMLButtonElement>(null);
 
   // A lookup still running when the section closes is dropped.
   useEffect(() => () => lookup.current?.abort(), []);
@@ -132,7 +135,8 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
   };
 
   const applyNearest = (latitude: number, longitude: number): void => {
-    if (!onAddress) return;
+    if (!onAddress || nearest.status === 'searching') return;
+    const hadFocus = document.activeElement === offerButton.current;
     lookup.current?.abort();
     const ctrl = new AbortController();
     lookup.current = ctrl;
@@ -142,8 +146,12 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
       if (!res.ok) setNearest({ status: 'error' });
       else if (!res.value) setNearest({ status: 'none' });
       else {
+        const focus = document.activeElement;
         onAddress(res.value.address);
         setNearest({ status: 'done', label: res.value.address.label, distance: res.value.distance });
+        // The offer goes away with the new location: keep the keyboard focus in this group.
+        if (hadFocus && (focus === offerButton.current || focus === document.body))
+          locateButton.current?.focus();
       }
     });
   };
@@ -172,7 +180,12 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
   return (
     <div className={styles.root}>
       <div className={styles.row}>
-        <Button icon={<LocateIcon />} onClick={locate} disabled={state.status === 'locating'}>
+        <Button
+          ref={locateButton}
+          icon={<LocateIcon />}
+          onClick={locate}
+          disabled={state.status === 'locating'}
+        >
           {t.button}
         </Button>
         <p className={state.status === 'error' ? styles.error : styles.message} role="status">
@@ -183,9 +196,10 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
         <div className={styles.row}>
           {offerNearest && state.status === 'done' && (
             <Button
+              ref={offerButton}
               size="sm"
               onClick={() => applyNearest(state.latitude, state.longitude)}
-              disabled={nearest.status === 'searching'}
+              aria-busy={nearest.status === 'searching' || undefined}
             >
               {t.nearest}
             </Button>
