@@ -90,3 +90,31 @@ describe('EconomicsSection', () => {
     expect(screen.getByRole('textbox', { name: 'Evaluation period' })).toHaveValue('25');
   });
 });
+
+describe('EconomicsSection with battery', () => {
+  beforeEach(() => {
+    resetStores();
+    useUiStore.getState().setSectionOpen('economics', true);
+    useConfigStore.getState().patch('battery', { enabled: true });
+  });
+
+  it('holds the storage costs and what the storage replaces, and shows both investments', () => {
+    render(<EconomicsSection />);
+    commit('Investition Batteriespeicher', '3000');
+    commit('Davon ersetzt der Speicher', '400');
+    expect(useConfigStore.getState().config.battery).toMatchObject({
+      investment: 3000,
+      replacedInvestment: 400,
+    });
+    const f = getFormat('de');
+    const m = (v: number): string => f.currency(v, 'CHF', 0).replace(/\s/g, ' ');
+    expect(
+      screen.getByText(
+        `Ohne Batterie ${m(1800)} · mit Batterie ${m(1800)} − ${m(400)} + ${m(3000)} = ${m(4400)}`,
+      ),
+    ).toBeInTheDocument();
+    // What the storage replaces cannot exceed the floors' investment.
+    commit('Davon ersetzt der Speicher', '5000');
+    expect(useConfigStore.getState().config.battery.replacedInvestment).toBe(1800);
+  });
+});

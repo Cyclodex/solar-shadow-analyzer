@@ -1,4 +1,4 @@
-import type { EconomicsConfig, EconomicsResult } from './types';
+import type { BatteryConfig, EconomicsConfig, EconomicsResult } from './types';
 
 // ─────────────────────────────────────────────
 // ECONOMICS
@@ -18,11 +18,57 @@ const MAX_PAYBACK_YEARS = 1000;
  */
 export function economics(annualKwh: number, floors: number, e: EconomicsConfig): EconomicsResult {
   const kwh = Math.max(0, annualKwh);
-  const investment = Math.max(0, e.investmentPerFloor * floors);
   const share = Math.min(100, Math.max(0, e.selfConsumptionPct)) / 100;
   const selfConsumedKwh = kwh * share;
-  const exportedKwh = kwh - selfConsumedKwh;
-  const annualSavings = selfConsumedKwh * e.electricityPrice + exportedKwh * e.feedInTariff;
+  const result = economicsFromFlows(
+    selfConsumedKwh,
+    kwh - selfConsumedKwh,
+    0,
+    e.investmentPerFloor * floors,
+    e,
+  );
+  return { ...result, annualKwh: kwh };
+}
+
+/** Investment without and with the storage, currency (see batteryInvestments). */
+export interface InvestmentSplit {
+  /** Floors: investmentPerFloor × floors (modules, inverters, mounting). */
+  without: number;
+  /** Part of `without` the storage replaces (capped at `without`). */
+  replaced: number;
+  /** without − replaced + storage investment. */
+  with: number;
+}
+
+/**
+ * The investments of the two variants: without storage the floors' systems; with storage the same minus what
+ * the storage replaces (battery.replacedInvestment, e.g. the micro-inverters: a balcony storage has its own
+ * inverter) plus the storage itself. Keeps the existing per-floor field as the single source of the PV costs.
+ */
+export function batteryInvestments(e: EconomicsConfig, b: BatteryConfig, floors: number): InvestmentSplit {
+  const without = Math.max(0, e.investmentPerFloor * floors);
+  const replaced = Math.min(without, Math.max(0, b.replacedInvestment));
+  return { without, replaced, with: without - replaced + Math.max(0, b.investment) };
+}
+
+/**
+ * Same as `economics`, for given energy flows (year 1, kWh): self-consumed energy saves the electricity price,
+ * exported energy earns the feed-in tariff, `extraImportKwh` (e.g. standby of a storage system from the grid)
+ * costs the electricity price. Used with the storage simulation, where the flows come from the load profile.
+ * Degradation applies to all savings alike (the storage's own ageing is not modelled).
+ */
+export function economicsFromFlows(
+  selfConsumedKwh: number,
+  exportedKwh: number,
+  extraImportKwh: number,
+  investmentTotal: number,
+  e: EconomicsConfig,
+): EconomicsResult {
+  const self = Math.max(0, selfConsumedKwh);
+  const exported = Math.max(0, exportedKwh);
+  const investment = Math.max(0, investmentTotal);
+  const annualSavings =
+    self * e.electricityPrice + exported * e.feedInTariff - Math.max(0, extraImportKwh) * e.electricityPrice;
   const q = 1 - Math.min(100, Math.max(0, e.degradationPct)) / 100; // yearly output factor
 
   let paybackYears = Infinity;
@@ -49,9 +95,9 @@ export function economics(annualKwh: number, floors: number, e: EconomicsConfig)
   }
 
   return {
-    annualKwh: kwh,
-    selfConsumedKwh,
-    exportedKwh,
+    annualKwh: self + exported,
+    selfConsumedKwh: self,
+    exportedKwh: exported,
     annualSavings,
     paybackYears,
     lifetimeNet: lifetimeSavings - investment,

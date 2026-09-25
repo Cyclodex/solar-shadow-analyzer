@@ -7,7 +7,7 @@ import { SelectField, type SelectOption } from '../components/SelectField';
 import { useFormat, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { DEFAULT_CONFIG, LIMITS } from '../model/defaults';
-import { economics } from '../model/economics';
+import { batteryInvestments, economics } from '../model/economics';
 import { useConfigSection, usePatch } from '../state/configStore';
 import sections from './sections.module.css';
 
@@ -35,6 +35,16 @@ const de = {
   years: 'Jahre',
   perYear: '%/Jahr',
   restore: 'Beispielwerte wiederherstellen',
+  batteryInvestment: 'Investition Batteriespeicher',
+  batteryInvestmentHint:
+    'Beispielwert: 2 × EcoFlow STREAM Ultra X à CHF 1’499 (Händler ch.ecoflow.com, 24.09.2026).',
+  replaced: 'Davon ersetzt der Speicher',
+  replacedHint:
+    'Teil der Investition je Stockwerk, der mit dem Speicher wegfällt, z. B. die Mikro-Wechselrichter (der Speicher hat einen eigenen). Total für alle Stockwerke.',
+  investmentHintBattery: (total: string, floors: string) =>
+    `Module, Wechselrichter, Montage · total ${total} für ${floors} (Variante ohne Batterie)`,
+  comparison: (without: string, replaced: string, storage: string, withBattery: string) =>
+    `Ohne Batterie ${without} · mit Batterie ${without} − ${replaced} + ${storage} = ${withBattery}`,
 };
 const messages: Messages<typeof de> = {
   de,
@@ -58,6 +68,16 @@ const messages: Messages<typeof de> = {
     years: 'years',
     perYear: '%/year',
     restore: 'Restore example values',
+    batteryInvestment: 'Battery storage investment',
+    batteryInvestmentHint:
+      'Example value: 2 × EcoFlow STREAM Ultra X at CHF 1,499 (retailer ch.ecoflow.com, 24 Sep 2026).',
+    replaced: 'Of which the storage replaces',
+    replacedHint:
+      'Part of the investment per floor that is no longer needed with the storage, e.g. the micro-inverters (the storage has its own). Total for all floors.',
+    investmentHintBattery: (total, floors) =>
+      `Modules, inverter, mounting · total ${total} for ${floors} (variant without battery)`,
+    comparison: (without, replaced, storage, withBattery) =>
+      `Without battery ${without} · with battery ${without} − ${replaced} + ${storage} = ${withBattery}`,
   },
 };
 
@@ -78,6 +98,10 @@ export function EconomicsSection() {
   const f = useFormat();
   const e = useConfigSection('economics');
   const numFloors = useConfigSection('building').numFloors;
+  const battery = useConfigSection('battery');
+  const LB = LIMITS.battery;
+  const split = batteryInvestments(e, battery, numFloors);
+  const money = (v: number): string => f.currency(v, e.currency, 0);
   const patch = usePatch();
   const L = LIMITS.economics;
   const perKwh = `${e.currency}/kWh`;
@@ -147,8 +171,42 @@ export function EconomicsSection() {
         limit={L.investmentPerFloor}
         sliderMax={5000}
         unit={e.currency}
-        hint={t.investmentHint(f.currency(totalInvestment, e.currency, 0), c.floorsCount(numFloors))}
+        hint={(battery.enabled ? t.investmentHintBattery : t.investmentHint)(
+          f.currency(totalInvestment, e.currency, 0),
+          c.floorsCount(numFloors),
+        )}
       />
+      {battery.enabled && (
+        <>
+          <NumberField
+            label={t.batteryInvestment}
+            value={battery.investment}
+            onChange={(investment) => patch('battery', { investment })}
+            limit={LB.investment}
+            sliderMax={10000}
+            unit={e.currency}
+            hint={t.batteryInvestmentHint}
+          />
+          <NumberField
+            label={t.replaced}
+            value={battery.replacedInvestment}
+            onChange={(replacedInvestment) => patch('battery', { replacedInvestment })}
+            limit={LB.replacedInvestment}
+            max={Math.max(LB.replacedInvestment.min, split.without)}
+            sliderMax={Math.max(10, split.without)}
+            unit={e.currency}
+            hint={t.replacedHint}
+          />
+          <p className={sections.hint}>
+            {t.comparison(
+              money(split.without),
+              money(split.replaced),
+              money(battery.investment),
+              money(split.with),
+            )}
+          </p>
+        </>
+      )}
       <NumberField
         label={t.degradation}
         value={e.degradationPct}

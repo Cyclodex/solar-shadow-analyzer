@@ -1,5 +1,13 @@
-import type { HeatmapData, Lang, SimulationResult, TiltSweepPoint } from '../model/types';
-import { dateFromDayOfYear, formatMinutes } from '../model/time';
+import type {
+  BaselineFlows,
+  BatteryFlows,
+  BatteryResult,
+  HeatmapData,
+  Lang,
+  SimulationResult,
+  TiltSweepPoint,
+} from '../model/types';
+import { dateFromDayOfYear, formatMinutes, utcToLocal } from '../model/time';
 import { floorLabel, LOCALES, monthNames, type Messages } from '../i18n';
 import { CSV_MIME, csvFormatForLocale, spreadsheetLocale, toCsv, type CsvCell, type CsvFormat } from './csv';
 import { downloadText } from './download';
@@ -24,6 +32,38 @@ const de = {
   tiltFromHorizontal: 'Neigung ab Horizontal β (°)',
   annualKwh: (who: string) => `${who}: Jahresertrag (kWh)`,
   date: 'Datum',
+  battery: {
+    pv: 'Solar nach Systemverlusten (kWh)',
+    selfDirect: 'Direkt verbraucht (kWh)',
+    selfBattery: 'Über Batterie verbraucht (kWh)',
+    exported: 'Eingespeist (kWh)',
+    imported: 'Netzbezug (kWh)',
+    load: 'Verbrauch (kWh)',
+    charged: 'Geladen (kWh)',
+    discharged: 'Entladen (kWh)',
+    curtailed: 'Abgeregelt an der AC-Grenze (kWh)',
+    pvInputLimited: 'Über PV-Eingangsgrenze (kWh)',
+    chargeLoss: 'Ladeverluste (kWh)',
+    dischargeLoss: 'Entladeverluste (kWh)',
+    standby: 'Eigenverbrauch Speicher (kWh)',
+    storedDelta: 'Änderung Speicherinhalt (kWh)',
+    baseOutput: 'Ohne Batterie: Abgabe (kWh)',
+    baseSelf: 'Ohne Batterie: selbst verbraucht (kWh)',
+    baseExported: 'Ohne Batterie: eingespeist (kWh)',
+    baseImported: 'Ohne Batterie: Netzbezug (kWh)',
+    baseCurtailed: 'Ohne Batterie: abgeregelt (kWh)',
+  },
+  hourly: {
+    time: 'Ortszeit (Intervallbeginn)',
+    pv: 'Solar (W)',
+    direct: 'Solar direkt abgegeben (W)',
+    charge: 'Laden (W)',
+    discharge: 'Entladen (W)',
+    load: 'Verbrauch (W)',
+    exported: 'Einspeisung (W)',
+    imported: 'Netzbezug (W)',
+    soc: 'Ladestand (%)',
+  },
 };
 
 const messages: Messages<typeof de> = {
@@ -41,6 +81,38 @@ const messages: Messages<typeof de> = {
     tiltFromHorizontal: 'Tilt from horizontal β (°)',
     annualKwh: (who) => `${who}: annual yield (kWh)`,
     date: 'Date',
+    battery: {
+      pv: 'Solar after system losses (kWh)',
+      selfDirect: 'Used directly (kWh)',
+      selfBattery: 'Used via battery (kWh)',
+      exported: 'Fed in (kWh)',
+      imported: 'Grid purchase (kWh)',
+      load: 'Consumption (kWh)',
+      charged: 'Charged (kWh)',
+      discharged: 'Discharged (kWh)',
+      curtailed: 'Curtailed at the AC limit (kWh)',
+      pvInputLimited: 'Above the PV input limit (kWh)',
+      chargeLoss: 'Charging losses (kWh)',
+      dischargeLoss: 'Discharging losses (kWh)',
+      standby: 'Storage own consumption (kWh)',
+      storedDelta: 'Change of stored energy (kWh)',
+      baseOutput: 'Without battery: output (kWh)',
+      baseSelf: 'Without battery: self-consumed (kWh)',
+      baseExported: 'Without battery: fed in (kWh)',
+      baseImported: 'Without battery: grid purchase (kWh)',
+      baseCurtailed: 'Without battery: curtailed (kWh)',
+    },
+    hourly: {
+      time: 'Local time (interval start)',
+      pv: 'Solar (W)',
+      direct: 'Solar output directly (W)',
+      charge: 'Charging (W)',
+      discharge: 'Discharging (W)',
+      load: 'Consumption (W)',
+      exported: 'Feed-in (W)',
+      imported: 'Grid purchase (W)',
+      soc: 'State of charge (%)',
+    },
   },
 };
 
@@ -187,6 +259,83 @@ export function heatmapCsv(h: HeatmapData, lang: Lang, format: CsvFormat): strin
       row.push(v >= 0 ? round(v * 100, 1) : null);
     }
     rows.push(row);
+  }
+  return toCsv(rows, format);
+}
+
+const FLOW_COLUMNS: readonly (keyof BatteryFlows)[] = [
+  'pv',
+  'selfDirect',
+  'selfBattery',
+  'exported',
+  'imported',
+  'load',
+  'charged',
+  'discharged',
+  'curtailed',
+  'pvInputLimited',
+  'chargeLoss',
+  'dischargeLoss',
+  'standby',
+];
+const BASE_COLUMNS: readonly [
+  keyof BaselineFlows,
+  'baseOutput' | 'baseSelf' | 'baseExported' | 'baseImported' | 'baseCurtailed',
+][] = [
+  ['output', 'baseOutput'],
+  ['selfConsumed', 'baseSelf'],
+  ['exported', 'baseExported'],
+  ['imported', 'baseImported'],
+  ['curtailed', 'baseCurtailed'],
+];
+
+/**
+ * Monthly energy flows of the storage simulation and of the same system without storage; last row = year
+ * (with the change of the stored energy, which closes the annual balance).
+ */
+export function batteryMonthlyCsv(r: BatteryResult, lang: Lang, format: CsvFormat): string {
+  const t = messages[lang];
+  const months = monthNames(lang, 'long');
+  const header: CsvCell[] = [
+    t.month,
+    ...FLOW_COLUMNS.map((k) => t.battery[k as keyof typeof t.battery]),
+    t.battery.storedDelta,
+    ...BASE_COLUMNS.map(([, label]) => t.battery[label]),
+  ];
+  const row = (label: string, f: BatteryFlows, b: BaselineFlows, stored: number | null): CsvCell[] => [
+    label,
+    ...FLOW_COLUMNS.map((k) => kwh(f[k])),
+    stored === null ? null : kwh(stored),
+    ...BASE_COLUMNS.map(([k]) => kwh(b[k])),
+  ];
+  const rows: CsvCell[][] = [header];
+  for (let m = 0; m < 12; m++) rows.push(row(months[m], r.monthly[m], r.baseline.monthly[m], null));
+  rows.push(row(t.year, r.annual, r.baseline.annual, r.annual.storedDelta));
+  return toCsv(rows, format);
+}
+
+/** Hourly (weather step) series of the storage simulation, local time of `timeZone` at the interval start. */
+export function batteryHourlyCsv(r: BatteryResult, timeZone: string, lang: Lang, format: CsvFormat): string {
+  const t = messages[lang].hourly;
+  const s = r.series;
+  const half = (s.stepMinutes * 60_000) / 2;
+  const rows: CsvCell[][] = [
+    [t.time, t.pv, t.direct, t.charge, t.discharge, t.load, t.exported, t.imported, t.soc],
+  ];
+  const w = (v: number): number => round(v, 1);
+  for (let i = 0; i < s.timesUtc.length; i++) {
+    const local = utcToLocal(s.timesUtc[i] - half, timeZone);
+    rows.push([
+      `${local.date} ${formatMinutes(local.minutes)}`,
+      w(s.pv[i]),
+      w(s.direct[i]),
+      w(s.charge[i]),
+      w(s.discharge[i]),
+      w(s.load[i]),
+      w(s.exported[i]),
+      w(s.imported[i]),
+      round(s.soc[i] * 100, 1),
+    ]);
   }
   return toCsv(rows, format);
 }

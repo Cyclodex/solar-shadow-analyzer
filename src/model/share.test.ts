@@ -51,8 +51,28 @@ function refBase64Url(bytes: Uint8Array): string {
 }
 const refEncodeJson = (json: string): string => refBase64Url(new TextEncoder().encode(json));
 
-const SECTIONS = ['location', 'building', 'panels', 'system', 'horizon', 'weather', 'economics'] as const;
-const NUMERIC_SECTIONS = ['location', 'building', 'panels', 'system', 'weather', 'economics'] as const;
+const SECTIONS = [
+  'location',
+  'building',
+  'panels',
+  'system',
+  'horizon',
+  'weather',
+  'economics',
+  'battery',
+] as const;
+const NUMERIC_SECTIONS = [
+  'location',
+  'building',
+  'panels',
+  'system',
+  'weather',
+  'economics',
+  'battery',
+] as const;
+
+/** What a version-1 link (base 1) decodes to: config v3 with the battery section of base 2 (storage off). */
+const V1_CONFIG: Config = { ...SHARE_BASES[1], version: 3, battery: SHARE_BASES[2]!.battery! };
 
 function limitsOf(section: string): [string, FieldLimit][] {
   return Object.entries((LIMITS as unknown as Record<string, Record<string, FieldLimit>>)[section] ?? {});
@@ -71,8 +91,13 @@ const codePoints = (s: string): number => Array.from(s).length;
 
 /** Asserts every invariant sanitizeConfig promises. */
 function expectValid(c: Config): void {
-  expect(c.version).toBe(2);
+  expect(c.version).toBe(3);
   expect(Object.keys(c).sort()).toEqual(['version', ...SECTIONS].sort());
+  expect(typeof c.battery.enabled).toBe('boolean');
+  expect(['shared', 'per-floor']).toContain(c.battery.layout);
+  expect(['surplus', 'base-load', 'self-consumption']).toContain(c.battery.strategy);
+  expect(['h0', 'flat']).toContain(c.battery.loadProfile);
+  expect(c.battery.preset.length).toBeGreaterThan(0);
   for (const s of NUMERIC_SECTIONS) {
     const sec = c[s] as unknown as Rec;
     for (const [field, lim] of limitsOf(s)) {
@@ -165,7 +190,7 @@ function pickOne<T>(rnd: () => number, items: readonly T[]): T {
 
 /** Random (mostly valid, off-grid) raw config; each field keeps its default with probability 1/2. */
 function randomRawConfig(rnd: () => number): Rec {
-  const raw: Rec = { version: 2 };
+  const raw: Rec = { version: 3 };
   for (const s of SECTIONS) {
     const sec: Rec = { ...(DEFAULT_CONFIG[s] as unknown as Rec) };
     for (const [field, lim] of limitsOf(s)) {
@@ -526,16 +551,26 @@ describe('sanitizeConfig', () => {
 // ── Share encoding ───────────────────────────
 
 describe('encodeConfig / decodeConfig', () => {
-  it('encodes the default config as the empty diff "{}"', () => {
-    // '{}' = 0x7B 0x7D → 011110 110111 1101(00) → indices 30, 55, 52 → "e30"
-    expect(encodeConfig(DEFAULT_CONFIG)).toBe('e30');
+  it('encodes the default config as the version-only diff {"v":2}', () => {
+    expect(encodeConfig(DEFAULT_CONFIG)).toBe(refEncodeJson('{"v":2}'));
+    expect(decodeConfig(refEncodeJson('{"v":2}'))).toEqual(DEFAULT_CONFIG);
+    // '{}' = 0x7B 0x7D → 011110 110111 1101(00) → indices 30, 55, 52 → "e30": a link of version 1.
     expect(refEncodeJson('{}')).toBe('e30');
-    expect(decodeConfig('e30')).toEqual(SHARE_BASES[1]);
+    expect(decodeConfig('e30')).toEqual(V1_CONFIG);
+  });
+
+  it('encodes changed battery fields with short keys', () => {
+    const c: Config = {
+      ...DEFAULT_CONFIG,
+      battery: { ...DEFAULT_CONFIG.battery, enabled: true, units: 3, strategy: 'self-consumption' },
+    };
+    expect(encodeConfig(c)).toBe(refEncodeJson('{"v":2,"x":{"e":true,"u":3,"s":"self-consumption"}}'));
+    expect(decodeConfig(encodeConfig(c))).toEqual(c);
   });
 
   it('encodes only the changed fields with short keys (format is part of the link contract)', () => {
     const c: Config = { ...DEFAULT_CONFIG, building: { ...DEFAULT_CONFIG.building, facadeAzimuth: 180 } };
-    expect(encodeConfig(c)).toBe(refEncodeJson('{"b":{"a":180}}'));
+    expect(encodeConfig(c)).toBe(refEncodeJson('{"v":2,"b":{"a":180}}'));
     const d: Config = {
       ...DEFAULT_CONFIG,
       horizon: {
@@ -548,7 +583,7 @@ describe('encodeConfig / decodeConfig', () => {
     };
     expect(encodeConfig(d)).toBe(
       refEncodeJson(
-        '{"h":{"t":false,"o":[{"i":"o1","n":"Haus","u":-5,"d":20,"w":15,"t":10,"h":12}],"m":[[90,4.5]]}}',
+        '{"v":2,"h":{"t":false,"o":[{"i":"o1","n":"Haus","u":-5,"d":20,"w":15,"t":10,"h":12}],"m":[[90,4.5]]}}',
       ),
     );
     expect(decodeConfig(encodeConfig(d))).toEqual(d);
@@ -584,12 +619,12 @@ describe('encodeConfig / decodeConfig', () => {
       panels: { ...DEFAULT_CONFIG.panels, tiltFromVertical: 30, powerWp: 425, width: 172.2 },
     };
     const json =
-      '{"l":{"n":"Bern","a":46.9481,"o":7.4474,"e":549},"b":{"a":180,"f":4},"p":{"w":172.2,"t":30,"p":425}}';
+      '{"v":2,"l":{"n":"Bern","a":46.9481,"o":7.4474,"e":549},"b":{"a":180,"f":4},"p":{"w":172.2,"t":30,"p":425}}';
     const s = encodeConfig(c);
     expect(s).toBe(refEncodeJson(json));
     // ASCII JSON → base64 without padding has ⌈8·bytes/6⌉ chars
     expect(s.length).toBe(Math.ceil((json.length * 8) / 6));
-    expect(s.length).toBeLessThan(140);
+    expect(s.length).toBeLessThan(150); // 142 incl. the version key "v":2
     expect(decodeConfig(s)).toEqual(c);
   });
 
@@ -621,11 +656,14 @@ describe('encodeConfig / decodeConfig', () => {
     const long = decodeConfig(
       refEncodeJson('{"building":{"facadeAzimuth":135},"weather":{"source":"clear-sky"}}'),
     );
+    // No `v`: a version-1 payload, unchanged fields from base 1 (e.g. the old 800 W inverter limit).
     expect(long).toEqual({
-      ...DEFAULT_CONFIG,
-      building: { ...DEFAULT_CONFIG.building, facadeAzimuth: 135 },
-      weather: { ...DEFAULT_CONFIG.weather, source: 'clear-sky' },
+      ...V1_CONFIG,
+      building: { ...V1_CONFIG.building, facadeAzimuth: 135 },
+      weather: { ...V1_CONFIG.weather, source: 'clear-sky' },
     });
+    expect(long?.system.inverterLimitW).toBe(800);
+    expect(decodeConfig(encodeConfig(DEFAULT_CONFIG))?.system.inverterLimitW).toBe(600);
     const full: Config = { ...DEFAULT_CONFIG, panels: { ...DEFAULT_CONFIG.panels, count: 4 } };
     expect(decodeConfig(refEncodeJson(JSON.stringify(full)))).toEqual(full);
     const v1 = decodeConfig(refEncodeJson('{"latitude":46,"balconyHeight":300}'));
@@ -703,7 +741,7 @@ describe('share format versions', () => {
     // '{"p":{"t":30}}' — tilt 30°, everything else from base 1.
     expect(refEncodeJson('{"p":{"t":30}}')).toBe('eyJwIjp7InQiOjMwfX0');
     const golden: Config = {
-      ...SHARE_BASES[1],
+      ...V1_CONFIG,
       panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 30, powerWp: 430 },
     };
     expect(decodeConfig('eyJwIjp7InQiOjMwfX0')).toEqual(golden);
@@ -711,9 +749,15 @@ describe('share format versions', () => {
 
   it('keeps the meaning of existing links when a default changes (regression)', () => {
     const D = DEFAULT_CONFIG;
-    const saved = { year: D.weather.year, price: D.economics.electricityPrice, wp: D.panels.powerWp };
+    const saved = {
+      year: D.weather.year,
+      price: D.economics.electricityPrice,
+      wp: D.panels.powerWp,
+      ac: D.battery.acLimitW,
+    };
     try {
       // Simulates a later release with new defaults.
+      D.battery.acLimitW = 800;
       D.weather.year = 2026;
       D.economics.electricityPrice = 0.32;
       D.panels.powerWp = 450;
@@ -722,7 +766,8 @@ describe('share format versions', () => {
       expect(c?.weather.year).toBe(2025);
       expect(c?.economics.electricityPrice).toBe(0.3);
       expect(c?.panels.powerWp).toBe(430);
-      expect(decodeConfig('e30')).toEqual(SHARE_BASES[1]);
+      expect(c?.battery.acLimitW).toBe(600);
+      expect(decodeConfig('e30')).toEqual(V1_CONFIG);
       // A config that uses the new defaults still round-trips.
       const next = sanitizeConfig({ ...D, panels: { ...D.panels, count: 3 } });
       expect(decodeConfig(encodeConfig(next))).toEqual(next);
@@ -730,6 +775,7 @@ describe('share format versions', () => {
       D.weather.year = saved.year;
       D.economics.electricityPrice = saved.price;
       D.panels.powerWp = saved.wp;
+      D.battery.acLimitW = saved.ac;
     }
   });
 
@@ -743,8 +789,30 @@ describe('share format versions', () => {
       ...SHARE_BASES[SHARE_VERSION],
       panels: { ...SHARE_BASES[SHARE_VERSION].panels, tiltFromVertical: 30 },
     });
-    // Version 1 writes no `v`: the default config stays '{}'.
-    expect(JSON.parse(atob(encodeConfig(DEFAULT_CONFIG)))).toEqual({});
+    // From version 2 on every link carries `v`: the default config is '{"v":2}'.
+    expect(JSON.parse(atob(encodeConfig(DEFAULT_CONFIG)))).toEqual({ v: SHARE_VERSION });
+  });
+});
+
+describe('config v2 → v3 (battery)', () => {
+  it('fills the battery section of a v2 JSON export or stored config with the defaults (storage off)', () => {
+    const v2 = { ...SHARE_BASES[1], panels: { ...SHARE_BASES[1].panels, count: 3 } };
+    const c = configFromJson(JSON.stringify(v2));
+    expect(c).toEqual({ ...V1_CONFIG, panels: { ...V1_CONFIG.panels, count: 3 } });
+    expect(c?.battery.enabled).toBe(false);
+    expect(sanitizeConfig({ state: {} })).toEqual(DEFAULT_CONFIG);
+  });
+
+  it('keeps a valid battery section and repairs an invalid one', () => {
+    const c = sanitizeConfig({
+      battery: { enabled: true, layout: 'per-floor', strategy: 'x', units: 99, minSocPct: -5, preset: '' },
+    });
+    expect(c.battery.enabled).toBe(true);
+    expect(c.battery.layout).toBe('per-floor');
+    expect(c.battery.strategy).toBe(DEFAULT_CONFIG.battery.strategy);
+    expect(c.battery.units).toBe(LIMITS.battery.units.max);
+    expect(c.battery.minSocPct).toBe(0);
+    expect(c.battery.preset).toBe(DEFAULT_CONFIG.battery.preset);
   });
 });
 

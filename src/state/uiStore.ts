@@ -14,7 +14,16 @@ export type ViewKey = 'scene3d' | 'frontal' | 'profile' | 'sunpath' | 'panelShad
 export const VIEW_KEYS: readonly ViewKey[] = ['scene3d', 'frontal', 'profile', 'sunpath', 'panelShadow'];
 
 /** Ids of the collapsible sidebar sections (keys of `openSections`). */
-const SECTION_IDS = ['location', 'building', 'panels', 'system', 'horizon', 'weather', 'economics'] as const;
+const SECTION_IDS = [
+  'location',
+  'building',
+  'panels',
+  'system',
+  'battery',
+  'horizon',
+  'weather',
+  'economics',
+] as const;
 export type SectionId = (typeof SECTION_IDS)[number];
 
 const isSectionId = (id: string): id is SectionId => (SECTION_IDS as readonly string[]).includes(id);

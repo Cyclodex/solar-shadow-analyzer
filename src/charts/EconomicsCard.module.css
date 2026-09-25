@@ -299,3 +299,8 @@
     break-inside: avoid;
   }
 }
+
+/* Details of the with/without battery rows: may wrap on narrow cards. */
+.table tbody .compareDetail {
+  white-space: normal;
+}

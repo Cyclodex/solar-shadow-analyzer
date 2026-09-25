@@ -152,6 +152,13 @@
   --seq-5: #6da7ec;
   --seq-6: #9ec5f4;
   --seq-7: #cde2fb;
+
+  /* Energy paths of the battery charts: steps of the categorical palette (theme-specific via --floor-k) */
+  --flow-direct: var(--floor-3);
+  --flow-battery: var(--floor-2);
+  --flow-export: var(--floor-0);
+  --flow-import: var(--floor-4);
+  --flow-soc: var(--floor-6);
 }
 
 /* ── Light theme ──────────────────────────── */

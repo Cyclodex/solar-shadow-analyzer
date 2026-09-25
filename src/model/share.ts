@@ -1,4 +1,4 @@
-import type { Config, HorizonPoint, Obstacle } from './types';
+import type { BatteryConfig, Config, HorizonPoint, Obstacle } from './types';
 import { DEFAULT_CONFIG, LIMITS, createObstacle, type FieldLimit } from './defaults';
 import { clamp, normalizeDeg, roundToStep } from './units';
 
@@ -32,6 +32,7 @@ export const ROUNDING_OVERRIDES = {
   location: { latitude: 1e-4, longitude: 1e-4 },
   panels: { powerWp: 1 },
   economics: { electricityPrice: 1e-4, feedInTariff: 1e-4, investmentPerFloor: 1 },
+  battery: { investment: 1, replacedInvestment: 1 },
 } as const;
 
 /** Manual horizon points: azimuth wrapped to [0, 360), elevation clamped (negative values never matter: sun ≤ 0° is night). */
@@ -51,6 +52,7 @@ const SECTION_KEYS: readonly SectionKey[] = [
   'horizon',
   'weather',
   'economics',
+  'battery',
 ];
 
 function isRecord(v: unknown): v is Rec {
@@ -243,13 +245,13 @@ const V1_KEYS = [
 ] as const;
 
 function isV1(o: Rec): boolean {
-  return o.version !== 2 && V1_KEYS.some((k) => hasOwn(o, k));
+  return o.version !== 2 && o.version !== 3 && V1_KEYS.some((k) => hasOwn(o, k));
 }
 
 /** Maps a flat v1 config onto the v2 structure (v1 balconyHeight = floor-to-floor height; panelThickness dropped). */
 function migrateV1(o: Rec): Rec {
   return {
-    version: 2,
+    version: 3,
     location: { latitude: o.latitude, longitude: o.longitude },
     building: {
       facadeAzimuth: o.facadeAzimuth,
@@ -310,9 +312,10 @@ function sanitizeRecord(raw: Rec): Config {
   const hor = section(o, 'horizon');
   const wea = section(o, 'weather');
   const eco = section(o, 'economics');
+  const bat = section(o, 'battery');
 
   return {
-    version: 2,
+    version: 3,
     location: {
       name,
       latitude,
@@ -381,6 +384,40 @@ function sanitizeRecord(raw: Rec): Config {
       degradationPct: num(eco.degradationPct, L.economics.degradationPct, D.economics.degradationPct),
       lifetimeYears: num(eco.lifetimeYears, L.economics.lifetimeYears, D.economics.lifetimeYears),
     },
+    battery: sanitizeBattery(bat),
+  };
+}
+
+/** Battery section (config v3); configs and links without it get DEFAULT_CONFIG.battery (storage off). */
+function sanitizeBattery(bat: Rec): BatteryConfig {
+  const D = DEFAULT_CONFIG.battery;
+  const L = LIMITS.battery;
+  const n = (key: keyof typeof L): number => num(bat[key], L[key], D[key]);
+  return {
+    enabled: bool(bat.enabled, D.enabled),
+    preset: text(bat.preset, MAX_TEXT_LENGTH) || D.preset,
+    layout: oneOf(bat.layout, ['shared', 'per-floor'], D.layout),
+    units: n('units'),
+    unitCapacityWh: n('unitCapacityWh'),
+    pvInputW: n('pvInputW'),
+    chargeW: n('chargeW'),
+    dischargeW: n('dischargeW'),
+    acLimitW: n('acLimitW'),
+    chargeEfficiencyPct: n('chargeEfficiencyPct'),
+    dischargeEfficiencyPct: n('dischargeEfficiencyPct'),
+    minSocPct: n('minSocPct'),
+    standbyW: n('standbyW'),
+    strategy: oneOf(bat.strategy, ['surplus', 'base-load', 'self-consumption'], D.strategy),
+    baseLoadW: n('baseLoadW'),
+    consumptionKwh: n('consumptionKwh'),
+    loadProfile: oneOf(bat.loadProfile, ['h0', 'flat'], D.loadProfile),
+    investment: num(bat.investment, L.investment, D.investment, ROUNDING_OVERRIDES.battery.investment),
+    replacedInvestment: num(
+      bat.replacedInvestment,
+      L.replacedInvestment,
+      D.replacedInvestment,
+      ROUNDING_OVERRIDES.battery.replacedInvestment,
+    ),
   };
 }
 
@@ -402,13 +439,17 @@ function deepFreeze<T>(o: T): T {
  * Current share format version. Changing a default in DEFAULT_CONFIG requires a new base: add
  * SHARE_BASES[n + 1] = literal copy of the new defaults and bump this; compactDiff then writes `v`.
  */
-export const SHARE_VERSION: number = 1;
+export const SHARE_VERSION: number = 2;
+
+/** A frozen share base: the config shape of its app version (version 1 predates `battery` and config v3). */
+export type ShareBase = Omit<Config, 'version' | 'battery'> & { version: number; battery?: BatteryConfig };
 
 /**
  * Diff base of each share format version (literal snapshots; never edit an existing entry). Payloads without
- * `v` — every link created before versioning — are version 1.
+ * `v` — every link created before versioning — are version 1. Version 2 adds the battery section (off): a
+ * base without a section takes it from the first base that has one (version 1 links → storage off).
  */
-export const SHARE_BASES: Readonly<Record<number, Config>> = deepFreeze({
+export const SHARE_BASES: Readonly<Record<number, ShareBase>> = deepFreeze({
   1: {
     version: 2,
     location: {
@@ -447,10 +488,80 @@ export const SHARE_BASES: Readonly<Record<number, Config>> = deepFreeze({
       lifetimeYears: 25,
     },
   },
+  2: {
+    version: 3,
+    location: {
+      name: '47.100° N, 7.450° E',
+      latitude: 47.1,
+      longitude: 7.45,
+      timezone: 'Europe/Zurich',
+      elevation: 486,
+    },
+    building: {
+      facadeAzimuth: 202,
+      floorHeight: 280,
+      railingHeight: 100,
+      balconyDepth: 150,
+      numFloors: 2,
+      lowestFloor: 1,
+    },
+    panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 45, powerWp: 430 },
+    system: {
+      inverterLimitW: 600,
+      lossesPct: 14,
+      tempCoeffPct: -0.35,
+      noct: 45,
+      albedo: 0.2,
+      shadingModel: 'substring',
+    },
+    horizon: { terrainEnabled: true, obstacles: [], manual: [] },
+    weather: { source: 'open-meteo', year: 2025 },
+    economics: {
+      currency: 'CHF',
+      electricityPrice: 0.3,
+      feedInTariff: 0.08,
+      selfConsumptionPct: 70,
+      investmentPerFloor: 900,
+      degradationPct: 0.5,
+      lifetimeYears: 25,
+    },
+    battery: {
+      enabled: false,
+      preset: 'ecoflow-stream-ultra-x',
+      layout: 'shared',
+      units: 2,
+      unitCapacityWh: 3840,
+      pvInputW: 4000,
+      chargeW: 3000,
+      dischargeW: 2400,
+      acLimitW: 600,
+      chargeEfficiencyPct: 95,
+      dischargeEfficiencyPct: 95,
+      minSocPct: 10,
+      standbyW: 0,
+      strategy: 'surplus',
+      baseLoadW: 200,
+      consumptionKwh: 2500,
+      loadProfile: 'h0',
+      investment: 2998,
+      replacedInvestment: 0,
+    },
+  },
 });
 
+/** Section `s` of `base`, or of the first base that has it (sections added in later versions). */
+function baseSection(base: ShareBase, s: SectionKey): Rec {
+  const own = (base as unknown as Record<string, unknown>)[s];
+  if (isRecord(own)) return own;
+  for (let v = 1; v <= SHARE_VERSION; v++) {
+    const later = (SHARE_BASES[v] as unknown as Record<string, unknown>)[s];
+    if (isRecord(later)) return later;
+  }
+  return {};
+}
+
 /** Base of payload version `v`: 1 when absent or unknown, the newest base for versions from a newer app. */
-function shareBase(v: unknown): Config {
+function shareBase(v: unknown): ShareBase {
   if (typeof v !== 'number' || !Number.isInteger(v)) return SHARE_BASES[1];
   if (v > SHARE_VERSION) return SHARE_BASES[SHARE_VERSION];
   return hasOwn(SHARE_BASES, String(v)) ? SHARE_BASES[v] : SHARE_BASES[1];
@@ -500,6 +611,30 @@ const ALIASES: AliasTable = {
       lifetimeYears: 'y',
     },
   },
+  battery: {
+    key: 'x',
+    fields: {
+      enabled: 'e',
+      preset: 'p',
+      layout: 'l',
+      units: 'u',
+      unitCapacityWh: 'c',
+      pvInputW: 'v',
+      chargeW: 'i',
+      dischargeW: 'o',
+      acLimitW: 'a',
+      chargeEfficiencyPct: 'ci',
+      dischargeEfficiencyPct: 'co',
+      minSocPct: 'm',
+      standbyW: 'sb',
+      strategy: 's',
+      baseLoadW: 'b',
+      consumptionKwh: 'k',
+      loadProfile: 'lp',
+      investment: 'n',
+      replacedInvestment: 'r',
+    },
+  },
 };
 
 const OBSTACLE_ALIASES: { [F in keyof Obstacle]-?: string } = {
@@ -542,7 +677,7 @@ function compactDiff(c: Config): Rec {
   const base = SHARE_BASES[SHARE_VERSION];
   for (const s of SECTION_KEYS) {
     const cur = c[s] as unknown as Rec;
-    const def = base[s] as unknown as Rec;
+    const def = baseSection(base, s);
     const fields = ALIASES[s].fields as Record<string, string>;
     const sec: Rec = {};
     for (const [full, alias] of Object.entries(fields)) {
@@ -566,10 +701,10 @@ function compactDiff(c: Config): Rec {
  * as well). Unknown keys are dropped.
  */
 function expandPayload(o: Rec): Rec {
-  const out: Rec = { version: 2 };
+  const out: Rec = { version: 3 };
   const base = shareBase(ownValue(o, 'v'));
   for (const s of SECTION_KEYS) {
-    const def = base[s] as unknown as Rec;
+    const def = baseSection(base, s);
     const src = pick(o, ALIASES[s].key, s);
     const sec: Rec = { ...def };
     if (isRecord(src)) {
