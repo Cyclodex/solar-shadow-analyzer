@@ -457,6 +457,70 @@ Jedes Feature ergänzt diesen Abschnitt nur in seinem eigenen Unterabschnitt (ne
 nur in seiner eigenen Zeile. Die E2E-Specs blockieren `geo.admin.ch` bereits (`page.route`); eigene Specs mocken die
 Antworten.
 
+### C, Gebäude: Prismen-Horizont, Import und Liste (Teil 1)
+
+- **Prismen-Horizont** (`model/buildings.ts` `prismHorizonTangents`, exakter Kantensweep): Jede Grundrisskante deckt
+  vom Beobachter aus ein Azimutintervall; für jeden Horizontschritt darin ist der Abstand t des Strahls zur Kante
+  exakt, und ein flaches Dach ist an der nächsten Kreuzung am höchsten (tan = (Dach − z) / t). Alle Höhen einer
+  Beobachterposition in einem Durchgang, beliebige Umlaufrichtung, Höfe als Schlüssellochring ohne Sonderfall;
+  Prismen, die den Beobachter enthalten, zählen nicht (wie bei `obstacleHorizon`). Gegen `obstacleHorizon` auf 1'000
+  Quadern (5 Fassaden, 6 Höhen) höchstens 1.4e-14°, gegen einen Strahltest je Azimut auf konkaven Sternpolygonen
+  unter 1e-9°, gegen einen Marsch in 1-cm-Schritten (U-Form, Hof) höchstens ein Schritt (Tests). Ein Prisma mit Basis
+  über dem Beobachter zählt bis zum Boden (ein Horizontprofil hat keine Lücken).
+- **`prismFloorHorizons`** (`buildingHorizon.ts`): Regeln von `prismBuildings`/`ownBuildingIds`, Beobachter =
+  Panelmitte jedes Stockwerks (Stockwerke gleicher Position in einem Sweep); die Prismen im Fassadenrahmen bleiben für
+  die letzte Kombination aus Gebäudeliste, Anker, Standort, Fassade und dsmActive gemerkt (der Neigungs-Sweep ändert
+  nur die Beobachter); `null`, wenn nichts über eine Panelmitte ragt. Gemessen (Node 22, Xeon 2.1 GHz, je 120
+  importierte Gebäude, 940–1'024 Ecken, 8 Stockwerke): 0.5–0.9 ms je Aufruf, alle 19 Neigungen 6.5–11 ms.
+- **Import** (`hooks/useBuildingImport.ts`, Zustand `state/buildingImportStore.ts`, nicht persistiert): nach einer
+  Adresswahl (`useBuildingImportLoader`, in `<DataLoader/>` gemountet: die einzige Änderung am Fundament, weil
+  «Horizont & Umgebung» seinen Inhalt nur offen rendert) oder mit «Gebäude laden» um den Standort:
+  `fetchSwisstopoBuildings(Punkt, surfaceModel.radius)` mit Fortschritt (Kacheln, dann Auswahl), Abbrechen, Fehler mit
+  «Erneut versuchen»; ausserhalb CH/FL `unavailable` (Config unverändert), bei `coverage < 1` der Hinweis «Gebäude
+  ausserhalb der Schweiz und Liechtensteins fehlen». Eigenes Gebäude: der Teil, der den Punkt 0.5 m hinter dem
+  Fassadenursprung enthält (nur «Gebäude laden»), sonst der den Adresspunkt enthält, sonst der nächste bis 25 m.
+  Gespeichert werden Anker (Importpunkt, 1e-6°), Radius und das lokale Datum; importierte Gebäude werden ersetzt, von
+  Hand erfasste bleiben (auf den neuen Anker umgerechnet; über 2 km davon entfernt fallen sie weg, gemeldet), ids
+  `b<Index + 1>` (kompakte Form im Teilen-Link). Eine Adresswahl schaltet den Laserscan ein und setzt
+  `sitePlanRequest` (Teil 2 öffnet damit den Lageplan, `consumeSitePlanRequest`), auch wenn der Import scheitert.
+  Tragen importierte Gebäude Änderungen (entfernt, bearbeitet), fragt «Neu laden» zuerst (`pendingConfirm`); nach
+  einer Adresswahl nur, wenn die Adresse im Radius des bisherigen Imports liegt, weiter weg gehören die Änderungen
+  zu einem anderen Ort. Ein neuer Import bricht einen laufenden ab.
+- **Ausdünnen** (`horizonScores`, `planImport`): Beim Import sind Fassade und Balkon noch nicht bestätigt. Die
+  Beobachter stehen deshalb an jeder wählbaren Fassade des eigenen Gebäudes (höchstens 3 m auseinander, von Ende zu
+  Ende) und an der eingestellten Fassade, in den Höhen der eingestellten Stockwerke und ab 0.5 m alle 3 m bis zur
+  Dachhöhe (das oberste Geschoss sieht am weitesten), je in beiden Panelmitten-Abständen (0° und 90° Neigung). Je
+  Horizontschritt vor der Fassade wird das höchste Prisma gemerkt (argmax); Punktzahl eines Gebäudes = höchster
+  Winkel, den es so setzt. Behalten wird in dieser Reihenfolge, bis 120 Gebäude und 1'600 Ecken (Reserve von 30
+  Gebäuden und 400 Ecken für Eingaben von Hand; `sanitizeConfig` würde spätere Gebäude sonst stillschweigend
+  abschneiden): das eigene Gebäude, angrenzende Teile (≤ 0.5 m, damit der Lageplan Brandmauern erkennt), die
+  Horizontsetzer nach Punktzahl (ein weggelassenes Gebäude verändert den Horizont höchstens um seine Punktzahl; die
+  Anzahl und dieser Wert werden gemeldet), dann die übrigen Teile im 60-m-Umkreis nach Abstand (Lageplan und
+  3D-Ansicht; 60 m wie der Schattenausschnitt der 3D-Szene). An den Beobachtern bleibt der Horizont gleich (Test);
+  gemessen dazwischen (alle 1 m entlang aller Fassaden, 8 Stockwerke, drei Panelabstände, 300 m): Breitenrainstrasse
+  10 höchstens 0.26°, Kramgasse 49 0.00° bis 80° neben der Fassadennormale und 2.05° bei streifendem Blick (84°, 0.6 m
+  hoch). Ergebnis im Browser: Kramgasse 1'513 Teile → 120 (85 setzen den Horizont), Breitenrain 536 → 119 (107);
+  Auswahl 50–130 ms (Node), im Browser in Schritten zwischen den Frames. Teilen-Link damit 9'400–11'300 Zeichen.
+- **Fassadenkanten** (`facadeEdges`): Aussennormale als geographischer Azimut, Länge, Anteil an anderen Teilen
+  (Proben 0.5 m vor der Kante); Brandmauer ab der Hälfte (auch zu Teilen des eigenen Gebäudes), die Brücken eines
+  Schlüssellochrings sind innen, wählbar ab 2 m; Hofkanten schauen in den Hof. Für Teil 2 ausserdem `edgePoint`,
+  `projectOntoEdge`, `footprintToFacade`, `rectFootprint` (Rechteck im Fassadenrahmen → ENU, 0.1 m),
+  `reanchorFootprint`, `buildingBearing`, `manualAnchor` und `controls/siteplan/buildingData.ts` (Namen
+  «Gebäude k» aus der id, `useSiteGeometry`).
+- **Liste** (`controls/horizon/BuildingList.tsx` mit `BuildingItem`, `BuildingImportStatus`, `AddBuildingForm`):
+  Zusammenfassung (Anzahl, davon von Hand, Quelle swisstopo, Stand, entfernte), «im Laserscan enthalten» bei
+  dsmActive, aufklappbare Liste (eigenes Gebäude zuerst, dann nach Abstand vom Balkon; 20, dann «Alle anzeigen») mit
+  Name, Höhe und Basis (ändern → `edited`), Abstand und Richtung (unter 0.5 m «angrenzend»), Entfernen (importiert →
+  `removed`, bleibt mit «wiederherstellen» an seinem Platz und behält den Fokus; von Hand → gelöscht, Fokus auf
+  «Gebäude hinzufügen»), Rechteck von Hand (Abstand, Versatz, Breite, Tiefe, Drehung, Höhe, Basis; ohne Anker wird
+  der Standort zum Anker mit Radius 0), leerer Zustand mit Hinweis auf die Adresssuche. Die Eingabe von Hand erhält den
+  Fokus als Gruppe (auf Handys keine Bildschirmtastatur), ist kein `<form>` (Enter übernimmt nur das Feld). Alle
+  Knöpfe `--touch`.
+- **Tests**: `buildings.test.ts`, `buildingHorizon.test.ts` (Modell), `useBuildingImport.test.tsx` (Import mit
+  gemocktem `fetchSwisstopoBuildings`, auch StrictMode), `BuildingList.test.tsx`, `e2e/buildings.spec.ts`
+  (synthetische Vektorkacheln per `page.route`: laden, entfernen, nach dem Neuladen gespeichert, Rückfrage beim
+  Neu laden, iPhone ohne waagrechtes Scrollen und mit 44-px-Zielen).
+
 ## i18n
 
 Jede Komponente definiert ihre Texte lokal:
