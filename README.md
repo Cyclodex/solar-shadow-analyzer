@@ -179,7 +179,8 @@ ruft direkt aus dem Browser folgende Dienste auf:
 - **swisstopo / geo.admin.ch** (nur für die Schweiz und Liechtenstein; freie Geodaten, «© swisstopo»,
   [Nutzungsbedingungen](https://www.swisstopo.admin.ch/de/nutzungsbedingungen-kostenlose-geodaten-und-geodienste)):
   - Adresssuche (`api3.geo.admin.ch`): erhält den Suchtext bei einer Adresssuche; nach der Wahl einer Adresse die
-    Gebäudeangaben aus dem Gebäude- und Wohnungsregister (Geschosse, Baujahr) und die Höhe am Standort (Koordinaten).
+    Gebäudeangaben aus dem Gebäude- und Wohnungsregister (Geschosse, Baujahr) und die Höhe am Standort (Koordinaten);
+    die Koordinaten des Gerätestandorts nur bei einem Klick auf «Nächste Adresse übernehmen» (nach «Mein Standort»).
   - Gebäude der Basiskarte (`vectortiles.geo.admin.ch`): Kartenkacheln rund um den Standort (etwa 0.2–0.7 MB),
     nach der Wahl einer Adresse und bei einem Import der Gebäude.
   - Oberflächenmodell swissSURFACE3D und Geländemodell swissALTI3D (`data.geo.admin.ch`): Ausschnitte rund um den

@@ -61,6 +61,8 @@ Die Phasen des alten Plans und ihre Umsetzung:
     Versionswechsel), Koordinaten auf 1e-6°, Teilen-Links mit Gebäuden, WGS84 ⇄ LV95 und lokale Meter,
     Gebäude-Import aus den swisstopo-Vektorkacheln (zusammengefügt an Kachelkanten), Rechenregeln, Ladezustände und
     Platzhalter der Oberfläche.
+  - Erledigt, Adresssuche (A): Adressen der Schweiz und Liechtensteins (swisstopo) und Orte in einer Suche,
+    Gebäudeangaben aus dem GWR, Höhe vom Höhendienst, «Nächste Adresse übernehmen», Koordinaten auf 6 Stellen.
   - Offen: Adresssuche mit Gebäudeangaben (GWR) und Import der Umgebung nach der Wahl einer Adresse;
     Laserscan-Horizont (swissSURFACE3D) je Stockwerk und Neigung im Web Worker, Bäume wahlweise; Nachbargebäude als
     bearbeitbare Prismen, Lageplan zum Bestätigen von Fassade und Balkon, Gebäude in der 3D-Ansicht und im
