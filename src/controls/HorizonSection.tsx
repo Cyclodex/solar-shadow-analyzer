@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { Section } from '../components/Section';
 import { Toggle } from '../components/Toggle';
 import { useMessages, type Messages } from '../i18n';
@@ -6,10 +7,15 @@ import { BuildingList } from './horizon/BuildingList';
 import { HorizonSparkline } from './horizon/HorizonSparkline';
 import { ManualHorizon } from './horizon/ManualHorizon';
 import { ObstacleList } from './horizon/ObstacleList';
-import { SurfaceModelControls } from './horizon/SurfaceModelControls';
 import { TerrainStatus } from './horizon/TerrainStatus';
 import sections from './sections.module.css';
 import styles from './HorizonSection.module.css';
+
+// The laser-scan settings load with the section's first opening (the section renders its content only open),
+// like the building list (docs/ARCHITECTURE.md "Laden und Rechenlast").
+const SurfaceModelControls = lazy(() =>
+  import('./horizon/SurfaceModelControls').then((m) => ({ default: m.SurfaceModelControls })),
+);
 
 const de = {
   title: 'Horizont & Umgebung',
@@ -73,7 +79,9 @@ export function HorizonSection() {
       <div className={styles.chart}>
         <HorizonSparkline />
       </div>
-      <SurfaceModelControls />
+      <Suspense fallback={null}>
+        <SurfaceModelControls />
+      </Suspense>
       <BuildingList />
       <ObstacleList />
       <ManualHorizon />

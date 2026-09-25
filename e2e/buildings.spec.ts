@@ -136,8 +136,12 @@ function tileBytes(x: number, y: number): Uint8Array {
   );
 }
 
-/** The synthetic address: 6 m north of SITE, inside the own building. */
-const ADDRESS = enuToLonLat(SITE, 0, 6);
+/**
+ * The synthetic address: 2 m north of SITE, inside the own building by its south wall (an entrance). Until the
+ * facade is confirmed the location is this point: the building across the street is 22 m away, within the
+ * 25 m of «Eigenes Gebäude» (from 6 m inside it would be 26 m and not offered).
+ */
+const ADDRESS = enuToLonLat(SITE, 0, 2);
 
 /** SearchServer answer for the synthetic address (the shape of api3.geo.admin.ch, see geocode fixtures). */
 function searchResult(): unknown {
@@ -309,23 +313,16 @@ async function openSection(page: Page, name: RegExp, touch: boolean): Promise<vo
 }
 
 /**
- * Imports the surroundings: with the address search (feature A) by picking the synthetic address (the site
- * plan then opens by itself), else with «Gebäude laden» and opening the «Gebäude» section.
+ * Imports the surroundings by picking the synthetic address (feature A): location = the address, the buildings
+ * are imported around it and the site plan opens by itself.
  */
 async function importSurroundings(page: Page, touch: boolean): Promise<void> {
   const press = (l: Locator): Promise<void> => (touch ? l.tap() : l.click());
   await openSection(page, /^Standort/, touch);
   const search = page.getByRole('combobox', { name: 'Adresse oder Ort suchen' });
-  if ((await search.count()) > 0) {
-    await press(search);
-    await search.pressSequentially('Teststrasse 1', { delay: 30 });
-    await press(page.getByRole('option', { name: /Teststrasse 1, 3000 Bern/ }));
-    return;
-  }
-  await openSection(page, /^Horizont & Umgebung/, touch);
-  await press(page.getByRole('button', { name: 'Gebäude laden' }));
-  await expect(page.getByText(/^3 Gebäude · Quelle swisstopo/)).toBeVisible({ timeout: 20_000 });
-  await openSection(page, /^Gebäude\s?\d+°/, touch);
+  await press(search);
+  await search.pressSequentially('Teststrasse 1', { delay: 30 });
+  await press(page.getByRole('option', { name: /Teststrasse 1, 3000 Bern/ }));
 }
 
 /** Screen centre of the facade edge `index` of the own building on the plan (a line, 0 px wide if vertical). */
@@ -360,6 +357,12 @@ function differingPixels(a: Buffer, b: Buffer): number {
 test('site plan: facade and balcony set the location; the buildings show in the list and in 3D', async ({
   page,
 }) => {
+  // The laser scan (data.geo.admin.ch, blocked here) waits while the location is the address point inside
+  // the own building: nothing is requested before «Übernehmen».
+  const scans: string[] = [];
+  page.on('request', (r) => {
+    if (/data\.geo\.admin\.ch/.test(r.url())) scans.push(r.url());
+  });
   await page.goto('./');
   await importSurroundings(page, false);
   const plan = page.getByRole('group', { name: 'Lageplan, Norden oben' });
@@ -369,9 +372,10 @@ test('site plan: facade and balcony set the location; the buildings show in the 
   // The own building stands alone: all four walls are facades.
   const select = page.getByRole('combobox', { name: 'Fassade mit dem Balkon' });
   await expect(select.locator('option')).toHaveText([/^0° N/, /^90° O/, /^180° S/, /^270° W/]);
-  // Keyboard alternative to tapping another building: «Eigenes Gebäude» (imported ones within 25 m).
+  // Keyboard alternative to tapping another building: «Eigenes Gebäude» (imported ones within 25 m of the
+  // location, here still the address).
   const own = page.getByRole('combobox', { name: 'Eigenes Gebäude' });
-  await expect(own.locator('option')).toHaveText([/^Gebäude 1 · /, /^Gebäude 2 · 20\sm S$/]);
+  await expect(own.locator('option')).toHaveText([/^Gebäude 1 · am Standort$/, /^Gebäude 2 · 22\sm S$/]);
   await own.selectOption({ label: (await own.locator('option').nth(1).textContent()) ?? '' });
   await expect(select.locator('option')).toHaveText([/^0° N · 30/, /^90° O/, /^180° S/, /^270° W/]);
   await page.getByRole('button', { name: 'Verwerfen' }).click();
@@ -388,8 +392,11 @@ test('site plan: facade and balcony set the location; the buildings show in the 
   await along.fill('4');
   await along.press('Enter');
   await expect(page.getByText(/Noch nicht übernommen/)).toBeVisible();
+  expect(scans).toEqual([]);
   await page.getByRole('button', { name: 'Übernehmen', exact: true }).click();
   await expect(page.getByText('Balkon an der Fassade 180° S des eigenen Gebäudes.')).toBeVisible();
+  // Now it loads for the balcony (STAC first).
+  await expect.poll(() => scans.some((u) => u.includes('/stac/')), { timeout: 15_000 }).toBe(true);
 
   // Location = the balcony on the south wall (≈ 4 m east of its west corner at −8 m), 1e-6°.
   await expect.poll(async () => (await hashConfig(page)).b?.a).toBe(180);

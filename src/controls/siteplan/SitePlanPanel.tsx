@@ -17,6 +17,7 @@ import { useUiStore } from '../../state/uiStore';
 import { useTimeStore } from '../../state/timeStore';
 import sections from '../sections.module.css';
 import { buildingName, useSiteGeometry } from './buildingData';
+import { hasScrollAnchoring, holdInView } from './holdInView';
 import { SitePlanMap, type MapBuilding } from './SitePlanMap';
 import { useSun } from './useSun';
 import {
@@ -237,6 +238,7 @@ export function SitePlanPanel() {
   const [notice, setNotice] = useState('');
   const [announcement, setAnnouncement] = useState('');
   const rootRef = useRef<HTMLDivElement>(null);
+  const releaseHold = useRef<(() => void) | null>(null);
   const bodyId = useId();
 
   const autoOwn = useMemo(
@@ -278,12 +280,20 @@ export function SitePlanPanel() {
     // «Gebäude laden» with the balcony already on a facade: nothing to confirm.
     if (r.reason === 'manual' && placed) return;
     useBuildingImportStore.setState({ sitePlanOpen: true, sitePlanGuide: true });
-    // An instant jump: results above may still grow while they load, and the browser's scroll anchoring
-    // keeps the plan in place then (a smooth scroll would end short of it).
+    // An instant jump (a smooth scroll would end short of it while the results above still grow). The
+    // browser's scroll anchoring then keeps the plan in place; without it (holdInView) the plan is held there
+    // until the user scrolls, taps or types.
     if (r.reason === 'address') {
-      requestAnimationFrame(() => rootRef.current?.scrollIntoView?.({ block: 'start' }));
+      requestAnimationFrame(() => {
+        const el = rootRef.current;
+        if (!el?.scrollIntoView) return;
+        el.scrollIntoView({ block: 'start' });
+        releaseHold.current?.();
+        releaseHold.current = hasScrollAnchoring() ? null : holdInView(el);
+      });
     }
   }, [request, hasSite, placed]);
+  useEffect(() => () => releaseHold.current?.(), []);
 
   // Nothing to place without stored buildings (the building list explains the import).
   if (!hasSite) return null;

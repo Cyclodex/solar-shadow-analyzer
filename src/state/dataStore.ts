@@ -47,9 +47,10 @@ export interface WeatherData {
 /**
  * Load state of the laser-scan (swissSURFACE3D) horizon: idle = off; loading; ready = `horizons` belong to
  * `siteKey`; error = load failed (results use the prism fallback); unavailable = no scan data at the site
- * (outside CH/FL).
+ * (outside CH/FL); waiting = the location lies inside its building (a picked address before «Übernehmen» in
+ * the site plan): nothing loads until it is on the facade (results use the prisms, as after an error).
  */
-export type SurfaceStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable';
+export type SurfaceStatus = 'idle' | 'loading' | 'ready' | 'error' | 'unavailable' | 'waiting';
 
 export interface SurfaceData {
   status: SurfaceStatus;

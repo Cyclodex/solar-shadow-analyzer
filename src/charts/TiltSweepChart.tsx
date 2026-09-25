@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { ViewCard } from '../components/ViewCard';
 import { Button } from '../components/Button';
 import { useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
@@ -489,6 +489,23 @@ export function TiltSweepChart() {
   // Provisional while inputs load, and while the sweep is recomputed after another input changed.
   const busy = !sweep || pending || sweep.updating === true;
 
+  // While the first sweep of a new site computes (sweep null), the card keeps the height it had with the
+  // chart: without it the card shrank by 231 px for 60–240 ms and grew back, the scroll anchoring of the
+  // browser followed the shrink but not the growth, and the site plan below (opened by an address pick) moved
+  // 232 px after its jump. Set on the DOM before paint; the first render of the app has nothing to keep.
+  const captionRef = useRef<HTMLParagraphElement>(null);
+  const keptHeight = useRef(0);
+  useLayoutEffect(() => {
+    const card = captionRef.current?.closest('section');
+    if (!card) return;
+    if (sweep) {
+      card.style.minHeight = '';
+      keptHeight.current = card.getBoundingClientRect().height;
+    } else if (keptHeight.current > 0) {
+      card.style.minHeight = `${keptHeight.current}px`;
+    }
+  }, [sweep, geom, table]);
+
   return (
     <ViewCard
       title={t.title}
@@ -570,7 +587,9 @@ export function TiltSweepChart() {
           <div className={chart.empty}>{t.waiting}</div>
         )}
       </div>
-      <p className={chart.caption}>{[source, t.steps].filter(Boolean).join(' ')}</p>
+      <p ref={captionRef} className={chart.caption}>
+        {[source, t.steps].filter(Boolean).join(' ')}
+      </p>
     </ViewCard>
   );
 }

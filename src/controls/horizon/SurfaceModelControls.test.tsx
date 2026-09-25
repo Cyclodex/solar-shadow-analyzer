@@ -111,6 +111,15 @@ describe('SurfaceModelControls', () => {
     );
   });
 
+  it('inside the own building (address point): waits for the site plan', () => {
+    enable();
+    act(() => useDataStore.getState().setSurface({ status: 'waiting' }));
+    render(<SurfaceModelControls />);
+    expect(screen.getByRole('status')).toHaveTextContent(
+      /^Der Laserscan wartet auf den Lageplan: .* Nach «Übernehmen» von Fassade und Balkon im Abschnitt «Gebäude» wird er für diese Stelle geladen/,
+    );
+  });
+
   it('an error explains the fallback and retries', () => {
     enable();
     act(() =>

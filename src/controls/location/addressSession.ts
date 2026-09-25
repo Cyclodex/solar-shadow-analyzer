@@ -1,12 +1,7 @@
 import { create } from 'zustand';
 import { LIMITS } from '../../model/defaults';
-import {
-  fetchBuildingInfo,
-  fetchGroundHeight,
-  type BuildingInfo,
-  type GeoErrorKind,
-  type SwissAddress,
-} from '../../model/geocode';
+import type { BuildingInfo, GeoErrorKind, SwissAddress } from '../../model/geocode';
+import { withGeocode } from '../../model/geocodeLazy';
 import { wgs84ToLv95 } from '../../model/lv95';
 import type { LocationConfig } from '../../model/types';
 import { useConfigStore } from '../../state/configStore';
@@ -65,7 +60,7 @@ function loadBuilding(address: SwissAddress): void {
   const ctrl = new AbortController();
   buildingRequest = ctrl;
   useAddressSession.setState({ building: { status: 'loading' } });
-  void fetchBuildingInfo(address.featureId, { signal: ctrl.signal }).then((res) => {
+  void withGeocode((m) => m.fetchBuildingInfo(address.featureId, { signal: ctrl.signal })).then((res) => {
     if (ctrl.signal.aborted || useAddressSession.getState().address !== address) return;
     useAddressSession.setState({
       building: res.ok ? { status: 'ready', info: res.value } : { status: 'error', error: res.error.kind },
@@ -94,7 +89,7 @@ export function applyAddress(address: SwissAddress): void {
   heightRequest = ctrl;
   useAddressSession.setState({ address });
   loadBuilding(address);
-  void fetchGroundHeight(address.lv95, { signal: ctrl.signal }).then((res) => {
+  void withGeocode((m) => m.fetchGroundHeight(address.lv95, { signal: ctrl.signal })).then((res) => {
     if (!res.ok || ctrl.signal.aborted || useAddressSession.getState().address !== address) return;
     const { location } = useConfigStore.getState().config;
     if (addressMatchesLocation(address, location)) {

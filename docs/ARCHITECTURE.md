@@ -80,11 +80,14 @@ src/
                            Eingaben), loadError.ts + LoadErrorDetails (übersetzte Ursache eines Ladefehlers,
                            technische Meldung aufklappbar), useTimeSlider (Uhrzeitregler für TimeControls und
                            BottomBar)
-    location/              PlaceSearch, PresetSelect, MyLocationButton, CompassDial, TimeZoneField, timeZones
+    location/              PlaceSearch (Adressen und Orte), AddressBuilding + addressBuildingText (Gebäuderegister),
+                           addressSession (gewählte Adresse), PresetSelect, MyLocationButton, CompassDial,
+                           TimeZoneField, timeZones
     horizon/               TerrainStatus, SurfaceModelControls (Laserscan), BuildingList (Umgebungsgebäude),
                            ObstacleList/ObstacleItem, ManualHorizon (inkl. PVGIS-Dateiimport), HorizonSparkline,
                            horizonData
-    siteplan/              SitePlan (Lageplan: Fassade und Balkon bestätigen)
+    siteplan/              SitePlan (Lageplan: Fassade und Balkon bestätigen; SitePlanPanel/SitePlanMap lazy),
+                           sitePlanModel, holdInView (hält den Lageplan ohne Scroll-Verankerung)
   views/                   2D-Ansichten: FrontalView, ProfileView (Seite), SunPathView, PanelShadowView
     svg/                   Reine Layout-Module ohne React (frontalLayout, profileLayout, sunPathLayout,
                            panelShadowLayout, geometry2d, legend, constants) + SvgFigure, Legend, ViewNotice,
@@ -106,8 +109,9 @@ src/
                            (JSON speichern/laden), clipboard, download, filenames, Druckbericht (print.ts, print.css,
                            PrintReport.tsx, PrintRoot.tsx), canvasRender (Canvas vor PNG-Export/Druck synchron neu
                            zeichnen)
-  hooks/                   useModel (memoisierte Modell-Hooks) + cache.ts, useTerrain/useWeather/useSurfaceModel
-                           (je Loader + Leser), useAnimation, useMediaQuery (Layouts aus app/layout.ts,
+  hooks/                   useModel (memoisierte Modell-Hooks) + cache.ts, useTerrain/useWeather (je Loader +
+                           Leser), useSurfaceModel (Leser) + surfaceModelLoader (Laserscan-Lader, lazy),
+                           useBuildingImport (lazy) + Import-Worker, useAnimation, useMediaQuery (Layouts aus app/layout.ts,
                            pointer: coarse), useNearViewport (Karten weit unter dem Bildschirm rechnen nicht,
                            ausser im Druck)
   state/                   configStore, timeStore, uiStore, dataStore, shareLinkStore (Hinweise zum Teilen-Link),
@@ -260,7 +264,8 @@ Laden (`useTerrainLoader`, einmal in `<DataLoader/>` gemountet):
   `consumeSurroundingsImport`, siehe [Umgebung](#umgebung-adresse-laserscan-gebäude)).
 - `useDataStore` (nicht persistiert): Gelände-Horizont, Wetterreihe und Laserscan-Horizonte (`surface`) inkl.
   Ladezustand/Fehler; geschrieben von den Loadern in `hooks/useTerrain.ts`, `hooks/useWeather.ts` und
-  `hooks/useSurfaceModel.ts` (einmal in `<DataLoader/>` gemountet).
+  `hooks/surfaceModelLoader.ts` (einmal in `<DataLoader/>` gemountet, der Laserscan-Lader erst, sobald er in der
+  Sitzung eingeschaltet ist).
 - `useShareLinkStore` (nicht persistiert, von `resetStores()` zurückgesetzt): Hinweise zum Teilen-Link für die
   WarningsBar (ersetzte eigene Config wiederherstellen, ungültiger Link).
 - URL-Hash `#c=…` überschreibt beim Laden die gespeicherte Config (Teilen-Link, `state/urlSync.ts`); ein nicht
@@ -278,11 +283,11 @@ Laden (`useTerrainLoader`, einmal in `<DataLoader/>` gemountet):
 
 ## Umgebung: Adresse, Laserscan, Gebäude
 
-Stand: in Arbeit (PLAN.md). Das Fundament (Config-Vertrag, Koordinaten, Rechenregeln, Gebäude-Import, Zustände,
-Platzhalter der UI) ist gelegt; Adresssuche, Laserscan-Horizont und Gebäude entstehen parallel (siehe
-[Zuständigkeiten](#zuständigkeiten-der-parallelen-arbeit)). Nur Schweiz und Liechtenstein; ausserhalb bleibt alles wie
-bisher (Ortssuche Open-Meteo, Hindernisse als Quader, Terrarium-Gelände). Messungen und Quellen: Recherche vom
-25.09.2026.
+Stand: umgesetzt (PLAN.md). Fundament, Adresssuche (A), Laserscan-Horizont (B) und Gebäude (C) entstanden parallel
+(siehe [Zuständigkeiten](#zuständigkeiten-der-parallelen-arbeit)) und sind zusammengeführt
+([Integration](#integration-adresse-laserscan-und-gebäude-zusammen)). Nur Schweiz und Liechtenstein; ausserhalb bleibt
+alles wie bisher (Ortssuche Open-Meteo, Hindernisse als Quader, Terrarium-Gelände). Messungen und Quellen: Recherche
+vom 25.09.2026.
 
 ### Konventionen (verbindlich)
 
@@ -354,8 +359,12 @@ Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200
   ∪ Prismen ∪ Laserscan (falls dsmActive): `floorHorizonsWithTerrain(config, terrain, surroundings)`
   (`hooks/useTerrain.ts`); `useHorizons`, Jahresrechnung, Heatmap und Neigungs-Sweep geben die `SurroundingsSource`
   (`useSurroundingsSource`) mit. Mit Gebäuden oder Laserscan rechnet der Sweep jede Neigung mit eigenen Horizonten.
-- **Prismen:** `prismBuildings(buildings, dsmActive, ownBuildingIds(…))`: mit dsmActive nur `source: 'manual'` oder
-  `edited`, sonst alle; entfernte nie; das eigene Gebäude nie (`buildingHorizon.ts prismFloorHorizons`).
+- **Prismen:** `prismBuildings(buildings, dsmActive)`: mit dsmActive nur `source: 'manual'` oder `edited`, sonst
+  alle; entfernte nie (`buildingHorizon.ts prismFloorHorizons`). Vom eigenen Gebäude (`ownBuildingIds`) zählt nur
+  der Teil vor der Balkonzone, n > Balkontiefe + 0.5 m (`ownPrismPieces`, dieselbe Zone wie beim Laserscan unten:
+  ein Flügel desselben Teils vor der Fassade schattet), und nur solange der Standort auf seiner Wand liegt (höchstens
+  0.5 m neben dem Umriss) und die Fassade nach aussen zeigt (der Punkt 1 m davor liegt ausserhalb). Sonst, etwa mit
+  dem Adresspunkt im Gebäude vor «Übernehmen» im Lageplan, zählt das eigene Gebäude gar nicht.
 - **Masken des Laserscans** (Worker): Zellen in Grundrissen mit `removed || edited` (`dsmMaskPolygons`) → Boden (DTM).
   Mit `trees === false` wird jede Zelle ausserhalb der Vereinigung _aller_ swisstopo-Gebäudegrundrisse im Radius (der
   Worker lädt die Kacheln vollständig, nicht nur die gespeicherten Gebäude) zu Boden.
@@ -374,6 +383,13 @@ Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200
 - **Laden:** Solange der Laserscan lädt, gelten die Prismen aller Gebäude und die Jahreswerte sind vorläufig
   (`useSurfacePending` in `useTerrainPending`); nach einem Fehler oder ausserhalb der Abdeckung (keine STAC-Items:
   Status `'unavailable'`, Hinweis «nur in der Schweiz und Liechtenstein verfügbar») ebenfalls die Prismen.
+- **Standort im eigenen Gebäude:** Liegt der Standort in einem Gebäude des Imports, das der Laserscan enthält (nicht
+  entfernt, nicht bearbeitet), oder auf dessen Umriss mit der Fassade nach innen
+  (`buildingHorizon.ts locationInsideOwnBuilding`), wartet der Laserscan (Status `'waiting'`, kein Download, keine
+  Rechnung): Sein Horizont wäre das Gebäude selbst. Es gelten die Prismen ohne das eigene Gebäude, die Jahreswerte
+  sind nicht vorläufig (wie nach einem Fehler); der Status nennt den Lageplan. Ein Download wartet ausserdem, solange
+  ein Gebäude-Import angefragt ist oder läuft (dessen Gebäude entscheiden das). Siehe
+  [Integration](#integration-adresse-laserscan-und-gebäude-zusammen).
 - **Offene Annahmen:** Bäume gelten ganzjährig als undurchsichtig (Befliegungen meist ohne Laub, Bern März 2023);
   Prismen mit flachem Dach überschätzen Schrägdächer (RMS 5.7–10.2° gegen den Laserscan an einem Ort); importierte
   Gebäude stehen auf dem Boden des Standorts (Basis 0); ob die Grundrisse Dachüberstände enthalten, ist offen.
@@ -428,7 +444,9 @@ Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200
 - **Ablauf nach einer Adresswahl:** Die Adresssuche setzt Standort (Label, 1e-6°, Zeitzone Europe/Zurich bzw.
   Europe/Vaduz, Höhe vom Höhendienst) und ruft `useUiStore.requestSurroundingsImport(lat, lon)`; der Gebäude-Import
   holt die Anfrage mit `consumeSurroundingsImport()` ab (einmal je Anfrage), importiert die Gebäude im Radius
-  `surfaceModel.radius`, schaltet den Laserscan ein und öffnet den Lageplan.
+  `surfaceModel.radius`, schaltet den Laserscan ein und öffnet den Lageplan. Der Laserscan lädt erst nach
+  «Übernehmen» im Lageplan (vorher liegt der Standort im eigenen Gebäude, siehe Rechenregeln und
+  [Integration](#integration-adresse-laserscan-und-gebäude-zusammen)).
 
 ### Zuständigkeiten der parallelen Arbeit
 
@@ -518,7 +536,8 @@ Antworten.
 - **Dateien:** `model/cog.ts` (COG-Leser), `model/dsm.ts` (STAC, Mosaik, Boden, Masken, Strahlengang, Speicher des
   Workers), `model/dsmEstimate.ts` (was die Seite braucht: Ausdehnung, Algorithmusversion, Datenschlüssel,
   Schätzung der Datenmenge; von `dsm.ts` wieder exportiert), `workers/*` (Auftrag `dsm`),
-  `hooks/useSurfaceModel.ts` (Loader, Ergebnis-Cache, Leser), `controls/horizon/SurfaceModelControls.tsx`,
+  `hooks/useSurfaceModel.ts` (Leser; Loader und Ergebnis-Cache seit der Integration in
+  `hooks/surfaceModelLoader.ts`, eigener Chunk), `controls/horizon/SurfaceModelControls.tsx`,
   `controls/horizon/provisional.ts` (Text der Hinweise «vorläufig» in KpiBar, TiltControl und ShadeHeatmap),
   `test/cogFixture.ts` (synthetische COGs, STAC, Höhendienst und Vektorkacheln für Tests und E2E),
   `scripts/validate-dsm.ts`, `e2e/surface.spec.ts`.
@@ -713,7 +732,8 @@ Antworten.
 - **Öffnen nach einem Import:** `requestSitePlan('address')` öffnet auch den Abschnitt «Gebäude»; der Lageplan holt
   die Anfrage beim Einhängen ab (`sitePlanOpen`, `sitePlanGuide` in `buildingImportStore`, nicht gespeichert), zeigt
   die Anleitung und springt ohne Animation an seinen Anfang (eine weiche Bewegung endete auf dem Handy rund 250 px zu
-  früh, weil Ergebnisse darüber noch wachsen; nach dem Sprung hält die Scroll-Verankerung ihn fest). Nach «Gebäude
+  früh, weil Ergebnisse darüber noch wachsen; nach dem Sprung hält die Scroll-Verankerung des Browsers ihn fest,
+  ohne sie `holdInView`, siehe [Integration](#integration-adresse-laserscan-und-gebäude-zusammen)). Nach «Gebäude
   laden» öffnet er sich nur, wenn der Standort noch auf keiner Fassade liegt, und erst wenn der Abschnitt aufgeht.
 - **Touch, Maus, Tastatur:** `touch-action: pan-y`: senkrechtes Wischen scrollt die Seite; ein Tipp handelt erst mit
   dem `click`; seitwärts mehr als 8 px verschiebt den Plan (auf dem Balkon: zieht ihn); zwei Finger zoomen und
@@ -782,8 +802,8 @@ Befunde der Durchsicht von Teil 2, jeweils mit Test.
   eine Lücke entsteht; Schlüssellochringe bleiben gültig (Tests: U, Hof, Brücke, 60 zufällige Sternpolygone gegen
   Fläche und 12'000 Punktproben). Nur solange der Standort höchstens 0.5 m neben dem Umriss liegt (im Lageplan
   gesetzt): Der Adresspunkt im Gebäude legte sonst die ganze Front in den Horizont; bis dahin zählt es wie bisher
-  nicht. Die 3D-Ansicht zeichnet den ganzen eigenen Grundriss, jetzt im Einklang mit dem Modell. Der Satz «das eigene
-  Gebäude nie» in den Rechenregeln oben gilt damit für den Teil hinter der Balkonzone.
+  nicht. Die 3D-Ansicht zeichnet den ganzen eigenen Grundriss, jetzt im Einklang mit dem Modell. Die Rechenregeln
+  oben beschreiben das so (bei der Integration nachgeführt, dazu die Fassade, die ins Gebäude zeigt).
 - **Eigenes Gebäude per Tastatur:** Auswahl «Eigenes Gebäude» im Lageplan (`ownBuildingChoices`): importierte, nicht
   entfernte Teile bis 25 m vom Standort oder angrenzend an das eigene, nach Abstand, höchstens 20 (das eigene immer),
   beschriftet «Gebäude k · 12 m NO» bzw. «am Standort»; die Wahl ist ein Entwurf wie «Das ist mein Gebäude», die
@@ -826,6 +846,63 @@ Befunde der Durchsicht von Teil 2, jeweils mit Test.
   `buildingsGeometry.test.ts` (Reichweite, Schattenkamera, anderer Ort), `PrintReport.test.tsx`,
   `useBuildingImport.test.tsx` (Reihenfolge und Link-Länge, Laserscan bei «Behalten»); `e2e/buildings.spec.ts`:
   «Eigenes Gebäude», anderer Ort (Hinweise, keine Gebäude in 3D, Meldung beim Hinzufügen).
+
+### Integration: Adresse, Laserscan und Gebäude zusammen
+
+Zusammengeführt auf `claude/project-overhaul-improvements-esrgrp` (A 05243fd, B 5110c44, C 50f33c1), geprüft mit
+echten Daten (Kramgasse 49 und Breitenrainstrasse 10, Bern; Chromium, Desktop 1280 × 900 und Handy 390 × 844, hinter
+dem Proxy der Sandbox mit etwa 1 Mbit/s je Verbindung): Suche → Adresse → Gebäude-Import → Lageplan → Fassade und
+Balkon → Laserscan → Horizont-Diagramm → Jahreswerte → 3D → Druckbericht → Teilen-Link in einem neuen Browser
+(Standort auf 1e-6°, Fassade, 119/120 Gebäude, Anker und Laserscan-Einstellungen gleich).
+
+- **Reihenfolge nach einer Adresswahl:** Standort = Adresspunkt, Laserscan ein, Import angefragt (gleichzeitig);
+  Gebäudeangaben und Höhe (A); nach 7–15 s die Gebäude (Kramgasse 120 von 1'513 Teilen, Breitenrain 119 von 536)
+  und der Lageplan; Wetter und Gelände des Adresspunkts. **Vorher** lud der Laserscan nach dem Wetter für den
+  Adresspunkt, der im eigenen Gebäude liegt: Mit 30 s im Lageplan war er vor «Übernehmen» fertig (Breitenrain,
+  5.00 MB), sein Horizont war das eigene Gebäude (88.7° über die ganze Breite im Horizont-Diagramm) und die
+  Jahreswerte galten als endgültig. Doppelt geladen wurde nicht: Nach «Übernehmen» (Standort 16 m weiter) kamen
+  die Kacheln aus dem Speicher des Workers (0 B Laserscan, nur STAC 9 kB und die Höhe); bei schnellem «Übernehmen»
+  (5 s, Kramgasse) 0.59 MB vorher und 4.30 MB nachher, zusammen so viel wie ein Laden (4.89 MB). **Jetzt** wartet der
+  Laserscan, solange der Standort im eigenen Gebäude liegt (Rechenregeln: `locationInsideOwnBuilding`, Status
+  `'waiting'`, Hinweis in den Laserscan-Einstellungen), und ein Download wartet, solange ein Gebäude-Import
+  angefragt ist oder läuft (`buildingImportSettled` in `surfaceModelLoader.ts`, nach `terrainDownloadGate`: sind
+  Wetter und Gelände schneller da als die Gebäude, begänne er sonst für den Adresspunkt). Gemessen: 0 Anfragen an `data.geo.admin.ch` vor «Übernehmen» (30 s
+  bzw. 5 s im Lageplan), danach ein Laden (Breitenrain 15 Anfragen an die Dateien, 5.00 MB; Kramgasse 11, 4.89 MB),
+  fertig 25–47 s nach «Übernehmen». Das Gelände lädt für den Adresspunkt und bleibt danach gültig (Breitenrain nach 30 s:
+  0 B neu; bei schnellem «Übernehmen» werden abgebrochene Kacheln neu geholt).
+- **Horizont-Diagramm:** vor dem Laserscan «Gelände» und «Gebäude» (Prismen aller Gebäude; vom eigenen nur der Teil
+  vor der Balkonzone, vor «Übernehmen» nichts), danach
+  «Gelände» und «Laserscan»; importierte Gebäude stecken dann im Laserscan (Rechenregeln), «Gebäude» erscheint nur
+  für bearbeitete und von Hand erfasste: mit einem Gebäude von Hand Kramgasse 3.2° / 44.7° / 25.4°, Breitenrain
+  3.5° / 60.4° / 25.4° (Gelände / Laserscan / Gebäude, Höchstwerte vor der Fassade vom 1. OG).
+- **Lageplan nach dem Sprung** (E2E «site plan on an iPhone», unter `BASE_PATH` 1 von 16 bis 3 von 24 Läufen rot):
+  Der Tipp auf die Nordkante traf den Rand des Lageplans. Ursache: Die Karte «Neigungsvergleich» (weiter oben)
+  zeigte für den neuen Standort 60–240 ms ihren Platzhalter (548 → 317 → 548 px); die Scroll-Verankerung von
+  Chromium folgte dem Schrumpfen (−231 px), dem Wachsen nicht, und der Lageplan stand 0.3–0.5 s nach dem Sprung
+  232 px tiefer. `TiltSweepChart` hält jetzt die Höhe der Karte (`min-height` vor dem Zeichnen), bis das Ergebnis des
+  neuen Standorts da ist; danach blieb die Kante in 8 von 8 Läufen 4 s lang bei 291–292 px (die Warnungen und
+  Hinweise «vorläufig» darüber, +104, +67, +104 px, fängt die Verankerung ab) und der Test lief 40 von 40 Mal durch.
+  Browser ohne Scroll-Verankerung (`CSS.supports('overflow-anchor', 'auto')` falsch) halten den Lageplan mit
+  `siteplan/holdInView.ts` bis zur ersten Eingabe (Rad, Berührung, Zeiger, Taste), einem fremden Bildlauf oder
+  10 s.
+- **E2E «site plan: facade and balcony …»:** Seit A gemergt ist, geht der Test über die Adresse (Standort = Adresspunkt
+  statt Standardstandort); das Haus gegenüber lag 26 m davon, die Auswahl «Eigenes Gebäude» zeigt Teile bis 25 m. Die
+  25-m-Regel und die Abstände (vom Standort, vor «Übernehmen» also vom Adresspunkt) stimmen; der synthetische
+  Adresspunkt liegt jetzt 2 m statt 6 m hinter der Südwand (ein Eingang), das Haus gegenüber 22 m entfernt. Der Test
+  prüft ausserdem: keine Anfrage an `data.geo.admin.ch` vor «Übernehmen», danach STAC.
+- **Druckbericht:** Standort mit «Gebäude an der Adresse» (EGID, Geschosse, Baujahr oder Bauperiode, Grundfläche;
+  nur solange der Standort die gewählte Adresse ist, `useAddressBuildingSummary`), Umgebung mit «Laserscan-Stand»
+  (geladen mit Datenstand und Abdeckung unter 100 %, wird geladen, wartet auf den Lageplan, Fehler oder nicht
+  verfügbar, jeweils womit gerechnet wurde). Quellenangabe einmal «© swisstopo» (Zeile «Datenquellen»), auch wenn
+  nur die Adresse von swisstopo stammt; der Footer nennt swisstopo in einer Zeile seiner Quellenliste.
+- **Laden:** Adresssuche (`geocode.ts` mit `fetchRetry.ts`, über `geocodeLazy.ts` bei der ersten Suche, Adresswahl
+  oder «Nächste Adresse übernehmen»), Laserscan-Einstellungen (mit «Horizont & Umgebung»), Laserscan-Lader
+  (`hooks/surfaceModelLoader.ts`, sobald der Laserscan in der Sitzung ein ist; er bleibt danach eingehängt und setzt
+  den Zustand beim Ausschalten zurück) und Gebäude-Import (`useBuildingImport.ts`, mit der ersten Anfrage der
+  Adresssuche; bis dahin bleibt sie in `uiStore`) sind eigene Chunks. Anfangs geladenes JavaScript (Einstieg und
+  `modulepreload`, je Datei gzip -9): main 030c38d 606.4 kB (201.2 kB gzip), Merge 50f33c1 684.1 kB (231.4 kB,
+  +15.0 %), jetzt 655.4 kB (222.9 kB, +10.8 %; als eine Datei gepackt 219.7 kB, +9.2 %: die gemeinsamen Module
+  liegen jetzt in 10 statt 1 Datei). CSS 75.7 / 79.0 / 77.8 kB. Precache 1'700 / 1'970 / 1'981 KiB.
 
 ## i18n
 
@@ -978,6 +1055,10 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
   gar nicht (`frameloop` `'never'`); solange kein Pixel der Bühne sichtbar ist, behält die Szene zudem die zuletzt
   gezeigten Daten (`useKeptWhileHidden`, `SceneContent` memoisiert), Statusanzeige und Beschreibung bleiben
   aktuell. Der Schimmer der Platzhalter läuft über `transform` (ohne Neuzeichnen im Hauptthread).
+- **Umgebung (Adresse, Laserscan, Gebäude):** Die Adresssuche lädt `geocode.ts` bei der ersten Suche, der
+  Gebäude-Import (Hook, Worker, Job) und der Laserscan-Lader laden erst, wenn sie gebraucht werden, Liste,
+  Lageplan und Laserscan-Einstellungen mit ihrem Abschnitt; Rechnungen und Downloads laufen in Web Workern (Zahlen:
+  [Integration](#integration-adresse-laserscan-und-gebäude-zusammen)).
 - **Drucken und PNG-Export:** Der Druck zeigt die ganze Seite, also gilt `useNearViewport` währenddessen als nah.
   Sein `beforeprint`-Listener und der von `flushSweeps` werden beim Laden der Module registriert, also vor dem des
   Druckmodus (`export/print.ts`), der die Canvases erfasst, und rendern synchron (`flushSync`), weil der Browser
@@ -1009,8 +1090,8 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
   diese Abstände ein. Unter der transparenten Statusleiste (immer weisse Symbole) liegt ein fixer Streifen in
   `--statusbar`, auch im hellen Theme.
 - **Service Worker** (Workbox `generateSW`, nur im Produktions-Build; in Entwicklung und Tests aus):
-  - Precache des ganzen Builds (`js, css, html, svg, png` + Manifest), auch des lazy geladenen 3D-Chunks (~960 kB)
-    und des Gelände-Workers (~31 kB).
+  - Precache des ganzen Builds (`js, css, html, svg, png` + Manifest), auch des lazy geladenen 3D-Chunks (~970 kB),
+    des Gelände-Workers (~76 kB, mit dem Laserscan), des Import-Workers (~36 kB) und der Chunks der Umgebung.
     Ein Asset über `maximumFileSizeToCacheInBytes` (Standard 2 MiB) bricht den Build ab, statt offline zu fehlen.
   - Navigationen fallen auf `index.html` zurück (`navigateFallback`), alte Precaches werden aufgeräumt
     (`cleanupOutdatedCaches`). Kein Runtime-Caching: Wetter- und Geländedaten cacht die App selbst im `localStorage`.
@@ -1089,7 +1170,9 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
   (derselbe Worker als `sw.js?next` registriert, weil Playwright die Update-Anfrage für `sw.js` nicht umleitet) wartet
   mit «Neue Version verfügbar» und übernimmt erst nach «Neu laden» (schlägt mit `registerType: 'autoUpdate'` fehl).
   Nur dort laufen Service Worker; die übrigen Specs blockieren sie (`serviceWorkers: 'block'`), damit `page.route()`
-  jede Anfrage sieht. Mit `BASE_PATH` laufen Build, `vite preview` und `baseURL` unter dem Pfad (die Specs navigieren
+  jede Anfrage sieht. `address.spec.ts`, `surface.spec.ts` und `buildings.spec.ts` beantworten geo.admin.ch mit
+  aufgezeichneten bzw. synthetischen Antworten (Adresssuche, Laserscan-COGs, Vektorkacheln); siehe die Abschnitte A,
+  B und C unter [Umgebung](#umgebung-adresse-laserscan-gebäude). Mit `BASE_PATH` laufen Build, `vite preview` und `baseURL` unter dem Pfad (die Specs navigieren
   relativ mit `page.goto('./')`).
 - **CI** (`.github/workflows/ci.yml`, Node aus `.nvmrc`): Lint, `format:check`, Typecheck, Tests und Build; danach
   E2E mit dem von Playwright installierten Chromium, als Matrix unter `/` und unter `/solar-shadow-analyzer/`

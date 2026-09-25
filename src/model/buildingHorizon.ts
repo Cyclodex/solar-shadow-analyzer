@@ -2,7 +2,7 @@ import type { Building, Config, FloorPlacement, HorizonProfile } from './types';
 import { clipRingAbove, facadePrisms, prismHorizonTangents, tanToDeg, type Prism } from './buildings';
 import { facadeTransform, type FacadeTransform } from './enu';
 import { FLOOR_HORIZON_STEP_DEG } from './horizon';
-import { segmentDistance, type ReadonlyVertex } from './polygon';
+import { pointInRing, segmentDistance, type ReadonlyVertex } from './polygon';
 import { OWN_BUILDING_EXCLUSION, ownBuildingIds, ownExclusionZone, prismBuildings } from './surroundings';
 import { cmToM } from './units';
 
@@ -54,17 +54,58 @@ const flatRing = (ring: readonly ReadonlyVertex[]): Float64Array => {
   return out;
 };
 
+/** Distance in front of the facade origin (m) that must lie outside the own building (about the observers). */
+const FRONT_PROBE_N = 1;
+
+/**
+ * The location is not on a wall of `own` facing out: more than OWN_WALL_TOLERANCE_M inside its outline (a
+ * picked address point before «Übernehmen» in the site plan), or the point FRONT_PROBE_N in front of it lies
+ * inside the footprint. Seen from there the own building would stand in front of the panels.
+ */
+function unplacedIn(own: Building, transform: FacadeTransform): boolean {
+  const [ox, oy] = transform.origin;
+  if (!(outlineDistance(own.footprint, ox, oy) <= OWN_WALL_TOLERANCE_M)) return true;
+  const [fx, fy] = transform.toAnchor([0, FRONT_PROBE_N]);
+  return pointInRing(own.footprint, fx, fy);
+}
+
+/**
+ * True while the location lies inside its building: a building of the swisstopo import that the laser scan
+ * contains (not removed, not edited: those are masked) holds the location or has it on its outline
+ * (OWN_WALL_TOLERANCE_M) and holds the point FRONT_PROBE_N in front of it, where the panel rows hang. That is a
+ * picked address point before «Übernehmen» in the site plan, or a location on a wall with the facade azimuth
+ * pointing into the building. The laser scan waits then (hooks/useSurfaceModel.ts, status 'waiting'): its
+ * horizon would be the building itself (88.7° measured from the address point of Breitenrainstrasse 10, Bern)
+ * and the results would look final. The prisms leave the own building out meanwhile (ownPrismPieces).
+ */
+export function locationInsideOwnBuilding(
+  config: Pick<Config, 'location' | 'building' | 'horizon'>,
+): boolean {
+  const { buildings, buildingImport: anchor } = config.horizon;
+  if (!anchor || buildings.length === 0) return false;
+  const transform = facadeTransform(anchor, config.location, config.building.facadeAzimuth);
+  const [ox, oy] = transform.origin;
+  const [fx, fy] = transform.toAnchor([0, FRONT_PROBE_N]);
+  return buildings.some(
+    (b) =>
+      b.source === 'swisstopo' &&
+      !b.removed &&
+      !b.edited &&
+      pointInRing(b.footprint, fx, fy) &&
+      (pointInRing(b.footprint, ox, oy) || outlineDistance(b.footprint, ox, oy) <= OWN_WALL_TOLERANCE_M),
+  );
+}
+
 /**
  * Prisms of an own building (footprint containing the probe behind the facade origin), the same part the
  * laser scan keeps (surroundings.ts isOwnBuildingCell): its footprint in front of the balcony zone,
  * n > balconyDepth + 0.5 m (the zone spans the own footprint along the facade, so nothing beside it stays).
  * A wing or annex of the same part in front of the facade shades, like a separate part would. Only while the
- * location lies on its wall (site plan applied): the address point inside the building would put the whole
- * front of it into the horizon, so until then the own building does not count at all (as before).
+ * location lies on its wall facing out (site plan applied): the address point inside the building would put
+ * the whole front of it into the horizon, so until then the own building does not count at all (as before).
  */
 function ownPrismPieces(building: Building, transform: FacadeTransform, balconyDepthM: number): Prism[] {
-  const [ox, oy] = transform.origin;
-  if (!(outlineDistance(building.footprint, ox, oy) <= OWN_WALL_TOLERANCE_M)) return [];
+  if (unplacedIn(building, transform)) return [];
   const ring = building.footprint.map((p) => transform.toFacade(p));
   // The row width only bounds the zone when no own footprint is known; here it always is.
   const zone = ownExclusionZone(balconyDepthM, 0, ring);

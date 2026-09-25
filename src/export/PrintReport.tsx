@@ -15,9 +15,10 @@ import { anchorDistance, OTHER_SITE_DISTANCE, SWISSTOPO_CREDIT } from '../model/
 import { lonLatToEnu } from '../model/enu';
 import type { Config, ShadingModel } from '../model/types';
 import { useConfig } from '../state/configStore';
-import { useDataStore } from '../state/dataStore';
+import { useDataStore, type SurfaceStatus } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { shareUrl } from '../state/urlSync';
+import { useAddressBuildingSummary } from '../controls/location/addressBuildingText';
 import styles from './PrintReport.module.css';
 
 const de = {
@@ -87,6 +88,16 @@ const de = {
   surfaceModel: 'Laserscan (swissSURFACE3D)',
   surfaceOn: (trees: boolean, radius: string) =>
     `ein, ${trees ? 'mit Bäumen (ganzjährig undurchsichtig)' : 'nur Gebäude'}, Umkreis ${radius}`,
+  surfaceStatus: 'Laserscan-Stand',
+  surfaceReady: (years: string) => (years ? `geladen, Datenstand ${years}` : 'geladen'),
+  surfaceCoverage: (pct: string) => `deckt ${pct} des Umkreises ab (Grenze der Schweiz und Liechtensteins)`,
+  surfaceLoading: 'wird geladen: Ergebnisse vorläufig',
+  surfaceWaiting: 'wartet auf die Bestätigung von Fassade und Balkon im Lageplan',
+  surfaceError: 'konnte nicht geladen werden',
+  surfaceUnavailable: 'nur in der Schweiz und Liechtenstein verfügbar',
+  withPrisms: 'gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+  withoutScan: 'gerechnet ohne Laserscan',
+  addressBuilding: 'Gebäude an der Adresse',
   sources: 'Datenquellen',
 };
 
@@ -155,6 +166,16 @@ const messages: Messages<typeof de> = {
     surfaceModel: 'Laser scan (swissSURFACE3D)',
     surfaceOn: (trees, radius) =>
       `on, ${trees ? 'with trees (opaque all year)' : 'buildings only'}, radius ${radius}`,
+    surfaceStatus: 'Laser-scan state',
+    surfaceReady: (years) => (years ? `loaded, data from ${years}` : 'loaded'),
+    surfaceCoverage: (pct) => `covers ${pct} of the radius (border of Switzerland and Liechtenstein)`,
+    surfaceLoading: 'loading: results provisional',
+    surfaceWaiting: 'waiting for facade and balcony to be confirmed in the site plan',
+    surfaceError: 'could not be loaded',
+    surfaceUnavailable: 'available in Switzerland and Liechtenstein only',
+    withPrisms: 'computed with the surrounding buildings as flat-roofed blocks',
+    withoutScan: 'computed without the laser scan',
+    addressBuilding: 'Building at the address',
     sources: 'Data sources',
   },
 };
@@ -206,6 +227,8 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
   const minutes = useTimeStore((s) => s.minutes);
   const utc = useSelectedUtc();
   const weatherFallback = useDataStore((st) => st.weather.usingFallback);
+  const surface = useDataStore((st) => st.surface);
+  const addressBuilding = useAddressBuildingSummary();
   const { location: loc, building: b, panels: p, system: s, horizon: h, weather: w, economics: e } = config;
 
   // Surroundings (buildings feature): position on the building, buildings, laser scan, sources.
@@ -253,7 +276,27 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
       t.surfaceModel,
       h.surfaceModel.enabled ? t.surfaceOn(h.surfaceModel.trees, f.unit(h.surfaceModel.radius, 'm')) : t.off,
     ]);
-    if (imported || h.surfaceModel.enabled) surroundingRows.push([t.sources, SWISSTOPO_CREDIT]);
+    if (h.surfaceModel.enabled) {
+      // What the printed results used: the scan, or the fallback while it loads, waits or failed.
+      const fallback = h.buildings.some((x) => !x.removed) ? t.withPrisms : t.withoutScan;
+      const partial = surface.coverage !== null && surface.coverage < 0.999;
+      const state: Partial<Record<SurfaceStatus, string[]>> = {
+        ready: [
+          t.surfaceReady(surface.dataYears.join(', ')),
+          ...(partial ? [t.surfaceCoverage(f.pct(Math.round((surface.coverage ?? 0) * 100)))] : []),
+        ],
+        loading: [t.surfaceLoading, fallback],
+        waiting: [t.surfaceWaiting, fallback],
+        error: [t.surfaceError, fallback],
+        unavailable: [t.surfaceUnavailable],
+      };
+      const text = (state[surface.status] ?? []).join('; ');
+      if (text) surroundingRows.push([t.surfaceStatus, text]);
+    }
+  }
+  // «© swisstopo» once: imported buildings, the laser scan or a location from the address search.
+  if (imported || h.surfaceModel.enabled || addressBuilding !== null) {
+    surroundingRows.push([t.sources, SWISSTOPO_CREDIT]);
   }
 
   const created = new Intl.DateTimeFormat(f.locale, { dateStyle: 'long', timeStyle: 'short' }).format(
@@ -277,6 +320,9 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
           title={t.location}
           items={[
             [t.name, displayLocationName(loc, f)],
+            ...(addressBuilding?.facts
+              ? ([[t.addressBuilding, addressBuilding.facts]] as [string, string][])
+              : []),
             // 6 decimals: the stored precision (1e-6°, at most 0.07 m).
             [t.coordinates, f.coords(loc.latitude, loc.longitude, 6)],
             ...placementRows,

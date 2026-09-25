@@ -41,6 +41,8 @@ const de = {
     'Es wird ohne Laserscan gerechnet, mit den Umgebungsgebäuden als Körper mit flachem Dach.',
   fallbackNone: 'Es wird ohne Laserscan gerechnet.',
   retry: 'Erneut versuchen',
+  waiting:
+    'Der Laserscan wartet auf den Lageplan: Der Standort liegt noch im eigenen Gebäude (etwa am Adresspunkt), von dort sähe er nur dieses. Nach «Übernehmen» von Fassade und Balkon im Abschnitt «Gebäude» wird er für diese Stelle geladen; bis dahin zählen die Umgebungsgebäude als Körper mit flachem Dach, ohne das eigene.',
   refreshStarting: 'Laserscan wird nachgeladen …',
   refreshing: (mb: string, pct: string) => `Laserscan wird nachgeladen … ${mb} (${pct})`,
   refreshHint:
@@ -75,6 +77,8 @@ const messages: Messages<typeof de> = {
       'Calculating without the laser scan, with the surrounding buildings as flat-roofed blocks.',
     fallbackNone: 'Calculating without the laser scan.',
     retry: 'Try again',
+    waiting:
+      'The laser scan waits for the site plan: the location still lies inside the own building (e.g. at the address point), from where it would see nothing but that building. Once facade and balcony are applied in the «Building» section it loads for that spot; until then the surrounding buildings count as flat-roofed blocks, without the own one.',
     refreshStarting: 'Reloading the laser scan …',
     refreshing: (mb, pct) => `Reloading the laser scan … ${mb} (${pct})`,
     refreshHint: 'Until then, new tilts or floors use the horizon of the nearest computed panel row.',
@@ -171,6 +175,13 @@ function SurfaceStatus({ hasBuildings }: { hasBuildings: boolean }) {
     return (
       <p className={styles.note} role="status">
         {t.unavailable}
+      </p>
+    );
+  }
+  if (surface.status === 'waiting') {
+    return (
+      <p className={styles.note} role="status">
+        {t.waiting}
       </p>
     );
   }

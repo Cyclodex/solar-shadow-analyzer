@@ -1,7 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Building } from '../model/types';
+import { resetAddressSession, useAddressSession } from '../controls/location/addressSession';
+import { wgs84ToLv95 } from '../model/lv95';
 import { useConfigStore } from '../state/configStore';
+import { useDataStore } from '../state/dataStore';
 import { useUiStore } from '../state/uiStore';
 import { resetStores } from '../test/utils';
 import { PrintReport } from './PrintReport';
@@ -13,6 +16,7 @@ const row = (term: string): string | null =>
 describe('PrintReport', () => {
   beforeEach(() => {
     resetStores();
+    resetAddressSession();
   });
 
   it('lists the automatic coordinate label and the coordinates in the report language', () => {
@@ -90,6 +94,107 @@ describe('PrintReport', () => {
     expect(row('Position on the building')).toBe('not confirmed in the site plan');
     expect(row('Laser scan (swissSURFACE3D)')).toBe('off');
     expect(row('Data sources')).toBe('© swisstopo');
+  });
+
+  it('laser-scan state: loaded with data year and coverage, or the fallback while loading, waiting, failed', () => {
+    useConfigStore.getState().patch('horizon', {
+      buildingImport: { latitude: 47.1, longitude: 7.45, radius: 300, date: '2026-09-25' },
+      buildings: [
+        {
+          id: 'b1',
+          name: '',
+          footprint: [
+            [10, 10],
+            [20, 10],
+            [20, 20],
+          ],
+          base: 0,
+          height: 9,
+          source: 'swisstopo',
+        },
+      ],
+      surfaceModel: { enabled: true, trees: true, radius: 300 },
+    });
+    const state = (): string | null => {
+      const { unmount } = render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+      const value = screen.queryByText('Laserscan-Stand', { selector: 'dt' }) ? row('Laserscan-Stand') : null;
+      unmount();
+      return value;
+    };
+    const set = (surface: Parameters<ReturnType<typeof useDataStore.getState>['setSurface']>[0]): void =>
+      useDataStore.getState().setSurface(surface);
+    set({ status: 'ready', dataYears: [2022, 2023], coverage: 0.78 });
+    expect(state()).toMatch(
+      /^geladen, Datenstand 2022, 2023; deckt 78\s% des Umkreises ab \(Grenze der Schweiz und Liechtensteins\)$/,
+    );
+    set({ coverage: 1 });
+    expect(state()).toBe('geladen, Datenstand 2022, 2023');
+    set({ status: 'loading' });
+    expect(state()).toBe(
+      'wird geladen: Ergebnisse vorläufig; gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+    );
+    set({ status: 'waiting' });
+    expect(state()).toBe(
+      'wartet auf die Bestätigung von Fassade und Balkon im Lageplan; gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+    );
+    set({ status: 'error' });
+    expect(state()).toBe(
+      'konnte nicht geladen werden; gerechnet mit den Umgebungsgebäuden als Körper mit flachem Dach',
+    );
+    set({ status: 'unavailable' });
+    expect(state()).toBe('nur in der Schweiz und Liechtenstein verfügbar');
+    useConfigStore
+      .getState()
+      .patch('horizon', { surfaceModel: { enabled: false, trees: true, radius: 300 } });
+    expect(state()).toBeNull();
+  });
+
+  it('a picked address: the building register data and «© swisstopo», also without surroundings', () => {
+    const address = {
+      label: 'Kramgasse 49, 3011 Bern',
+      street: 'Kramgasse',
+      houseNumber: '49',
+      postcode: '3011',
+      locality: 'Bern',
+      latitude: 46.947847,
+      longitude: 7.449979,
+      lv95: wgs84ToLv95(46.947847, 7.449979),
+      featureId: '1230393_0',
+      egid: '1230393',
+      country: 'CH' as const,
+      timezone: 'Europe/Zurich',
+      match: 'exact' as const,
+    };
+    useConfigStore.getState().patch('location', {
+      name: address.label,
+      latitude: address.latitude,
+      longitude: address.longitude,
+    });
+    useAddressSession.setState({
+      address,
+      building: {
+        status: 'ready',
+        info: {
+          egid: '1230393',
+          storeys: 5,
+          year: null,
+          period: { code: 8011, from: null, to: 1918 },
+          area: 147,
+          category: 1030,
+        },
+      },
+    });
+    const { unmount } = render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+    expect(row('Gebäude an der Adresse')).toMatch(
+      /^EGID 1230393 · Geschosse 5 · Baujahr vor 1919 \(Bauperiode\) · Grundfläche 147\sm²$/,
+    );
+    expect(row('Datenquellen')).toBe('© swisstopo');
+    unmount();
+    // Another location: neither.
+    useConfigStore.getState().patch('location', { name: 'Anderswo', latitude: 47.3769, longitude: 8.5417 });
+    render(<PrintReport printedAt={Date.UTC(2025, 5, 21, 10)} />);
+    expect(screen.queryByText('Gebäude an der Adresse')).toBeNull();
+    expect(screen.queryByText('Datenquellen')).toBeNull();
   });
 
   it('no position row with only buildings entered by hand, or with the buildings of another site', () => {

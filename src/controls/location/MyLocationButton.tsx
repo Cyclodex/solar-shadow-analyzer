@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button } from '../../components/Button';
 import { useFormat, useMessages, type Messages } from '../../i18n';
-import { NEAREST_ADDRESS_RADIUS, findNearestAddress, type SwissAddress } from '../../model/geocode';
+import type { SwissAddress } from '../../model/geocode';
+import { withGeocode } from '../../model/geocodeLazy';
 import { formatCoordinateName } from '../../model/share';
 import type { LocationConfig } from '../../model/types';
 import { roundToStep } from '../../model/units';
@@ -27,7 +28,7 @@ type Nearest =
   | { status: 'idle' }
   | { status: 'searching' }
   | { status: 'done'; label: string; distance: number }
-  | { status: 'none' }
+  | { status: 'none'; radius: number }
   | { status: 'error' };
 
 const de = {
@@ -158,7 +159,11 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
     const ctrl = new AbortController();
     lookup.current = ctrl;
     setNearest({ status: 'searching' });
-    void findNearestAddress(fix.latitude, fix.longitude, { signal: ctrl.signal }).then((res) => {
+    let radius = 0;
+    void withGeocode((m) => {
+      radius = m.NEAREST_ADDRESS_RADIUS;
+      return m.findNearestAddress(fix.latitude, fix.longitude, { signal: ctrl.signal });
+    }).then((res) => {
       if (lookup.current !== ctrl) return; // «Mein Standort» was pressed again
       lookup.current = null;
       // Another location replaced the fix meanwhile: the reply must not overwrite it. The config is read here, not
@@ -168,7 +173,7 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
         return;
       }
       if (!res.ok) setNearest({ status: 'error' });
-      else if (!res.value) setNearest({ status: 'none' });
+      else if (!res.value) setNearest({ status: 'none', radius });
       else {
         const focus = document.activeElement;
         onAddress(res.value.address);
@@ -191,7 +196,7 @@ export function MyLocationButton({ onLocate, onAddress, location }: MyLocationBu
   if (nearest.status === 'searching') nearestMessage = t.searching;
   else if (nearest.status === 'done')
     nearestMessage = t.nearestDone(nearest.label, f.unit(nearest.distance, 'm'));
-  else if (nearest.status === 'none') nearestMessage = t.nearestNone(f.unit(NEAREST_ADDRESS_RADIUS, 'm'));
+  else if (nearest.status === 'none') nearestMessage = t.nearestNone(f.unit(nearest.radius, 'm'));
   else if (nearest.status === 'error') nearestMessage = t.nearestError;
 
   const offerNearest = onAddress !== undefined && atFix && nearest.status !== 'done';

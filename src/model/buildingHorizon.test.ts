@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Building, Config, Obstacle } from './types';
-import { clearPrismHorizonMemo, prismFloorHorizons } from './buildingHorizon';
+import { clearPrismHorizonMemo, locationInsideOwnBuilding, prismFloorHorizons } from './buildingHorizon';
 import { DEFAULT_CONFIG } from './defaults';
 import { enuToLonLat, facadeToEnu } from './enu';
 import { floorPlacements } from './geometry';
@@ -198,6 +198,59 @@ describe('prismFloorHorizons', () => {
     const c: Config = {
       ...config([building('b1', L, { height: 20 })], { facadeAzimuth: 0 }),
       location: { ...DEFAULT_CONFIG.location, ...enuToLonLat(anchor, 10, -5) },
+    };
+    expect(prismFloorHorizons(c, floorPlacements(c), false)).toBeNull();
+  });
+
+  it('location inside the own building: an address point, or on the wall facing into it', () => {
+    const box: [number, number][] = [
+      [0, -10],
+      [30, -10],
+      [30, 0],
+      [0, 0],
+    ];
+    const at = (e: number, n: number, facadeAzimuth: number, over: Partial<Building> = {}): boolean =>
+      locationInsideOwnBuilding({
+        ...config([building('b1', box, over)], { facadeAzimuth }),
+        location: { ...DEFAULT_CONFIG.location, ...enuToLonLat(anchor, e, n) },
+      });
+    expect(at(10, -5, 180)).toBe(true); // the address point, 5 m inside
+    expect(at(10, -10, 180)).toBe(false); // on the south wall facing out (site plan applied)
+    expect(at(10, -10.3, 200)).toBe(false); // 0.3 m in front of it, azimuth turned by 20°
+    expect(at(10, -10, 0)).toBe(true); // on the south wall facing north, into the building
+    expect(at(10, -9.8, 180)).toBe(false); // 0.2 m inside: on the wall within the tolerance
+    expect(at(10, -5, 180, { removed: true })).toBe(false); // masked in the laser scan
+    expect(at(10, -5, 180, { edited: true })).toBe(false);
+    expect(at(10, -5, 180, { source: 'manual' })).toBe(false); // not in the laser scan
+    expect(at(10, 20, 180)).toBe(false); // outside every building
+    // A neighbour 0.8 m in front of the wall: the point 1 m out lies in it, but the location is not its own.
+    const neighbour = building('b2', [
+      [0, -14],
+      [30, -14],
+      [30, -10.8],
+      [0, -10.8],
+    ]);
+    const c = config([building('b1', box), neighbour], { facadeAzimuth: 180 });
+    expect(
+      locationInsideOwnBuilding({ ...c, location: { ...c.location, ...enuToLonLat(anchor, 10, -10) } }),
+    ).toBe(false);
+    expect(locationInsideOwnBuilding(config([]))).toBe(false);
+    expect(
+      locationInsideOwnBuilding({ ...config([building('b1', box)]), horizon: DEFAULT_CONFIG.horizon }),
+    ).toBe(false);
+  });
+
+  it('own building facing into it (on the wall, wrong azimuth): no prism either', () => {
+    const box: [number, number][] = [
+      [0, -10],
+      [30, -10],
+      [30, 0],
+      [0, 0],
+    ];
+    clearPrismHorizonMemo();
+    const c: Config = {
+      ...config([building('b1', box, { height: 20 })], { facadeAzimuth: 0 }),
+      location: { ...DEFAULT_CONFIG.location, ...enuToLonLat(anchor, 10, -10) },
     };
     expect(prismFloorHorizons(c, floorPlacements(c), false)).toBeNull();
   });

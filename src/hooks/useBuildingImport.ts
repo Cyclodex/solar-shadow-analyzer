@@ -290,16 +290,22 @@ export function handleSurroundingsRequest(
 }
 
 /**
+ * Takes the pending surroundings-import request of the address search (uiStore) and starts its import (at
+ * most once per request). <DataLoader/> calls it after loading this module for a request.
+ */
+export function takeSurroundingsImport(): void {
+  const request = useUiStore.getState().consumeSurroundingsImport();
+  if (request) handleSurroundingsRequest(request);
+}
+
+/**
  * Consumes the surroundings-import requests of the address search (uiStore.requestSurroundingsImport) and
  * starts the building import. Mount exactly once (in <DataLoader/>). The import itself is not tied to the
  * component (StrictMode's second mount finds the request already consumed and the import running).
  */
 export function useBuildingImportLoader(): void {
   useEffect(() => {
-    const take = (): void => {
-      const request = useUiStore.getState().consumeSurroundingsImport();
-      if (request) handleSurroundingsRequest(request);
-    };
+    const take = takeSurroundingsImport;
     take();
     return useUiStore.subscribe((s, prev) => {
       if (s.surroundingsImport && s.surroundingsImport !== prev.surroundingsImport) take();

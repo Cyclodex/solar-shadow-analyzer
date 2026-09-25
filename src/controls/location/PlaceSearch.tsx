@@ -1,6 +1,7 @@
 import { useEffect, useId, useState, type KeyboardEvent } from 'react';
 import { useFormat, useLang, useMessages, type Messages } from '../../i18n';
-import { searchSwissAddresses, type GeoErrorKind, type SwissAddress } from '../../model/geocode';
+import type { GeoErrorKind, SwissAddress } from '../../model/geocode';
+import { withGeocode } from '../../model/geocodeLazy';
 import { searchLocations } from '../../model/presets';
 import type { LocationConfig } from '../../model/types';
 import { SearchIcon } from '../icons';
@@ -146,7 +147,7 @@ export function PlaceSearch({ onSelectPlace, onSelectAddress }: PlaceSearchProps
     if (!needAddresses) return;
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
-      void searchSwissAddresses(q, { signal: ctrl.signal }).then((res) => {
+      void withGeocode((m) => m.searchSwissAddresses(q, { signal: ctrl.signal })).then((res) => {
         if (ctrl.signal.aborted) return;
         if (res.ok) setCache((prev) => withEntry(prev, key, { addresses: res.value }));
         else setMiss((m) => ({ ...(m?.key === key ? m : { key }), addresses: res.error.kind }));

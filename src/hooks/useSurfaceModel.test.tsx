@@ -5,27 +5,32 @@ import type { Config, HorizonProfile } from '../model/types';
 import type { DsmJobRequest, DsmJobResult } from '../model/dsm';
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { surfaceObserverKey, surfaceSiteKey } from '../model/dsmHorizon';
+import { enuToLonLat } from '../model/enu';
 import { floorPlacements } from '../model/geometry';
+import { INITIAL_BUILDING_IMPORT, useBuildingImportStore } from '../state/buildingImportStore';
 import { useConfig, useConfigStore } from '../state/configStore';
+import { useUiStore } from '../state/uiStore';
 import { INITIAL_SURFACE, useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
 import type { DsmWorkerOptions } from '../workers/terrainClient';
 import {
   decodeProfile,
   encodeProfile,
-  isDsmActive,
   observerSet,
   readSurfaceCache,
-  resetSurfaceLoader,
   surfacePlan,
+  useSurfaceModelLoader,
+  writeSurfaceCache,
+} from './surfaceModelLoader';
+import {
+  isDsmActive,
+  resetSurfaceLoader,
   useDsmActive,
   useProvisionalCause,
-  useSurfaceModelLoader,
   useSurfacePending,
   useSurfaceRefresh,
   useSurfaceSweepPending,
   useSurroundingsSource,
-  writeSurfaceCache,
 } from './useSurfaceModel';
 import { NO_SURROUNDINGS } from './useTerrain';
 
@@ -286,7 +291,10 @@ describe('useSurfaceModelLoader', () => {
     worker.memory.clear();
     worker.downloadMs = 5;
   });
-  afterEach(() => resetSurfaceLoader());
+  afterEach(() => {
+    resetSurfaceLoader();
+    useBuildingImportStore.setState(INITIAL_BUILDING_IMPORT);
+  });
 
   const enable = (config: Config = enabled): void => act(() => useConfigStore.getState().replace(config));
   const downloads = () => worker.jobs.filter((j) => !j.request.memoryOnly);
@@ -524,6 +532,75 @@ describe('useSurfaceModelLoader', () => {
     worker.respond = okResult;
     act(() => useDataStore.getState().retrySurface());
     await waitFor(() => expect(surface().status).toBe('ready'));
+  });
+
+  it('holds the download while a building import is requested or runs (it decides whether the location is inside)', async () => {
+    // The address search asked for the import (the import module is not loaded yet).
+    act(() => useUiStore.getState().requestSurroundingsImport(47.1, 7.45));
+    enable();
+    renderHook(() => useSurfaceModelLoader());
+    await new Promise((r) => setTimeout(r, 60));
+    expect(worker.jobs.map((j) => j.request.memoryOnly)).toEqual([true]); // the miss, no download
+    expect(surface().status).toBe('loading');
+    // Taken and running.
+    act(() => {
+      useUiStore.getState().consumeSurroundingsImport();
+      useBuildingImportStore.setState({ status: 'loading' });
+    });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(downloads()).toHaveLength(0);
+    act(() => useBuildingImportStore.setState({ status: 'ready' }));
+    await waitFor(() => expect(surface().status).toBe('ready'));
+    expect(downloads()).toHaveLength(1);
+  });
+
+  it('waits while the location lies inside its building (address point), loads once it is on the facade', async () => {
+    const anchor = { latitude: 47.1, longitude: 7.45 };
+    const own: Config['horizon']['buildings'][number] = {
+      id: 'b1',
+      name: '',
+      footprint: [
+        [-6, -6],
+        [6, -6],
+        [6, 6],
+        [-6, 6],
+      ],
+      base: 0,
+      height: 15,
+      source: 'swisstopo',
+    };
+    // Address picked: the laser scan is on, the download of the entrance point is under way when the
+    // buildings arrive (the import runs alongside).
+    worker.downloadMs = 2000;
+    enable({ ...enabled, location: { ...enabled.location, ...anchor } });
+    renderHook(() => useSurfaceModelLoader());
+    await waitFor(() => expect(downloads()).toHaveLength(1));
+    act(() =>
+      useConfigStore.getState().patch('horizon', {
+        buildings: [own],
+        buildingImport: { ...anchor, radius: 300, date: '2026-09-25' },
+      }),
+    );
+    expect(downloads()[0].outcome).toBe('aborted');
+    expect(surface()).toEqual({ ...INITIAL_SURFACE, status: 'waiting' });
+    const pending = renderHook(() => useSurfacePending());
+    expect(pending.result.current).toBe(false); // prisms, like after an error: nothing is on its way
+    await new Promise((r) => setTimeout(r, 100));
+    expect(worker.jobs).toHaveLength(2); // the miss and the aborted download, nothing since
+    expect(surface().status).toBe('waiting');
+    // «Übernehmen» in the site plan: the balcony on the south wall, facing south.
+    worker.downloadMs = 5;
+    act(() =>
+      useConfigStore.getState().setConfig((c) => ({
+        ...c,
+        location: { ...c.location, ...enuToLonLat(anchor, 0, -6) },
+        building: { ...c.building, facadeAzimuth: 180 },
+      })),
+    );
+    expect(surface().status).toBe('loading');
+    await waitFor(() => expect(surface().status).toBe('ready'));
+    expect(downloads()).toHaveLength(2);
+    expect(downloads()[1].request.site.facadeAzimuth).toBe(180);
   });
 
   it('a site change waits, shows loading and drops the old horizons; a new site or disabling aborts', async () => {
