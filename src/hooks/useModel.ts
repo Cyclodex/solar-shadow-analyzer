@@ -1,6 +1,7 @@
 import { useDeferredValue, useEffect, useMemo, useState, useSyncExternalStore } from 'react';
 import { flushSync } from 'react-dom';
 import type {
+  BatteryResult,
   Config,
   DailyProfilePoint,
   EconomicsResult,
@@ -39,7 +40,9 @@ import {
   type HeatmapSunCells,
   type SunGrid,
 } from '../model/analysis';
-import { economics } from '../model/economics';
+import { batteryInvestments, economics, economicsFromFlows } from '../model/economics';
+import { pvPowerMatrix, simulateBattery } from '../model/battery';
+import { householdLoadW } from '../model/loadProfile';
 import { clearSkyIrradiance } from '../model/irradiance';
 import { CLEAR_SKY_TEMPERATURE_C, sameWeatherSite } from '../model/weather';
 import { clamp } from '../model/units';
@@ -95,6 +98,11 @@ const sunCellsCache = createCache<HeatmapSunCells>(2);
 const sunTrackCache = createCache<SunTrack>(2);
 // Local month of every weather step (series + time zone): shared by every simulation of a series.
 const monthsCache = createCache<Uint8Array>(2);
+// Storage: PV power per step and floor (PV model + weather), household load (series + consumption), result.
+const pvMatrixCache = createCache<Float64Array>(2);
+const loadCache = createCache<Float64Array>(2);
+const batteryCache = createCache<BatteryResult>(3);
+const batteryEconomicsCache = createCache<BatteryEconomics>(3);
 
 /** Heatmap resolution: local clock slots of 10 minutes. */
 const HEATMAP_SLOT_MINUTES = 10;
@@ -118,6 +126,10 @@ export function clearModelCaches(): void {
     sunCellsCache,
     sunTrackCache,
     monthsCache,
+    pvMatrixCache,
+    loadCache,
+    batteryCache,
+    batteryEconomicsCache,
   ]) {
     c.clear();
   }
@@ -788,4 +800,87 @@ export function useEconomics(): EconomicsResult | null {
   if (!simulation) return null;
   const floors = simulation.floors.length;
   return economicsCache.get([simulation, e, floors], () => economics(simulation.totalAnnualKwh, floors, e));
+}
+
+// ── Battery storage ──────────────────────────
+
+/**
+ * Storage simulation (energy flows, SoC) for the loaded weather series; null while the storage is off or no
+ * series of the configured site and year is available. The PV power per step is cached per PV model and
+ * series, the load per series and consumption: a change of the storage settings only re-runs the dispatch.
+ */
+export function useBattery(): BatteryResult | null {
+  const { config, horizons } = useDeferredInputs();
+  const weather = useAnnualWeather(config);
+  const { battery, building, panels, system } = config;
+  if (!battery.enabled || !weather) return null;
+  const { latitude, longitude, timezone } = config.location;
+  const pv = pvMatrixCache.get(
+    [latitude, longitude, timezone, building, panels, system, horizons, weather],
+    () => pvPowerMatrix(floorModelOf(config, horizons), weather, trackOf(config, weather)),
+  );
+  const load = loadCache.get([weather, timezone, battery.consumptionKwh, battery.loadProfile], () =>
+    householdLoadW(
+      weather.timesUtc,
+      weather.stepMinutes,
+      weather.year,
+      timezone,
+      battery.consumptionKwh,
+      battery.loadProfile,
+    ),
+  );
+  const months = monthsOf(config, weather);
+  return batteryCache.get([pv, load, months, battery, building.numFloors], () =>
+    simulateBattery(battery, building.numFloors, weather, pv, load, months),
+  );
+}
+
+/** Economics with and without the storage, both from the simulated flows of the household load. */
+export interface BatteryEconomics {
+  withBattery: EconomicsResult;
+  withoutBattery: EconomicsResult;
+  /** Cumulative balance after 0 … lifetime years (index = year). */
+  cashFlowWith: number[];
+  cashFlowWithout: number[];
+}
+
+/** Standby energy the storage draws from the grid (imported beyond the uncovered load), kWh. */
+export function standbyFromGridKwh(r: BatteryResult): number {
+  const a = r.annual;
+  return Math.max(0, a.imported - (a.load - a.selfDirect - a.selfBattery));
+}
+
+/**
+ * Economics of the storage simulation (useBattery): self-consumption and feed-in from the load profile; the
+ * investments of batteryInvestments (without: the floors; with: minus what the storage replaces, plus the
+ * storage; same AC limit in both). Null while
+ * useBattery is null. The investment follows the simulated floors, the economics inputs are live.
+ */
+export function useBatteryEconomics(): BatteryEconomics | null {
+  const result = useBattery();
+  const e = useConfigSection('economics');
+  const simConfig = useSimulationConfig();
+  if (!result) return null;
+  const { battery } = simConfig;
+  const floors = simConfig.building.numFloors;
+  const deps = [result, e, battery.investment, battery.replacedInvestment, floors];
+  return batteryEconomicsCache.get(deps, () => {
+    const a = result.annual;
+    const b = result.baseline.annual;
+    const invest = batteryInvestments(e, battery, floors);
+    const withAt = (years: number): EconomicsResult =>
+      economicsFromFlows(a.selfDirect + a.selfBattery, a.exported, standbyFromGridKwh(result), invest.with, {
+        ...e,
+        lifetimeYears: years,
+      });
+    const withoutAt = (years: number): EconomicsResult =>
+      economicsFromFlows(b.selfConsumed, b.exported, 0, invest.without, { ...e, lifetimeYears: years });
+    const years = Array.from({ length: e.lifetimeYears + 1 }, (_, n) => n);
+    return {
+      withBattery: withAt(e.lifetimeYears),
+      withoutBattery: withoutAt(e.lifetimeYears),
+      cashFlowWith: years.map((n) => withAt(n).lifetimeNet),
+      cashFlowWithout: years.map((n) => withoutAt(n).lifetimeNet),
+    };
+  });
 }

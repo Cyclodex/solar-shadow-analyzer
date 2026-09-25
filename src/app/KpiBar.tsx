@@ -7,6 +7,8 @@ import { shadingTotals } from '../charts/lib/shadingTotals';
 import { criticalAngleKind, substringBeamLoss, type CriticalAngleKind } from '../model/geometry';
 import {
   useAnnualResultsState,
+  useBattery,
+  useBatteryEconomics,
   useEconomics,
   useFloorPlacements,
   useInstant,
@@ -51,6 +53,20 @@ const de = {
   power: 'Leistung jetzt',
   powerSub: 'bei klarem Himmel, AC',
   loading: 'Jahresergebnisse werden berechnet …',
+  paybackBatterySub: (savings: string) => `mit Batterie · Ersparnis ${savings} pro Jahr`,
+  battery: 'Batterie',
+  extra: 'Mehrertrag durch Batterie',
+  extraSub: (limit: string) => `gegenüber reinem Wechselrichter mit ${limit}`,
+  extraSelf: (kwh: string) => `davon selbst verbraucht ${kwh}`,
+  selfConsumption: 'Eigenverbrauch',
+  withoutBattery: (pct: string) => `ohne Batterie ${pct}`,
+  selfConsumptionSub: 'Anteil des Solarstroms im Haushalt',
+  autarky: 'Autarkie',
+  autarkySub: (kwh: string) => `Anteil am Verbrauch von ${kwh}`,
+  cycles: 'Vollzyklen',
+  cyclesUnit: 'pro Jahr',
+  cyclesSub: (kwh: string) => `Speicher ${kwh}`,
+  loadingBattery: 'Batterie wird berechnet …',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -81,6 +97,20 @@ const messages: Messages<typeof de> = {
     power: 'Power now',
     powerSub: 'clear sky, AC',
     loading: 'Computing annual results …',
+    paybackBatterySub: (savings) => `with battery · savings ${savings} per year`,
+    battery: 'Battery',
+    extra: 'Extra yield from the battery',
+    extraSub: (limit) => `compared with a plain inverter of ${limit}`,
+    extraSelf: (kwh) => `of which self-consumed ${kwh}`,
+    selfConsumption: 'Self-consumption',
+    withoutBattery: (pct) => `without battery ${pct}`,
+    selfConsumptionSub: 'share of the solar power used at home',
+    autarky: 'Self-sufficiency',
+    autarkySub: (kwh) => `share of the consumption of ${kwh}`,
+    cycles: 'Full cycles',
+    cyclesUnit: 'per year',
+    cyclesSub: (kwh) => `storage ${kwh}`,
+    loadingBattery: 'Computing battery …',
   },
 };
 
@@ -184,7 +214,10 @@ export function KpiBar() {
   const config = useConfig();
   const simulation = useSimulation();
   const simConfig = useSimulationConfig();
-  const econ = useEconomics();
+  const plainEcon = useEconomics();
+  const battery = useBattery();
+  const batteryEcon = useBatteryEconomics();
+  const econ = batteryEcon?.withBattery ?? plainEcon;
   const annualState = useAnnualResultsState();
   const provisionalNote = useProvisionalNote();
   const instant = useInstant();
@@ -340,12 +373,68 @@ export function KpiBar() {
             }
             sub={
               econ && ready
-                ? t.paybackSub(f.currency(econ.annualSavings, config.economics.currency, 0))
+                ? (batteryEcon ? t.paybackBatterySub : t.paybackSub)(
+                    f.currency(econ.annualSavings, config.economics.currency, 0),
+                  )
                 : null
             }
           />
         </dl>
       </div>
+
+      {simConfig.battery.enabled && config.battery.enabled && (
+        <div
+          className={provisional ? `${styles.group} ${styles.provisional}` : styles.group}
+          aria-busy={!battery || loading || undefined}
+        >
+          <h3 className={styles.groupTitle}>
+            {t.battery} {config.weather.year}
+          </h3>
+          {(!battery || loading) && <span className="sr-only">{t.loadingBattery}</span>}
+          <dl className={styles.grid}>
+            <Kpi
+              label={t.extra}
+              value={
+                battery && ready ? <Num value={`+${f.num(battery.extraOutputKwh)}`} unit="kWh" /> : skeleton
+              }
+              sub={
+                battery && ready
+                  ? [
+                      t.extraSub(f.unit(simConfig.battery.acLimitW, 'W')),
+                      t.extraSelf(f.kwh(battery.extraSelfKwh)),
+                    ]
+                  : null
+              }
+            />
+            <Kpi
+              label={t.selfConsumption}
+              value={battery && ready ? f.pct(battery.selfConsumptionPct) : skeleton}
+              sub={
+                battery && ready
+                  ? [t.withoutBattery(f.pct(battery.baselineSelfConsumptionPct)), t.selfConsumptionSub]
+                  : null
+              }
+            />
+            <Kpi
+              label={t.autarky}
+              value={battery && ready ? f.pct(battery.autarkyPct) : skeleton}
+              sub={
+                battery && ready
+                  ? [
+                      t.withoutBattery(f.pct(battery.baselineAutarkyPct)),
+                      t.autarkySub(f.kwh(battery.annual.load)),
+                    ]
+                  : null
+              }
+            />
+            <Kpi
+              label={t.cycles}
+              value={battery && ready ? <Num value={f.num(battery.cycles)} unit={t.cyclesUnit} /> : skeleton}
+              sub={battery && ready ? t.cyclesSub(f.unit(battery.capacityKwh, 'kWh', 2)) : null}
+            />
+          </dl>
+        </div>
+      )}
 
       <div className={styles.group}>
         <h3 className={styles.groupTitle}>

@@ -11,9 +11,10 @@ import {
 } from '../i18n';
 import { useCommon } from '../i18n/common';
 import { useSelectedUtc } from '../hooks/useModel';
+import { batteryPreset } from '../model/batteryPresets';
 import { anchorDistance, OTHER_SITE_DISTANCE, SWISSTOPO_CREDIT } from '../model/buildings';
 import { lonLatToEnu } from '../model/enu';
-import type { Config, ShadingModel } from '../model/types';
+import type { BatteryStrategy, Config, ShadingModel } from '../model/types';
 import { useConfig } from '../state/configStore';
 import { useDataStore, type SurfaceStatus } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
@@ -101,6 +102,29 @@ const de = {
   withoutScan: 'gerechnet ohne Laserscan',
   addressBuilding: 'Gebäude an der Adresse',
   sources: 'Datenquellen',
+  battery: 'Batterie',
+  device: 'Gerät',
+  custom: 'eigene Werte',
+  storage: 'Speicher',
+  storageValue: (units: string, unit: string, total: string) => `${units} × ${unit} = ${total}`,
+  layoutShared: 'ein System für alle Stockwerke',
+  layoutPerFloor: 'ein System je Stockwerk',
+  powers: 'PV-Eingang / Laden / Entladen',
+  acLimit: 'AC-Ausgangsgrenze',
+  strategy: 'Betriebsart',
+  strategies: {
+    surplus: 'nur Überschuss speichern',
+    'base-load': 'konstante Grundlast',
+    'self-consumption': 'Eigenverbrauch (Smart Meter)',
+  } satisfies Record<BatteryStrategy, string>,
+  baseLoad: 'Grundlast',
+  efficiency: 'Wirkungsgrad Laden / Entladen',
+  reserve: 'Reserve / Eigenverbrauch',
+  consumption: 'Jahresverbrauch Haushalt',
+  profileH0: 'BDEW-Standardlastprofil H0',
+  profileFlat: 'konstant',
+  batteryInvestment: 'Investition Speicher',
+  replaced: 'ersetzt',
 };
 
 const messages: Messages<typeof de> = {
@@ -181,6 +205,29 @@ const messages: Messages<typeof de> = {
     withoutScan: 'computed without the laser scan',
     addressBuilding: 'Building at the address',
     sources: 'Data sources',
+    battery: 'Battery',
+    device: 'Device',
+    custom: 'custom values',
+    storage: 'Storage',
+    storageValue: (units, unit, total) => `${units} × ${unit} = ${total}`,
+    layoutShared: 'one system for all floors',
+    layoutPerFloor: 'one system per floor',
+    powers: 'PV input / charging / discharging',
+    acLimit: 'AC output limit',
+    strategy: 'Operating mode',
+    strategies: {
+      surplus: 'store surplus only',
+      'base-load': 'constant base load',
+      'self-consumption': 'self-consumption (smart meter)',
+    },
+    baseLoad: 'Base load',
+    efficiency: 'Charging / discharging efficiency',
+    reserve: 'Reserve / own consumption',
+    consumption: 'Annual household consumption',
+    profileH0: 'BDEW standard load profile H0',
+    profileFlat: 'constant',
+    batteryInvestment: 'Storage investment',
+    replaced: 'replaces',
   },
 };
 
@@ -252,6 +299,8 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
   const surface = useDataStore((st) => st.surface);
   const addressBuilding = useAddressBuildingSummary();
   const { location: loc, building: b, panels: p, system: s, horizon: h, weather: w, economics: e } = config;
+  const bat = config.battery;
+  const systems = bat.layout === 'per-floor' ? b.numFloors : 1;
 
   // Surroundings (buildings feature): position on the building, buildings, laser scan, sources.
   const placedAz = placementAzimuth(config);
@@ -413,6 +462,43 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
             [t.lifetime, c.years(f.int(e.lifetimeYears))],
           ]}
         />
+        {bat.enabled && (
+          <Group
+            title={t.battery}
+            items={[
+              [t.device, batteryPreset(bat.preset)?.label ?? t.custom],
+              [
+                t.storage,
+                `${t.storageValue(
+                  f.int(bat.units),
+                  f.unit(bat.unitCapacityWh, 'Wh'),
+                  f.unit((bat.units * bat.unitCapacityWh * systems) / 1000, 'kWh', 2),
+                )}, ${bat.layout === 'per-floor' && b.numFloors > 1 ? t.layoutPerFloor : t.layoutShared}`,
+              ],
+              [t.powers, `${f.num(bat.pvInputW)} / ${f.num(bat.chargeW)} / ${f.unit(bat.dischargeW, 'W')}`],
+              [t.acLimit, f.unit(bat.acLimitW, 'W')],
+              [
+                t.strategy,
+                bat.strategy === 'self-consumption'
+                  ? t.strategies[bat.strategy]
+                  : `${t.strategies[bat.strategy]}, ${t.baseLoad} ${f.unit(bat.baseLoadW, 'W')}`,
+              ],
+              [
+                t.efficiency,
+                `${f.pct(bat.chargeEfficiencyPct, 1)} / ${f.pct(bat.dischargeEfficiencyPct, 1)}`,
+              ],
+              [t.reserve, `${f.pct(bat.minSocPct)} / ${f.unit(bat.standbyW, 'W', 1)}`],
+              [
+                t.consumption,
+                `${f.kwh(bat.consumptionKwh)}, ${bat.loadProfile === 'h0' ? t.profileH0 : t.profileFlat}`,
+              ],
+              [
+                t.batteryInvestment,
+                `${f.currency(bat.investment, e.currency, 0)} (${t.replaced} ${f.currency(bat.replacedInvestment, e.currency, 0)})`,
+              ],
+            ]}
+          />
+        )}
       </div>
       <ShareLink url={shareUrl(config)} label={t.link} long={t.linkLong} />
     </section>

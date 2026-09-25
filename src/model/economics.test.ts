@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { economics } from './economics';
+import { batteryInvestments, economics, economicsFromFlows } from './economics';
 import { DEFAULT_CONFIG } from './defaults';
 import type { EconomicsConfig } from './types';
 
@@ -76,5 +76,41 @@ describe('economics', () => {
     expect(zero.paybackYears).toBe(Infinity);
     expect(zero.lifetimeNet).toBe(-1800);
     expect(economics(-5, 1, E).annualKwh).toBe(0);
+  });
+});
+
+describe('economicsFromFlows', () => {
+  const e = DEFAULT_CONFIG.economics;
+
+  it('equals economics() for the flows of its self-consumption share', () => {
+    const a = economics(1000, 2, e);
+    const b = economicsFromFlows(700, 300, 0, 1800, e);
+    expect(b.annualSavings).toBeCloseTo(a.annualSavings, 12);
+    expect(b.paybackYears).toBeCloseTo(a.paybackYears, 12);
+    expect(b.lifetimeNet).toBeCloseTo(a.lifetimeNet, 12);
+  });
+
+  it('prices self-consumption, feed-in and grid-drawn standby', () => {
+    // 1000 · 0.30 + 500 · 0.08 − 20 · 0.30 = 334
+    const r = economicsFromFlows(1000, 500, 20, 3340, { ...e, degradationPct: 0 });
+    expect(r.annualSavings).toBeCloseTo(334, 12);
+    expect(r.paybackYears).toBeCloseTo(10, 12);
+    expect(r.annualKwh).toBe(1500);
+  });
+});
+
+describe('batteryInvestments', () => {
+  const e = DEFAULT_CONFIG.economics;
+  const b = DEFAULT_CONFIG.battery;
+
+  it('without: the floors; with: minus what the storage replaces, plus the storage', () => {
+    expect(batteryInvestments(e, b, 2)).toEqual({ without: 1800, replaced: 0, with: 1800 + 2998 });
+    expect(batteryInvestments(e, { ...b, replacedInvestment: 600 }, 2)).toEqual({
+      without: 1800,
+      replaced: 600,
+      with: 1200 + 2998,
+    });
+    // Capped at the floors' investment.
+    expect(batteryInvestments(e, { ...b, replacedInvestment: 5000 }, 2).with).toBe(2998);
   });
 });

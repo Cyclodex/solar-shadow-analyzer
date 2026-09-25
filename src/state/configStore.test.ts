@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Config } from '../model/types';
 import { DEFAULT_CONFIG } from '../model/defaults';
-import { CONFIG_STORAGE_KEY, shareConfig, useConfigStore } from './configStore';
+import { CONFIG_STORAGE_KEY, CONFIG_STORAGE_VERSION, shareConfig, useConfigStore } from './configStore';
 import { resetStores } from '../test/utils';
 
 describe('useConfigStore', () => {
@@ -44,13 +44,13 @@ describe('useConfigStore', () => {
     expect(useConfigStore.getState().config).toEqual(DEFAULT_CONFIG);
   });
 
-  it('persists the config to localStorage (version 2)', () => {
+  it('persists the config to localStorage (version 3)', () => {
     useConfigStore.getState().patch('location', { latitude: 46.5 });
     const stored = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) ?? 'null') as {
       state: { config: { location: { latitude: number } } };
       version: number;
     };
-    expect(stored.version).toBe(2);
+    expect(stored.version).toBe(3);
     expect(stored.state.config.location.latitude).toBe(46.5);
   });
 
@@ -94,7 +94,7 @@ describe('persist hydration', () => {
     );
     const store = await freshStore();
     const { config } = store.getState();
-    expect(config.version).toBe(2);
+    expect(config.version).toBe(3);
     expect(config.location.latitude).toBe(46.2);
     expect(config.building).toMatchObject({
       facadeAzimuth: 180,
@@ -106,16 +106,20 @@ describe('persist hydration', () => {
     expect(config.economics).toEqual(DEFAULT_CONFIG.economics);
   });
 
-  it('sanitizes a stored v2 config', async () => {
+  it('sanitizes a stored v2 config (no battery section: storage off)', async () => {
+    const v2: Record<string, unknown> = { ...DEFAULT_CONFIG };
+    delete v2.battery;
     localStorage.setItem(
       CONFIG_STORAGE_KEY,
       JSON.stringify({
-        state: { config: { ...DEFAULT_CONFIG, panels: { ...DEFAULT_CONFIG.panels, count: 50 } } },
+        state: { config: { ...v2, version: 2, panels: { ...DEFAULT_CONFIG.panels, count: 50 } } },
         version: 2,
       }),
     );
     const store = await freshStore();
     expect(store.getState().config.panels.count).toBe(8);
+    expect(store.getState().config.version).toBe(3);
+    expect(store.getState().config.battery).toEqual(DEFAULT_CONFIG.battery);
   });
 
   it('adds the surroundings fields to a stored config from before them (buildings none, laser scan off)', async () => {
@@ -146,7 +150,8 @@ describe('persist hydration', () => {
       state: { config: Config };
       version: number;
     };
-    expect(stored.version).toBe(2);
+    // The storage version is the battery migration's (the surroundings fields needed none of their own).
+    expect(stored.version).toBe(CONFIG_STORAGE_VERSION);
     expect(stored.state.config.horizon.surfaceModel.enabled).toBe(true);
     expect(stored.state.config.horizon.buildings).toEqual([]);
   });

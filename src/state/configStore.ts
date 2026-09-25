@@ -6,7 +6,7 @@ import { sanitizeConfig } from '../model/share';
 import { safeJsonStorage } from './storage';
 
 // ─────────────────────────────────────────────
-// CONFIG STORE (persisted: localStorage 'ssa.config', version 2)
+// CONFIG STORE (persisted: localStorage 'ssa.config', version 3; older versions migrate via sanitizeConfig)
 // Every write goes through sanitizeConfig (clamped to LIMITS, rounded, valid time zone), then is
 // structurally shared with the previous config: sections whose content did not change keep their
 // object identity. Hooks memoise per section reference (e.g. a tilt change leaves `location`,
@@ -24,6 +24,7 @@ export const SECTION_KEYS: readonly SectionKey[] = [
   'horizon',
   'weather',
   'economics',
+  'battery',
 ];
 
 export interface ConfigState {
@@ -44,7 +45,7 @@ interface PersistedConfig {
 }
 
 export const CONFIG_STORAGE_KEY = 'ssa.config';
-export const CONFIG_STORAGE_VERSION = 2;
+export const CONFIG_STORAGE_VERSION = 3;
 
 const sameJson = (a: unknown, b: unknown): boolean => a === b || JSON.stringify(a) === JSON.stringify(b);
 
@@ -108,7 +109,7 @@ export const useConfigStore = create<ConfigState>()(
       version: CONFIG_STORAGE_VERSION,
       storage: safeJsonStorage<PersistedConfig>(),
       partialize: (s): PersistedConfig => ({ config: s.config }),
-      // Older stored versions (v1 flat config, or `{ config: v1 }`) → sanitizeConfig migrates them.
+      // Older stored versions (v1 flat config, `{ config: v1 }`, v2 without battery) → sanitizeConfig migrates them.
       migrate: (persisted): PersistedConfig => ({ config: sanitizeConfig(persistedConfig(persisted)) }),
       merge: (persisted, current) => {
         if (persisted === undefined || persisted === null) return current;

@@ -3,6 +3,7 @@ import { Button } from '../components/Button';
 import { ResetIcon } from '../components/icons';
 import { useMessages, type Messages } from '../i18n';
 import { useConfigStore } from '../state/configStore';
+import { BatterySection } from './BatterySection';
 import { BuildingSection } from './BuildingSection';
 import { EconomicsSection } from './EconomicsSection';
 import { HorizonSection } from './HorizonSection';
@@ -121,6 +122,7 @@ export function SettingsSections() {
       <BuildingSection />
       <PanelSection />
       <SystemSection />
+      <BatterySection />
       <HorizonSection />
       <WeatherSection />
       <EconomicsSection />

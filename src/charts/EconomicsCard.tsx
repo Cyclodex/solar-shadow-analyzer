@@ -4,7 +4,13 @@ import { ViewCard } from '../components/ViewCard';
 import { cssVars } from '../components/cssVars';
 import { floorLabel, useFormat, useLang, useMessages, type Format, type Messages } from '../i18n';
 import { useCommon, type CommonMessages } from '../i18n/common';
-import { useAnnualInputsPending, useEconomics, useSimulation } from '../hooks/useModel';
+import {
+  useAnnualInputsPending,
+  useBatteryEconomics,
+  useEconomics,
+  useSimulation,
+  type BatteryEconomics,
+} from '../hooks/useModel';
 import { economics } from '../model/economics';
 import type { EconomicsConfig, EconomicsResult } from '../model/types';
 import { clearSkyParts } from '../export/filenames';
@@ -52,6 +58,16 @@ const de = {
   basisWeather: (year: number) => `simulierter Jahresertrag mit Open-Meteo-Wetter ${year}`,
   basisClearSky: (hint: string) => `simulierter Jahresertrag (${hint})`,
   loading: 'Wirtschaftlichkeit wird berechnet …',
+  withoutLine: 'ohne Batterie',
+  compareCaption: 'Wirtschaftlichkeit mit und ohne Batterie',
+  variant: 'Variante',
+  without: 'Ohne Batterie',
+  with: 'Mit Batterie',
+  selfCol: 'Selbst verbraucht',
+  exportCol: 'Eingespeist',
+  investmentCol: 'Investition',
+  batteryAssumptions: (acLimit: string, consumption: string, investment: string, replaced: string) =>
+    `Mit Batterie: Eigenverbrauch und Einspeisung aus der Simulation mit dem Verbrauchsprofil (${consumption}) statt des Eigenverbrauchsanteils; beide Varianten mit derselben AC-Grenze (${acLimit}); Investition mit Batterie: Stockwerke − ${replaced}, die der Speicher ersetzt, + ${investment} für den Speicher. Alterung und Ersatz des Speichers sind nicht berücksichtigt.`,
 };
 const messages: Messages<typeof de> = {
   de,
@@ -88,6 +104,16 @@ const messages: Messages<typeof de> = {
     basisWeather: (year) => `simulated annual yield with Open-Meteo weather ${year}`,
     basisClearSky: (hint) => `simulated annual yield (${hint.charAt(0).toLowerCase()}${hint.slice(1)})`,
     loading: 'Computing economics …',
+    withoutLine: 'without battery',
+    compareCaption: 'Economics with and without battery',
+    variant: 'Variant',
+    without: 'Without battery',
+    with: 'With battery',
+    selfCol: 'Self-consumed',
+    exportCol: 'Fed in',
+    investmentCol: 'Investment',
+    batteryAssumptions: (acLimit, consumption, investment, replaced) =>
+      `With battery: self-consumption and feed-in from the simulation with the consumption profile (${consumption}) instead of the self-consumption share; both variants with the same AC limit (${acLimit}); investment with battery: floors − ${replaced} replaced by the storage + ${investment} for the storage. Ageing and replacement of the storage are not included.`,
   },
 };
 
@@ -140,6 +166,9 @@ interface CashFlowChartProps {
   paybackYears: number;
   currency: string;
   t: T;
+  /** Second balance line (dashed), e.g. without battery. */
+  compare?: readonly number[];
+  compareLabel?: string;
 }
 
 /**
@@ -147,7 +176,7 @@ interface CashFlowChartProps {
  * break-even marker and end value. Keyboard/pointer: a year cursor (role="slider") reads out each year.
  * Savings accrue evenly within a year in the model, so the straight segments between years are exact.
  */
-function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps) {
+function CashFlowChart({ values, paybackYears, currency, t, compare, compareLabel }: CashFlowChartProps) {
   const f = useFormat();
   const [wrapRef, width] = useElementWidth<HTMLDivElement>({ fallback: 560 });
   const [active, setActive] = useState<number | null>(null);
@@ -155,7 +184,7 @@ function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps
   const years = values.length - 1;
 
   const height = width < 420 ? 210 : 250;
-  const { domain, ticks } = yScale(values);
+  const { domain, ticks } = yScale(compare ? [...values, ...compare] : values);
   const tickText = ticks.map((v) => f.num(v));
   const m = {
     top: 30,
@@ -186,7 +215,10 @@ function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps
     bx < m.left + plotW * 0.25 ? 'start' : bx > m.left + plotW * 0.75 ? 'end' : 'middle';
   const net = values[years];
   const shown = active ?? years;
-  const readout = t.yearValue(f.int(shown), f.currency(values[shown], currency, 0));
+  const readout =
+    t.yearValue(f.int(shown), f.currency(values[shown], currency, 0)) +
+    (compare && compareLabel ? ` · ${compareLabel} ${f.currency(compare[shown], currency, 0)}` : '');
+  const compareLine = compare ? linePath(compare.map((v, i) => [x(i), y(v)] as const)) : null;
 
   const yearAt = (clientX: number, svg: SVGSVGElement): number => {
     const r = svg.getBoundingClientRect();
@@ -278,6 +310,9 @@ function CashFlowChart({ values, paybackYears, currency, t }: CashFlowChartProps
           <path className={styles.gain} d={area} clipPath={`url(#${uid}-gain)`} />
           <path className={styles.loss} d={area} clipPath={`url(#${uid}-loss)`} />
           <line className={styles.zero} x1={m.left} x2={m.left + plotW} y1={y0} y2={y0} />
+          {compareLine && (
+            <path className={styles.line} d={compareLine} strokeDasharray="5 4" opacity={0.6} />
+          )}
           <path className={styles.line} d={line} />
 
           {showBreakEven && (
@@ -393,6 +428,57 @@ function FloorTable({
   );
 }
 
+function CompareTable({ b, e, t }: { b: BatteryEconomics; e: EconomicsConfig; t: T }) {
+  const f = useFormat();
+  const c = useCommon();
+  const payback = (years: number): string => (Number.isFinite(years) ? f.num(years, 1) : c.never);
+  const head = (label: string, unit: string): ReactNode => (
+    <>
+      {label} <span className={styles.colUnit}>{unit}</span>
+    </>
+  );
+  const rows: [string, EconomicsResult][] = [
+    [t.without, b.withoutBattery],
+    [t.with, b.withBattery],
+  ];
+  return (
+    <div className={styles.tableWrap}>
+      <table className={styles.table}>
+        <caption className="sr-only">{t.compareCaption}</caption>
+        <thead>
+          <tr>
+            <th scope="col">{t.variant}</th>
+            <th scope="col">{head(t.savingsCol, e.currency)}</th>
+            <th scope="col">{head(t.paybackCol, t.yearsUnit)}</th>
+            <th scope="col">{head(t.net(e.lifetimeYears), e.currency)}</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, r]) => (
+            <tr key={label}>
+              <th scope="row">
+                <span className={styles.floorName}>{label}</span>
+                <span className={`${styles.floorKwh} ${styles.compareDetail}`}>
+                  {t.selfCol} {f.kwh(r.selfConsumedKwh)}
+                </span>
+                <span className={`${styles.floorKwh} ${styles.compareDetail}`}>
+                  {t.exportCol} {f.kwh(r.exportedKwh)}
+                </span>
+                <span className={`${styles.floorKwh} ${styles.compareDetail}`}>
+                  {t.investmentCol} {f.currency(r.investment, e.currency, 0)}
+                </span>
+              </th>
+              <td>{f.num(r.annualSavings)}</td>
+              <td>{payback(r.paybackYears)}</td>
+              <td>{f.num(r.lifetimeNet)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 // ── Card ─────────────────────────────────────
 
 /**
@@ -407,7 +493,10 @@ export function EconomicsCard() {
   const locationName = useConfigSection('location').name;
   const e = useConfigSection('economics');
   const simulation = useSimulation();
-  const total = useEconomics();
+  const plainTotal = useEconomics();
+  const batteryEcon = useBatteryEconomics();
+  const battery = useConfigSection('battery');
+  const total = batteryEcon?.withBattery ?? plainTotal;
   const pending = useAnnualInputsPending();
 
   const rows = useMemo<FloorRow[]>(
@@ -423,7 +512,7 @@ export function EconomicsCard() {
 
   // Cumulative balance after 0 … lifetime years: the model's lifetimeNet for each horizon. The investment
   // follows the simulated floors (same snapshot as the yield, as in useEconomics), not the live config.
-  const cashFlow = useMemo(() => {
+  const plainCashFlow = useMemo(() => {
     if (!simulation) return null;
     const kwh = simulation.totalAnnualKwh;
     const floors = simulation.floors.length;
@@ -433,7 +522,9 @@ export function EconomicsCard() {
     );
   }, [simulation, e]);
 
-  const ready = simulation !== null && total !== null && cashFlow !== null;
+  const cashFlow = batteryEcon?.cashFlowWith ?? (battery.enabled ? null : plainCashFlow);
+  const ready =
+    simulation !== null && total !== null && cashFlow !== null && (!battery.enabled || !!batteryEcon);
   const money = (v: number): string => f.currency(v, e.currency, 0);
   const tariff = (v: number): string => {
     const digits = Math.abs(v * 100 - Math.round(v * 100)) > 1e-9 ? 4 : 2;
@@ -464,7 +555,21 @@ export function EconomicsCard() {
       }
       minHeight={200}
       busy={!ready || pending}
-      footer={<p>{t.assumptions(assumptionList, simulation ? basis : c.loading)}</p>}
+      footer={
+        <>
+          <p>{t.assumptions(assumptionList, simulation ? basis : c.loading)}</p>
+          {battery.enabled && (
+            <p>
+              {t.batteryAssumptions(
+                f.unit(battery.acLimitW, 'W'),
+                f.kwh(battery.consumptionKwh),
+                money(battery.investment),
+                money(battery.replacedInvestment),
+              )}
+            </p>
+          )}
+        </>
+      }
     >
       <div className={styles.layout}>
         {!ready && <span className="sr-only">{t.loading}</span>}
@@ -493,8 +598,19 @@ export function EconomicsCard() {
         </dl>
         {ready && (
           <div className={styles.details}>
-            <CashFlowChart values={cashFlow} paybackYears={total.paybackYears} currency={e.currency} t={t} />
-            <FloorTable rows={rows} total={total} e={e} t={t} />
+            <CashFlowChart
+              values={cashFlow}
+              paybackYears={total.paybackYears}
+              currency={e.currency}
+              t={t}
+              compare={batteryEcon?.cashFlowWithout}
+              compareLabel={t.withoutLine}
+            />
+            {batteryEcon ? (
+              <CompareTable b={batteryEcon} e={e} t={t} />
+            ) : (
+              <FloorTable rows={rows} total={total} e={e} t={t} />
+            )}
           </div>
         )}
       </div>

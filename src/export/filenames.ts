@@ -15,6 +15,9 @@ export type ExportKind =
   | 'tiltSweep'
   | 'heatmap'
   | 'economics'
+  | 'batteryMonthly'
+  | 'batteryDay'
+  | 'batteryHourly'
   | 'daily'
   | 'scene3d'
   | 'frontal'
@@ -32,6 +35,9 @@ const NAMES: Record<Lang, { app: string; clearSky: string } & Record<ExportKind,
     tiltSweep: 'neigungsvergleich',
     heatmap: 'schatten-heatmap',
     economics: 'wirtschaftlichkeit',
+    batteryMonthly: 'batterie-energiefluss',
+    batteryDay: 'batterie-tagesverlauf',
+    batteryHourly: 'batterie-stundenwerte',
     daily: 'tagesverlauf',
     scene3d: '3d-ansicht',
     frontal: 'frontalansicht',
@@ -48,6 +54,9 @@ const NAMES: Record<Lang, { app: string; clearSky: string } & Record<ExportKind,
     tiltSweep: 'tilt-comparison',
     heatmap: 'shade-heatmap',
     economics: 'economics',
+    batteryMonthly: 'battery-energy-flow',
+    batteryDay: 'battery-daily-profile',
+    batteryHourly: 'battery-hourly',
     daily: 'daily-profile',
     scene3d: '3d-view',
     frontal: 'front-view',

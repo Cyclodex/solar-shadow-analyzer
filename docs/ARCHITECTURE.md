@@ -49,11 +49,17 @@ src/
     simulation.ts          Jahressimulation (kWh je Stockwerk/Monat, Verschattungsverlust)
     analysis.ts            Heatmap-Daten (Sonne im Fassadenrahmen je Fassade und Horizont: heatmapSunCells, dann nur die
                            Verschattung: heatmapFromSunCells), Neigungs-Sweep (0–90° in 5°-Schritten), Tagesprofil
-    economics.ts           Wirtschaftlichkeit
+    economics.ts           Wirtschaftlichkeit (economics: Eigenverbrauchsanteil; economicsFromFlows: Flüsse aus der
+                           Batteriesimulation)
+    battery.ts             Batteriespeicher: PV-Leistung je Schritt (pvPowerMatrix), Energiefluss (dispatchBattery),
+                           Jahresergebnis (simulateBattery), Tagesauszug (batteryDay)
+    batteryPresets.ts      Geräte-Presets der Speicher mit Quellen (EcoFlow STREAM, Anker SOLIX, Zendure)
+    loadProfile.ts         Haushaltslast je Wetterschritt (BDEW-H0 oder konstant); loadProfileData.ts: H0-Tabelle
     storageCache.ts        localStorage-LRU-Cache der Wetter- und Geländeergebnisse (fängt fehlendes, gesperrtes oder
                            volles localStorage ab)
     presets.ts             Standort- (24) und Modul-Presets (5), Ortssuche (Open-Meteo Geocoding)
-    share.ts               Config ⇄ URL-Hash (Base64url) und JSON, Validierung (sanitizeConfig), Migration v1 → v2
+    share.ts               Config ⇄ URL-Hash (Base64url) und JSON, Validierung (sanitizeConfig), Migration v1 → v3,
+                           Teilen-Format-Versionen (SHARE_BASES 1 und 2)
     polygon.ts             Ebene Polygone: Fläche/Orientierung, Punkt-in-Polygon, Abstand, Vereinfachung, Clipping,
                            Höfe als Schlüssellochring (bridgeHoles)
     enu.ts                 WGS84 ⇄ lokale Meter Ost/Nord (Radien M/N), ENU ⇄ Fassadenrahmen (facadeTransform)
@@ -75,7 +81,7 @@ src/
     svg/                   SVG-Helfer für Diagramme und 2D-Ansichten: useElementWidth, useSvgId, paths, text
                            (Textbreiten, Fliesslayout), legend (gemeinsamer Legendenstil), HatchPattern
   controls/                Eingaben (Sidebar): Sidebar, TimeControls, TiltControl und je Einstellungsgruppe eine
-                           *Section.tsx (Location, Building, Panel, System, Horizon, Weather, Economics);
+                           *Section.tsx (Location, Building, Panel, System, Battery, Horizon, Weather, Economics);
                            sections.module.css (gemeinsames Layout der Abschnitte), icons (gemeinsame Icons der
                            Eingaben), loadError.ts + LoadErrorDetails (übersetzte Ursache eines Ladefehlers,
                            technische Meldung aufklappbar), useTimeSlider (Uhrzeitregler für TimeControls und
@@ -99,13 +105,14 @@ src/
                            (Modellschatten-Overlay), textures, webgl, messages, captureRender (Bild für PNG-Export
                            und Druck sofort und in höherer Auflösung rendern)
   charts/                  Analyse: DailyProfileChart, ShadeHeatmap (Canvas), MonthlyYieldChart, TiltSweepChart,
-                           EconomicsCard, MonthlyTable
+                           BatteryDayChart, BatteryMonthlyChart (nur mit Batterie), EconomicsCard, MonthlyTable
     lib/                   Chart-Bausteine ohne Library: scale, Axes, timeAxis, legend/ChartLegend, ChartTooltip,
                            ChartStats, DataTable (+ ColumnHeader), heatmap, monthlyTable, colors, canvasTheme,
                            floors, focus, sourceLabel, usePlotPointer (Maus und Touch-Gesten, siehe Layout und
                            Bedienung), PlotSlider (Tastatur-/Zeiger-Ebene mit Fadenkreuz), sliderKeys, shadingTotals
                            (Verschattungsverlust für KPI, Monatsertrag und Monatstabelle)
-  export/                  png, csv (RFC 4180), resultsCsv (Monatsertrag, Neigungsvergleich, Heatmap), configFile
+  export/                  png, csv (RFC 4180), resultsCsv (Monatsertrag, Neigungsvergleich, Heatmap, Batterie je Monat
+                           und je Stunde), configFile
                            (JSON speichern/laden), clipboard, download, filenames, Druckbericht (print.ts, print.css,
                            PrintReport.tsx, PrintRoot.tsx), canvasRender (Canvas vor PNG-Export/Druck synchron neu
                            zeichnen)
@@ -132,7 +139,8 @@ src/
 
 public/                    favicon.svg und die daraus erzeugten App-Icons (pwa-192x192, pwa-512x512,
                            pwa-maskable-512x512, apple-touch-icon)
-e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts, mobile.spec.ts, pwa.spec.ts)
+e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts, mobile.spec.ts, pwa.spec.ts,
+                           battery.spec.ts)
 scripts/validate-terrain.ts  Gelände-Horizont gegen PVGIS printhorizon prüfen (braucht Netzwerk)
 scripts/validate-yield.ts    Jahresertrag gegen PVGIS seriescalc/PVcalc prüfen (braucht Netzwerk)
 scripts/validate-buildings.ts  Gebäude-Import aus den swisstopo-Vektorkacheln live prüfen (Kramgasse 49, Bern)
@@ -217,6 +225,100 @@ ohne Horizont und AC-Grenze; β = 35° Süd, 45° und 90° bei 202°; Wetter 202
 | `era5`            | −0.7 % bis −1.3 %    | +0.6 % bis +3.6 %      | +3.6 % bis +5.8 %               |
 | `best_match`      | −1.8 % bis +0.6 %    | +1.4 % bis +2.9 %      | +4.3 % bis +5.3 %               |
 
+## Batteriespeicher
+
+Design-Notiz (Stand 25.09.2026). Modell in `model/battery.ts`, Last in `model/loadProfile.ts`, Hooks `useBattery`
+und `useBatteryEconomics` in `hooks/useModel.ts`.
+
+### Ziel und Abgrenzung
+
+Balkonspeicher wie EcoFlow STREAM haben Solareingang (MPPT), Batterie und Wechselrichter in einem Gerät. Die
+Panels laden mit voller Leistung, abgegeben wird höchstens die AC-Grenze. Ohne Speicher begrenzt die App den
+Ertrag je Stockwerk hart auf `system.inverterLimitW`; mit Speicher lädt der Überschuss die Batterie und geht
+später hinaus. Die Batterie ist ein eigener Konfigurationsabschnitt `battery` (standardmässig aus). Der
+Jahresertrag, die Verschattung und alle bisherigen Diagramme bleiben unverändert (`simulateYear`); die
+Batterie-Ergebnisse kommen dazu: KPI-Gruppe «Batterie», Tagesverlauf, Energiefluss je Monat, Wirtschaftlichkeit
+mit/ohne Batterie, CSV und Druckbericht.
+
+### Energiefluss je Wetterschritt (stündlich)
+
+Eingang ist die PV-Leistung jedes Stockwerks nach Temperatur und Systemverlusten, vor jeder AC-Grenze (`dcW` aus
+`evaluateStep`, `pvPowerMatrix`). Je Speichersystem j:
+
+1. PV-Eingangsgrenze: `min(PV, pvInputW)`, der Rest ist verloren (`pvInputLimited`).
+2. Eigenverbrauch des Systems (`standbyW`): aus PV, sonst aus der Batterie über der Reserve, sonst aus dem Netz.
+3. Direkte Abgabe bis zur Schwelle der Betriebsart: `surplus` = AC-Grenze, `base-load` = Grundlast,
+   `self-consumption` = Haushaltslast (auf mehrere Systeme anteilig zu `min(PV, AC-Grenze)` verteilt).
+4. Überschuss lädt: `≤ chargeW` und `≤ (Kapazität − Inhalt)/(η_L·h)`; gespeichert wird `Laden·η_L·h`.
+5. Was dann übrig ist, geht bis zur AC-Grenze hinaus; der Rest ist abgeregelt (`curtailed`).
+6. Entladen Richtung Ziel (`surplus`/`base-load`: Grundlast je System; `self-consumption`: ungedeckte Last),
+   begrenzt durch `dischargeW`, die freie AC-Grenze und `(Inhalt − Reserve)·η_E/h`.
+7. Haushalt: die AC-Abgabe deckt die Last zuerst mit direktem PV, dann mit Batteriestrom; der Rest wird
+   eingespeist, der ungedeckte Teil (plus Eigenverbrauch aus dem Netz) bezogen.
+
+Die Wirkungsgrade gelten relativ zum direkten Weg: `system.lossesPct` enthält den Wechselrichter schon, also ist
+`η_L·η_E` der Zusatzverlust einer kWh über die Batterie. Startzustand periodisch: ein erster Durchlauf ab der
+Reserve liefert den Inhalt am Jahresende, der ausgewertete zweite startet damit (31.12. geht in den 1.1. über).
+
+Energiebilanz (Test `battery.test.ts`): `PV = PV-Eingangsgrenze + direkt + entladen + abgeregelt + Ladeverluste +
+Entladeverluste + Eigenverbrauch aus PV/Batterie + Änderung des Speicherinhalts`, AC-seitig `direkt + entladen =
+selbst verbraucht + eingespeist`. Vergleich «ohne Batterie»: dieselben Systeme als reine Wechselrichter mit
+derselben AC-Grenze, ohne Eigenverbrauch (`min(PV, AC-Grenze)` je System). Mehrertrag = AC-Abgabe mit minus ohne
+Speicher.
+
+Kennzahlen: Eigenverbrauch = selbst verbraucht / PV, Autarkie = selbst verbraucht / Last (je mit und ohne
+Batterie), Vollzyklen = den Zellen entnommene Energie / Gesamtkapazität.
+
+### Aufbau: ein System oder je Stockwerk
+
+`layout: 'shared'` (Standard): alle Stockwerke laden einen Speicher mit einer AC-Grenze, wie mehrere parallel
+verbundene STREAM-Geräte an einem Ausgang. Die Schweizer Regel gilt pro Haushalt («gesamthaft maximal 600 W» pro
+Bezügerleitung), deshalb ist ein gemeinsames System für einen Haushalt der Normalfall. `'per-floor'`: je
+Stockwerk ein System mit eigener Batterie und AC-Grenze (z. B. getrennte Wohnungen); der Haushaltsverbrauch ist
+auch dann ein gemeinsamer. Mit `per-floor`, Kapazität 0 und `acLimitW = inverterLimitW` ergibt die Simulation
+exakt den heutigen Jahresertrag (Test).
+
+### Haushaltslast
+
+BDEW-Standardlastprofil H0 (1999): 96 Viertelstundenwerte für 3 Jahreszeiten × 3 Tagtypen, aus
+`Repräsentative Profile VDEW.xls` in <https://www.bdew.de/media/documents/Profile.zip> (abgerufen 24.09.2026,
+unverändert in `loadProfileData.ts`), mit dem täglichen Dynamisierungsfaktor `F(t) = −3.92e-10·t⁴ + 3.2e-7·t³ −
+7.02e-5·t² + 2.1e-3·t + 1.24` (auf 4 Stellen gerundet), Jahreszeiten Winter 1.11.–20.3., Sommer 15.5.–14.9.
+(BDEW, «Anwendung der Repräsentativen VDEW-Lastprofile step-by-step», S. 4 und 19). Stündlich gemittelt über die
+vier Viertelstunden der Ortszeit, dann auf den Jahresverbrauch skaliert (das dynamisierte Profil 2026 ergibt
+997.1 kWh je 1000 kWh/a). Feiertage sind nicht berücksichtigt (kantonal verschieden); ein Schweizer Profil ist
+nicht veröffentlicht. Alternative: konstante Last.
+
+### Geräte, Vorgaben und Annahmen
+
+Presets (`batteryPresets.ts`, Quellen im Code): EcoFlow STREAM Ultra X, Ultra, Pro; Anker SOLIX Solarbank 3
+E2700 Pro; Zendure SolarFlow 800 Pro. Werte ohne Herstellerangabe führt jedes Preset unter `assumed`; die UI
+nennt sie. Standard: 2 × STREAM Ultra X (je 3.84 kWh, 2000 W PV, 1500 W PV-Laden; Entladen nicht angegeben, die
+AC-Ausgangsleistung 1200 W gilt als Entladeleistung), gemeinsam, AC-Grenze 600 W (ESTI-Mitteilung
+Plug-&-Play-PV, Bulletin 7/2014: «gesamthaft maximal 600 W» pro Bezügerleitung; EnergieSchweiz-FAQ 12/2024: pro
+Haushalt bzw. Zähler; EU: 800 VA nach § 8 Abs. 5a EEG). Annahmen, weil kein Hersteller der Presets sie angibt:
+Wirkungsgrad Laden und Entladen je 95 %, Reserve 10 %, Eigenverbrauch 0 W. Verbrauch 2500 kWh (ElCom-Profil H2,
+Wegleitung Tarife 2027, 7.3.2), Grundlast 200 W und Investition CHF 2998 (2 × CHF 1499, Händler ch.ecoflow.com)
+sind Beispielwerte.
+
+Kosten (`batteryInvestments` in `model/economics.ts`): Die Investition je Stockwerk (Module, Wechselrichter,
+Montage) bleibt das einzige Feld für die PV-Anlage. Ohne Batterie gilt sie × Stockwerke; mit Batterie abzüglich
+`battery.replacedInvestment` (was der Speicher ersetzt, z. B. die Mikro-Wechselrichter, höchstens die
+Investition der Stockwerke; Standard 0, weil kein belegter Preis vorliegt) plus `battery.investment`. Beide
+Felder stehen in den Einstellungen unter «Wirtschaftlichkeit», sobald die Batterie eingeschaltet ist.
+
+Nicht modelliert: Alterung und Ersatz des Speichers, Laden aus dem Netz, zeitvariable Tarife, Temperatur der
+Batterie, gemischte Geräte (z. B. Ultra X mit STREAM AC Pro).
+
+### Konfiguration, Teilen-Link, Speicher
+
+`Config.version` ist 3 (neuer Abschnitt `battery`), `ssa.config` Version 3; ältere JSON-Dateien, gespeicherte
+Configs und Links ohne Abschnitt erhalten `DEFAULT_CONFIG.battery` (aus). Das Teilen-Format hat Version 2
+(`SHARE_BASES[2]` mit Batterie, Schlüssel `x`); Links ohne `v` (Version 1) nehmen den Batterieabschnitt aus der
+eingefrorenen Basis 2, eine spätere Änderung der Batterie-Standardwerte ändert sie also nicht. Seit Version 2
+trägt jeder Link `v` (die Standard-Config ist `{"v":2}`). Basis 2 hat auch die neue Standard-Wechselrichter-Grenze
+600 W (CH); Links der Version 1 behalten die 800 W von Basis 1.
+
 ## Gelände-Horizont
 
 `terrain.ts` lädt AWS-Terrarium-Kacheln (`https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png`, CORS `*`),
@@ -255,7 +357,7 @@ Laden (`useTerrainLoader`, einmal in `<DataLoader/>` gemountet):
 
 ## State
 
-- `useConfigStore` (Zustand, persistiert unter `ssa.config`, Version 2): `config: Config` + `patch(section, partial)`,
+- `useConfigStore` (Zustand, persistiert unter `ssa.config`, Version 3): `config: Config` + `patch(section, partial)`,
   `setConfig(updater)`, `replace(config)`, `reset()`. Jeder Schreibzugriff läuft durch `sanitizeConfig` und wird
   strukturell geteilt: unveränderte Abschnitte (`location`, `building`, …) behalten ihre Objektidentität.
 - `useTimeStore` (nicht persistiert): Datum, Uhrzeit (lokale Minuten), Animation (`playing`, `speed`).
@@ -335,9 +437,9 @@ vom 25.09.2026.
 - `surfaceModel: { enabled, trees, radius }`: Laserscan-Horizont ein, Bäume berücksichtigen, Radius (m).
 
 Standardwerte: `[]`, `null`, `{ enabled: false, trees: true, radius: 300 }`. Die Felder sind **additiv**: fehlend =
-keine Gebäude, kein Anker, Laserscan aus. `Config.version`, `SHARE_VERSION` und `SHARE_BASES` bleiben unverändert (ein
-paralleler Zweig erhöht sie); die Werte für «fehlend» stehen eingefroren in `SHARE_ADDED_FIELDS` (share.ts), der Typ
-`ShareBase` erlaubt Basen ohne die Felder. `LIMITS` (am Ende angehängt): `neighbour` (height 0.5–300 m, base −50…100 m,
+keine Gebäude, kein Anker, Laserscan aus. Sie brauchen keine eigene Version: `Config.version` 3,
+`SHARE_VERSION` 2 und `SHARE_BASES` stammen von der Batterie; die Werte für «fehlend» stehen eingefroren in
+`SHARE_ADDED_FIELDS` (share.ts), der Typ `ShareBase` erlaubt Basen ohne die Felder (und Basis 1 ohne Batterie). `LIMITS` (am Ende angehängt): `neighbour` (height 0.5–300 m, base −50…100 m,
 coord ±2000 m, je 0.1 m), `surfaceModel.radius` 150–500 m (Schritt 50), `buildingImport.radius` 0–1000 m (10).
 
 `sanitizeConfig`: höchstens `MAX_BUILDINGS` = 150 Gebäude, `MAX_BUILDING_VERTICES` = 64 Ecken je Gebäude (längere
@@ -1250,6 +1352,8 @@ Touch-Ziele und Felder auf Touchscreens (`pointer: coarse`):
   - Brute-Force-Ray-Casting gegen die Schattenrechtecke von `shadeFromAbove()`.
   - Analytische Fälle (Himmelssichtfaktor, Diffus-POA, Transitgeometrie).
   - Konsistenzprüfungen (Monate = Jahr, oberstes Stockwerk = unverschattet, Clipping).
+  - Batterie: Energiebilanz aller Betriebsarten, handgerechnete Tage, eine unabhängige Referenzrechnung je
+    Betriebsart, Kapazität 0 = `simulateYear` exakt, unbegrenzter Speicher, H0-Werte und -Summen gegen BDEW.
   - Wörtliche Auszüge der PVGIS-printhorizon-Antwort.
 - **UI** (Projekt `ui`, jsdom, `src/setupTests.ts`): Rendern und Interaktion mit Testing Library.
   - Netzwerk gesperrt (`fetch` wird abgelehnt, ausser ein Test stubbt es).
