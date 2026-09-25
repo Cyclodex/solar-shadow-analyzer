@@ -80,9 +80,8 @@ const de = {
   standby: 'Eigenverbrauch je System',
   standbyHint:
     'Kein Herstellerwert bekannt, darum 0 W. Mit eigener Messung ergänzen: gedeckt aus Solarstrom, sonst aus der Batterie, sonst aus dem Netz.',
-  investment: 'Investition Speicher',
-  investmentHint:
-    'Beispielwert: 2 × EcoFlow STREAM Ultra X à CHF 1’499 (Händler ch.ecoflow.com, 24.09.2026). Zusätzlich zur Investition je Stockwerk.',
+  costsHint: (investment: string) =>
+    `Kosten des Speichers (${investment}) und was er ersetzt: unter Einstellungen › Wirtschaftlichkeit.`,
   restore: 'Standardwerte wiederherstellen',
   fieldNames: {
     unitCapacityWh: 'Kapazität',
@@ -153,9 +152,8 @@ const messages: Messages<typeof de> = {
     standby: 'Own consumption per system',
     standbyHint:
       'No manufacturer value known, hence 0 W. Add your own measurement: covered by solar power, else the battery, else the grid.',
-    investment: 'Storage investment',
-    investmentHint:
-      'Example value: 2 × EcoFlow STREAM Ultra X at CHF 1,499 (retailer ch.ecoflow.com, 24 Sep 2026). On top of the investment per floor.',
+    costsHint: (investment) =>
+      `Storage cost (${investment}) and what it replaces: under Settings › Economics.`,
     restore: 'Restore defaults',
     fieldNames: {
       unitCapacityWh: 'capacity',
@@ -389,15 +387,7 @@ export function BatterySection() {
             unit="W"
             hint={t.standbyHint}
           />
-          <NumberField
-            label={t.investment}
-            value={b.investment}
-            onChange={(investment) => patch('battery', { investment })}
-            limit={L.investment}
-            sliderMax={10000}
-            unit={currency}
-            hint={t.investmentHint}
-          />
+          <p className={sections.hint}>{t.costsHint(f.currency(b.investment, currency, 0))}</p>
           <div className={sections.actions}>
             <Button
               size="sm"

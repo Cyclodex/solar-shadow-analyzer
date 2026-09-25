@@ -40,7 +40,7 @@ import {
   type HeatmapSunCells,
   type SunGrid,
 } from '../model/analysis';
-import { economics, economicsFromFlows } from '../model/economics';
+import { batteryInvestments, economics, economicsFromFlows } from '../model/economics';
 import { pvPowerMatrix, simulateBattery } from '../model/battery';
 import { householdLoadW } from '../model/loadProfile';
 import { clearSkyIrradiance } from '../model/irradiance';
@@ -808,8 +808,9 @@ export function standbyFromGridKwh(r: BatteryResult): number {
 }
 
 /**
- * Economics of the storage simulation (useBattery): self-consumption and feed-in from the load profile, the
- * investment of the floors plus the storage (with) or the floors only (without, same AC limit). Null while
+ * Economics of the storage simulation (useBattery): self-consumption and feed-in from the load profile; the
+ * investments of batteryInvestments (without: the floors; with: minus what the storage replaces, plus the
+ * storage; same AC limit in both). Null while
  * useBattery is null. The investment follows the simulated floors, the economics inputs are live.
  */
 export function useBatteryEconomics(): BatteryEconomics | null {
@@ -817,22 +818,20 @@ export function useBatteryEconomics(): BatteryEconomics | null {
   const e = useConfigSection('economics');
   const simConfig = useSimulationConfig();
   if (!result) return null;
-  const investment = simConfig.battery.investment;
+  const { battery } = simConfig;
   const floors = simConfig.building.numFloors;
-  return batteryEconomicsCache.get([result, e, investment, floors], () => {
+  const deps = [result, e, battery.investment, battery.replacedInvestment, floors];
+  return batteryEconomicsCache.get(deps, () => {
     const a = result.annual;
     const b = result.baseline.annual;
-    const floorInvestment = e.investmentPerFloor * floors;
+    const invest = batteryInvestments(e, battery, floors);
     const withAt = (years: number): EconomicsResult =>
-      economicsFromFlows(
-        a.selfDirect + a.selfBattery,
-        a.exported,
-        standbyFromGridKwh(result),
-        floorInvestment + investment,
-        { ...e, lifetimeYears: years },
-      );
+      economicsFromFlows(a.selfDirect + a.selfBattery, a.exported, standbyFromGridKwh(result), invest.with, {
+        ...e,
+        lifetimeYears: years,
+      });
     const withoutAt = (years: number): EconomicsResult =>
-      economicsFromFlows(b.selfConsumed, b.exported, 0, floorInvestment, { ...e, lifetimeYears: years });
+      economicsFromFlows(b.selfConsumed, b.exported, 0, invest.without, { ...e, lifetimeYears: years });
     const years = Array.from({ length: e.lifetimeYears + 1 }, (_, n) => n);
     return {
       withBattery: withAt(e.lifetimeYears),

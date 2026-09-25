@@ -180,6 +180,11 @@ export interface BatteryConfig {
   loadProfile: LoadProfileKind;
   /** Investment for the storage system(s), total (currency). */
   investment: number;
+  /**
+   * Part of the floors' investment (economics.investmentPerFloor × floors) that the storage makes unnecessary,
+   * e.g. the micro-inverters it replaces, total (currency). Subtracted in the variant with storage.
+   */
+  replacedInvestment: number;
 }
 
 export interface Config {

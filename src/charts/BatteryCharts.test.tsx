@@ -86,4 +86,12 @@ describe('battery results in the UI', () => {
     expect(e.cashFlowWith.at(-1)).toBeCloseTo(e.withBattery.lifetimeNet, 9);
     expect(screen.getByText(/beide Varianten mit derselben AC-Grenze \(600\sW\)/)).toBeInTheDocument();
   });
+
+  it('with battery, the investment drops by what the storage replaces', () => {
+    withWeather();
+    act(() => useConfigStore.getState().patch('battery', { replacedInvestment: 500 }));
+    const { result } = renderHook(() => useBatteryEconomics());
+    expect(result.current!.withBattery.investment).toBe(1800 - 500 + 2998);
+    expect(result.current!.withoutBattery.investment).toBe(1800);
+  });
 });

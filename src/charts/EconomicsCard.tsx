@@ -66,8 +66,8 @@ const de = {
   selfCol: 'Selbst verbraucht',
   exportCol: 'Eingespeist',
   investmentCol: 'Investition',
-  batteryAssumptions: (acLimit: string, consumption: string, investment: string) =>
-    `Mit Batterie: Eigenverbrauch und Einspeisung aus der Simulation mit dem Verbrauchsprofil (${consumption}) statt des Eigenverbrauchsanteils; beide Varianten mit derselben AC-Grenze (${acLimit}); Investition zusätzlich ${investment} für den Speicher. Alterung und Ersatz des Speichers sind nicht berücksichtigt.`,
+  batteryAssumptions: (acLimit: string, consumption: string, investment: string, replaced: string) =>
+    `Mit Batterie: Eigenverbrauch und Einspeisung aus der Simulation mit dem Verbrauchsprofil (${consumption}) statt des Eigenverbrauchsanteils; beide Varianten mit derselben AC-Grenze (${acLimit}); Investition mit Batterie: Stockwerke − ${replaced}, die der Speicher ersetzt, + ${investment} für den Speicher. Alterung und Ersatz des Speichers sind nicht berücksichtigt.`,
 };
 const messages: Messages<typeof de> = {
   de,
@@ -112,8 +112,8 @@ const messages: Messages<typeof de> = {
     selfCol: 'Self-consumed',
     exportCol: 'Fed in',
     investmentCol: 'Investment',
-    batteryAssumptions: (acLimit, consumption, investment) =>
-      `With battery: self-consumption and feed-in from the simulation with the consumption profile (${consumption}) instead of the self-consumption share; both variants with the same AC limit (${acLimit}); additional investment of ${investment} for the storage. Ageing and replacement of the storage are not included.`,
+    batteryAssumptions: (acLimit, consumption, investment, replaced) =>
+      `With battery: self-consumption and feed-in from the simulation with the consumption profile (${consumption}) instead of the self-consumption share; both variants with the same AC limit (${acLimit}); investment with battery: floors − ${replaced} replaced by the storage + ${investment} for the storage. Ageing and replacement of the storage are not included.`,
   },
 };
 
@@ -564,6 +564,7 @@ export function EconomicsCard() {
                 f.unit(battery.acLimitW, 'W'),
                 f.kwh(battery.consumptionKwh),
                 money(battery.investment),
+                money(battery.replacedInvestment),
               )}
             </p>
           )}

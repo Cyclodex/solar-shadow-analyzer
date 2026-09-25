@@ -90,6 +90,7 @@ const de = {
   profileH0: 'BDEW-Standardlastprofil H0',
   profileFlat: 'konstant',
   batteryInvestment: 'Investition Speicher',
+  replaced: 'ersetzt',
 };
 
 const messages: Messages<typeof de> = {
@@ -162,6 +163,7 @@ const messages: Messages<typeof de> = {
     profileH0: 'BDEW standard load profile H0',
     profileFlat: 'constant',
     batteryInvestment: 'Storage investment',
+    replaced: 'replaces',
   },
 };
 
@@ -315,7 +317,10 @@ export function PrintReport({ printedAt }: { printedAt: number }) {
                 t.consumption,
                 `${f.kwh(bat.consumptionKwh)}, ${bat.loadProfile === 'h0' ? t.profileH0 : t.profileFlat}`,
               ],
-              [t.batteryInvestment, f.currency(bat.investment, e.currency, 0)],
+              [
+                t.batteryInvestment,
+                `${f.currency(bat.investment, e.currency, 0)} (${t.replaced} ${f.currency(bat.replacedInvestment, e.currency, 0)})`,
+              ],
             ]}
           />
         )}

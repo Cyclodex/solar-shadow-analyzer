@@ -30,7 +30,8 @@ export const DEFAULT_CONFIG: Config = {
     powerWp: 430,
   },
   system: {
-    inverterLimitW: 800,
+    // CH: plug-in PV at most 600 W AC per household (ESTI Mitteilung Plug-&-Play-PV, Bulletin 7/2014).
+    inverterLimitW: 600,
     lossesPct: 14,
     tempCoeffPct: -0.35,
     noct: 45,
@@ -82,6 +83,8 @@ export const DEFAULT_CONFIG: Config = {
     loadProfile: 'h0',
     // Example value: 2 × CHF 1'499 (ch.ecoflow.com, distributor Soltark by Hoelzle AG, 2026-09-24).
     investment: 2998,
+    // Nothing assumed: the user enters what the storage replaces (e.g. the micro-inverters).
+    replacedInvestment: 0,
   },
 };
 
@@ -146,6 +149,7 @@ export const LIMITS = {
     baseLoadW: { min: 0, max: 5000, step: 5 },
     consumptionKwh: { min: 100, max: 50000, step: 10 },
     investment: { min: 0, max: 50000, step: 10 },
+    replacedInvestment: { min: 0, max: 50000, step: 10 },
   },
   obstacle: {
     offsetAlong: { min: -300, max: 300, step: 0.5 },

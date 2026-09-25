@@ -1,4 +1,4 @@
-import type { EconomicsConfig, EconomicsResult } from './types';
+import type { BatteryConfig, EconomicsConfig, EconomicsResult } from './types';
 
 // ─────────────────────────────────────────────
 // ECONOMICS
@@ -28,6 +28,27 @@ export function economics(annualKwh: number, floors: number, e: EconomicsConfig)
     e,
   );
   return { ...result, annualKwh: kwh };
+}
+
+/** Investment without and with the storage, currency (see batteryInvestments). */
+export interface InvestmentSplit {
+  /** Floors: investmentPerFloor × floors (modules, inverters, mounting). */
+  without: number;
+  /** Part of `without` the storage replaces (capped at `without`). */
+  replaced: number;
+  /** without − replaced + storage investment. */
+  with: number;
+}
+
+/**
+ * The investments of the two variants: without storage the floors' systems; with storage the same minus what
+ * the storage replaces (battery.replacedInvestment, e.g. the micro-inverters: a balcony storage has its own
+ * inverter) plus the storage itself. Keeps the existing per-floor field as the single source of the PV costs.
+ */
+export function batteryInvestments(e: EconomicsConfig, b: BatteryConfig, floors: number): InvestmentSplit {
+  const without = Math.max(0, e.investmentPerFloor * floors);
+  const replaced = Math.min(without, Math.max(0, b.replacedInvestment));
+  return { without, replaced, with: without - replaced + Math.max(0, b.investment) };
 }
 
 /**

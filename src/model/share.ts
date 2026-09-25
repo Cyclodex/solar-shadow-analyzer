@@ -32,7 +32,7 @@ export const ROUNDING_OVERRIDES = {
   location: { latitude: 1e-4, longitude: 1e-4 },
   panels: { powerWp: 1 },
   economics: { electricityPrice: 1e-4, feedInTariff: 1e-4, investmentPerFloor: 1 },
-  battery: { investment: 1 },
+  battery: { investment: 1, replacedInvestment: 1 },
 } as const;
 
 /** Manual horizon points: azimuth wrapped to [0, 360), elevation clamped (negative values never matter: sun ≤ 0° is night). */
@@ -412,6 +412,12 @@ function sanitizeBattery(bat: Rec): BatteryConfig {
     consumptionKwh: n('consumptionKwh'),
     loadProfile: oneOf(bat.loadProfile, ['h0', 'flat'], D.loadProfile),
     investment: num(bat.investment, L.investment, D.investment, ROUNDING_OVERRIDES.battery.investment),
+    replacedInvestment: num(
+      bat.replacedInvestment,
+      L.replacedInvestment,
+      D.replacedInvestment,
+      ROUNDING_OVERRIDES.battery.replacedInvestment,
+    ),
   };
 }
 
@@ -501,7 +507,7 @@ export const SHARE_BASES: Readonly<Record<number, ShareBase>> = deepFreeze({
     },
     panels: { length: 113.4, width: 176.2, count: 2, gap: 2, tiltFromVertical: 45, powerWp: 430 },
     system: {
-      inverterLimitW: 800,
+      inverterLimitW: 600,
       lossesPct: 14,
       tempCoeffPct: -0.35,
       noct: 45,
@@ -538,6 +544,7 @@ export const SHARE_BASES: Readonly<Record<number, ShareBase>> = deepFreeze({
       consumptionKwh: 2500,
       loadProfile: 'h0',
       investment: 2998,
+      replacedInvestment: 0,
     },
   },
 });
@@ -625,6 +632,7 @@ const ALIASES: AliasTable = {
       consumptionKwh: 'k',
       loadProfile: 'lp',
       investment: 'n',
+      replacedInvestment: 'r',
     },
   },
 };

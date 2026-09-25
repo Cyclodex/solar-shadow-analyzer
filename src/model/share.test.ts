@@ -656,11 +656,14 @@ describe('encodeConfig / decodeConfig', () => {
     const long = decodeConfig(
       refEncodeJson('{"building":{"facadeAzimuth":135},"weather":{"source":"clear-sky"}}'),
     );
+    // No `v`: a version-1 payload, unchanged fields from base 1 (e.g. the old 800 W inverter limit).
     expect(long).toEqual({
-      ...DEFAULT_CONFIG,
-      building: { ...DEFAULT_CONFIG.building, facadeAzimuth: 135 },
-      weather: { ...DEFAULT_CONFIG.weather, source: 'clear-sky' },
+      ...V1_CONFIG,
+      building: { ...V1_CONFIG.building, facadeAzimuth: 135 },
+      weather: { ...V1_CONFIG.weather, source: 'clear-sky' },
     });
+    expect(long?.system.inverterLimitW).toBe(800);
+    expect(decodeConfig(encodeConfig(DEFAULT_CONFIG))?.system.inverterLimitW).toBe(600);
     const full: Config = { ...DEFAULT_CONFIG, panels: { ...DEFAULT_CONFIG.panels, count: 4 } };
     expect(decodeConfig(refEncodeJson(JSON.stringify(full)))).toEqual(full);
     const v1 = decodeConfig(refEncodeJson('{"latitude":46,"balconyHeight":300}'));

@@ -146,12 +146,13 @@ stehen dort in `LIMITS`.
   100 cm, Balkontiefe 150 cm.
 - **Panels:** 2 Module à 430 Wp nebeneinander im Querformat, Breite entlang des Geländers 176.2 cm, Länge entlang
   der Neigung 113.4 cm, Abstand 2 cm; Neigung θ = 45° ab Senkrechte (β = 45°).
-- **System:** Wechselrichter-Grenze 800 W je Stockwerk, Systemverluste 14 %, Temperaturkoeffizient −0.35 %/K,
+- **System:** Wechselrichter-Grenze 600 W je Stockwerk (Schweizer Grenze für Steckersolar), Systemverluste 14 %, Temperaturkoeffizient −0.35 %/K,
   NOCT 45 °C, Albedo 0.2, Teilverschattung mit Bypass-Teilsträngen.
 - **Horizont:** Geländehorizont an, keine Hindernisse, keine eigenen Horizontpunkte.
 - **Wetterdaten:** Open-Meteo, Jahr 2025.
 - **Batterie (aus):** 2 × EcoFlow STREAM Ultra X (je 3.84 kWh) als ein System, AC-Grenze 600 W, «nur Überschuss
-  speichern» mit Grundlast 200 W, Haushalt 2500 kWh/Jahr (ElCom-Profil H2) mit Profil H0, Investition CHF 2998.
+  speichern» mit Grundlast 200 W, Haushalt 2500 kWh/Jahr (ElCom-Profil H2) mit Profil H0, Investition Speicher CHF 2998 (unter Wirtschaftlichkeit, dort
+  auch, was der Speicher von der Investition je Stockwerk ersetzt: Standard 0).
   Annahmen ohne Herstellerangabe: Wirkungsgrad Laden und Entladen je 95 %, Reserve 10 %, Eigenverbrauch 0 W.
 - **Wirtschaftlichkeit (Beispielwerte):** CHF, Strompreis 0.30/kWh, Einspeisevergütung 0.08/kWh, Eigenverbrauch
   70 %, Investition 900 je Stockwerk, Degradation 0.5 %/Jahr, Betrachtungsdauer 25 Jahre.

@@ -281,6 +281,12 @@ Wirkungsgrad Laden und Entladen je 95 %, Reserve 10 %, Eigenverbrauch 0 W. Verbr
 Wegleitung Tarife 2027, 7.3.2), Grundlast 200 W und Investition CHF 2998 (2 × CHF 1499, Händler ch.ecoflow.com)
 sind Beispielwerte.
 
+Kosten (`batteryInvestments` in `model/economics.ts`): Die Investition je Stockwerk (Module, Wechselrichter,
+Montage) bleibt das einzige Feld für die PV-Anlage. Ohne Batterie gilt sie × Stockwerke; mit Batterie abzüglich
+`battery.replacedInvestment` (was der Speicher ersetzt, z. B. die Mikro-Wechselrichter, höchstens die
+Investition der Stockwerke; Standard 0, weil kein belegter Preis vorliegt) plus `battery.investment`. Beide
+Felder stehen in den Einstellungen unter «Wirtschaftlichkeit», sobald die Batterie eingeschaltet ist.
+
 Nicht modelliert: Alterung und Ersatz des Speichers, Laden aus dem Netz, zeitvariable Tarife, Temperatur der
 Batterie, gemischte Geräte (z. B. Ultra X mit STREAM AC Pro).
 
@@ -290,7 +296,8 @@ Batterie, gemischte Geräte (z. B. Ultra X mit STREAM AC Pro).
 Configs und Links ohne Abschnitt erhalten `DEFAULT_CONFIG.battery` (aus). Das Teilen-Format hat Version 2
 (`SHARE_BASES[2]` mit Batterie, Schlüssel `x`); Links ohne `v` (Version 1) nehmen den Batterieabschnitt aus der
 eingefrorenen Basis 2, eine spätere Änderung der Batterie-Standardwerte ändert sie also nicht. Seit Version 2
-trägt jeder Link `v` (die Standard-Config ist `{"v":2}`).
+trägt jeder Link `v` (die Standard-Config ist `{"v":2}`). Basis 2 hat auch die neue Standard-Wechselrichter-Grenze
+600 W (CH); Links der Version 1 behalten die 800 W von Basis 1.
 
 ## Gelände-Horizont
 

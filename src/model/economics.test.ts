@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { economics, economicsFromFlows } from './economics';
+import { batteryInvestments, economics, economicsFromFlows } from './economics';
 import { DEFAULT_CONFIG } from './defaults';
 import type { EconomicsConfig } from './types';
 
@@ -96,5 +96,21 @@ describe('economicsFromFlows', () => {
     expect(r.annualSavings).toBeCloseTo(334, 12);
     expect(r.paybackYears).toBeCloseTo(10, 12);
     expect(r.annualKwh).toBe(1500);
+  });
+});
+
+describe('batteryInvestments', () => {
+  const e = DEFAULT_CONFIG.economics;
+  const b = DEFAULT_CONFIG.battery;
+
+  it('without: the floors; with: minus what the storage replaces, plus the storage', () => {
+    expect(batteryInvestments(e, b, 2)).toEqual({ without: 1800, replaced: 0, with: 1800 + 2998 });
+    expect(batteryInvestments(e, { ...b, replacedInvestment: 600 }, 2)).toEqual({
+      without: 1800,
+      replaced: 600,
+      with: 1200 + 2998,
+    });
+    // Capped at the floors' investment.
+    expect(batteryInvestments(e, { ...b, replacedInvestment: 5000 }, 2).with).toBe(2998);
   });
 });
