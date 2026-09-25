@@ -6,6 +6,7 @@ import { useCommon } from '../i18n/common';
 import { LIMITS } from '../model/defaults';
 import { useConfigSection, usePatch } from '../state/configStore';
 import { CompassDial } from './location/CompassDial';
+import { SitePlan } from './siteplan/SitePlan';
 import sections from './sections.module.css';
 import styles from './BuildingSection.module.css';
 
@@ -105,6 +106,7 @@ export function BuildingSection() {
         <p id={helpId} className={sections.hint}>
           {t.dialHelp}
         </p>
+        <SitePlan />
       </div>
 
       <div className={sections.group}>

@@ -8,7 +8,20 @@ import { safeJsonStorage } from './storage';
 // UI STORE (persisted: localStorage 'ssa.ui', version 1)
 // Language, theme, visible views, open sidebar sections, analysed ("focus") floor.
 // A focus floor that no longer fits a smaller floor count is capped (see capFocusFloor below).
+// Not persisted: the pending surroundings import (address search → building import, see below).
 // ─────────────────────────────────────────────
+
+/**
+ * Request to import the surroundings of an address the user picked (docs/ARCHITECTURE.md, "Umgebung"): the
+ * address search sets it, the building import consumes it (import buildings, enable the laser scan, open the
+ * site plan). `id` grows with every request, so picking the same address again triggers again.
+ */
+export interface SurroundingsImportRequest {
+  id: number;
+  /** WGS84 degrees of the picked address (1e-6). */
+  latitude: number;
+  longitude: number;
+}
 
 export type ViewKey = 'scene3d' | 'frontal' | 'profile' | 'sunpath' | 'panelShadow';
 export const VIEW_KEYS: readonly ViewKey[] = ['scene3d', 'frontal', 'profile', 'sunpath', 'panelShadow'];
@@ -40,6 +53,12 @@ export interface UiState {
   toggleView: (key: ViewKey) => void;
   setSectionOpen: (id: SectionId, open: boolean) => void;
   setFocusFloor: (floor: number) => void;
+  /** Pending surroundings import (not persisted), null when none. */
+  surroundingsImport: SurroundingsImportRequest | null;
+  /** Asks the building import to import the surroundings of (latitude, longitude). */
+  requestSurroundingsImport: (latitude: number, longitude: number) => void;
+  /** Returns the pending request and clears it (null when none): each request is handled once. */
+  consumeSurroundingsImport: () => SurroundingsImportRequest | null;
 }
 
 type PersistedUi = Pick<UiState, 'lang' | 'theme' | 'views' | 'openSections' | 'focusFloor'>;
@@ -93,9 +112,11 @@ function mergeUi(persisted: unknown, current: UiState): UiState {
   };
 }
 
+let surroundingsRequestId = 0;
+
 export const useUiStore = create<UiState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       lang: 'de',
       theme: preferredTheme(),
       views: DEFAULT_VIEWS,
@@ -110,6 +131,16 @@ export const useUiStore = create<UiState>()(
       setSectionOpen: (id, open) => set((s) => ({ openSections: { ...s.openSections, [id]: open } })),
       setFocusFloor: (floor) =>
         set((s) => (Number.isInteger(floor) && floor >= 0 ? { focusFloor: floor } : s)),
+      surroundingsImport: null,
+      requestSurroundingsImport: (latitude, longitude) => {
+        if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return;
+        set({ surroundingsImport: { id: ++surroundingsRequestId, latitude, longitude } });
+      },
+      consumeSurroundingsImport: () => {
+        const request = get().surroundingsImport;
+        if (request) set({ surroundingsImport: null });
+        return request;
+      },
     }),
     {
       name: UI_STORAGE_KEY,

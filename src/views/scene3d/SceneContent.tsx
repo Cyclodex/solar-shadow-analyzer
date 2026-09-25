@@ -2,6 +2,7 @@ import { memo, useEffect, useMemo, type RefObject } from 'react';
 import type { Format, Lang } from '../../i18n';
 import type { HorizonProfile, InstantState, Obstacle } from '../../model/types';
 import { Building } from './Building';
+import { Buildings3D } from './Buildings3D';
 import { CameraRig, type ActivePreset, type CameraApi } from './CameraRig';
 import { facadeRotationY, type Tuple3 } from './coords';
 import { Ground } from './Ground';
@@ -125,6 +126,8 @@ export const SceneContent = memo(function SceneContent({
       />
       <Ground palette={palette} compassRadius={compassRadius} lang={lang} />
       {farHorizon && <HorizonRing profile={farHorizon} observerHeight={observerHeight} palette={palette} />}
+      {/* Surrounding buildings: world coordinates (ENU), outside the facade-rotated group. */}
+      <Buildings3D />
       <group rotation-y={facadeRotationY(facadeAzimuth)}>
         <Building palette={palette} dims={dims} day={sky.day} />
         <PanelRows

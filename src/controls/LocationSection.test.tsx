@@ -179,8 +179,9 @@ describe('LocationSection', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Mein Standort' }));
       expect(location()).toMatchObject({
         name: '47.377° N, 8.542° E',
-        latitude: 47.3769,
-        longitude: 8.5417,
+        // Coordinates are kept to 1e-6° (share.ts ROUNDING_OVERRIDES).
+        latitude: 47.37692,
+        longitude: 8.54169,
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
         elevation: DEFAULT_CONFIG.location.elevation,
       });

@@ -48,10 +48,12 @@ import { useDataStore, type DataState } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
 import { useUiStore } from '../state/uiStore';
 import { createCache, sameDeps } from './cache';
+import { useSurfacePending, useSurroundingsSource } from './useSurfaceModel';
 import {
   floorHorizonsWithTerrain,
   floorTerrainHeight,
   terrainProfileAt,
+  type SurroundingsSource,
   type TerrainSource,
 } from './useTerrain';
 import { useWeatherBusy } from './useWeather';
@@ -131,16 +133,29 @@ function layoutOf(config: Config): PanelLayout {
   return layoutCache.get([config.panels, config.building], () => panelLayout(config));
 }
 
-function horizonsOf(config: Config, terrain: TerrainSource): HorizonProfile[] {
-  const { horizon, building, panels } = config;
-  // Obstacle horizons are seen from the panel centre (depends on the panel geometry); terrain only if enabled.
+/** True when some horizon is seen from the panel centre, i.e. depends on the panel geometry and tilt. */
+function tiltDependentHorizon(config: Config, surroundings: SurroundingsSource): boolean {
+  const { horizon } = config;
+  return horizon.obstacles.length > 0 || horizon.buildings.length > 0 || surroundings.dsm !== null;
+}
+
+function horizonsOf(
+  config: Config,
+  terrain: TerrainSource,
+  surroundings: SurroundingsSource,
+): HorizonProfile[] {
+  const { horizon, building, panels, location } = config;
+  // Obstacle, prism and laser-scan horizons are seen from the panel centre (depends on the panel geometry);
+  // prisms are anchored in the world (depend on the location); terrain only if enabled.
   const deps = [
     horizon,
     building,
-    horizon.obstacles.length > 0 ? panelGeometryKey(panels) : null,
+    tiltDependentHorizon(config, surroundings) ? panelGeometryKey(panels) : null,
     horizon.terrainEnabled ? terrain : null,
+    surroundings.dsm,
+    horizon.buildings.length > 0 ? `${location.latitude},${location.longitude}` : null,
   ];
-  return horizonsCache.get(deps, () => floorHorizonsWithTerrain(config, terrain));
+  return horizonsCache.get(deps, () => floorHorizonsWithTerrain(config, terrain, surroundings));
 }
 
 /** Floor model (layout, horizons, sky view factors) shared by the instant power, daily profile and simulation. */
@@ -198,11 +213,15 @@ export function useTerrainProfile(floor = 0): HorizonProfile | null {
   return terrainProfileAt(terrain, floorTerrainHeight(placement));
 }
 
-/** Horizon per floor (index = floor): terrain ∪ manual points ∪ obstacles seen from that floor. */
+/**
+ * Horizon per floor (index = floor): terrain ∪ manual points ∪ obstacles ∪ surrounding buildings ∪ laser scan
+ * (when active) seen from that floor.
+ */
 export function useHorizons(): HorizonProfile[] {
   const config = useConfig();
   const terrain = useDataStore(terrainSourceOf);
-  return horizonsOf(config, terrain);
+  const surroundings = useSurroundingsSource(config);
+  return horizonsOf(config, terrain, surroundings);
 }
 
 /** Focus floor (uiStore.focusFloor clamped to 0…numFloors−1): Panel-Schatten, sun path, horizon lists. */
@@ -286,11 +305,17 @@ export function useSolarPath(date?: string, stepMinutes = 10): SolarPathPoint[] 
 
 // ── Yearly computations (deferred) ───────────
 
-/** Deferred config + horizons + terrain: consistent snapshot for heavy computations. */
-function useDeferredInputs(): { config: Config; horizons: HorizonProfile[]; terrain: TerrainSource } {
+/** Deferred config + horizons + terrain + surroundings: consistent snapshot for heavy computations. */
+function useDeferredInputs(): {
+  config: Config;
+  horizons: HorizonProfile[];
+  terrain: TerrainSource;
+  surroundings: SurroundingsSource;
+} {
   const config = useDeferredValue(useConfig());
   const terrain = useDeferredValue(useDataStore(terrainSourceOf));
-  return { config, terrain, horizons: horizonsOf(config, terrain) };
+  const surroundings = useDeferredValue(useSurroundingsSource(config));
+  return { config, terrain, surroundings, horizons: horizonsOf(config, terrain, surroundings) };
 }
 
 /**
@@ -325,13 +350,15 @@ export function useWeatherPending(): boolean {
 /**
  * True while the terrain horizon is enabled and still arriving: it is loading, or a newly arrived horizon
  * has not reached the (deferred) annual results yet. Annual numbers computed meanwhile lack the terrain.
+ * Includes the enabled laser-scan horizon while it loads (useSurfacePending; results use the prism fallback).
  */
 export function useTerrainPending(): boolean {
   const terrainEnabled = useConfigSection('horizon').terrainEnabled;
   const loading = useDataStore((s) => s.terrain.status === 'loading');
   const terrain = useDataStore(terrainSourceOf);
   const deferredTerrain = useDeferredValue(terrain);
-  return terrainEnabled && (loading || deferredTerrain !== terrain);
+  const surfacePending = useSurfacePending();
+  return (terrainEnabled && (loading || deferredTerrain !== terrain)) || surfacePending;
 }
 
 /**
@@ -476,12 +503,14 @@ interface SweepRequest {
   config: Config;
   weather: WeatherSeries;
   terrain: TerrainSource;
+  surroundings: SurroundingsSource;
 }
 
 function sweepRequest(
   config: Config,
   shape: SweepShape,
   terrain: TerrainSource,
+  surroundings: SurroundingsSource,
   weather: WeatherSeries,
 ): SweepRequest {
   const { latitude, longitude, timezone } = config.location;
@@ -489,10 +518,22 @@ function sweepRequest(
   const panelsWithoutTilt = JSON.stringify({ ...panels, tiltFromVertical: 0 });
   const terrainDep = horizon.terrainEnabled ? terrain : null;
   return {
-    deps: [latitude, longitude, timezone, building, panelsWithoutTilt, system, horizon, terrainDep, weather],
+    deps: [
+      latitude,
+      longitude,
+      timezone,
+      building,
+      panelsWithoutTilt,
+      system,
+      horizon,
+      terrainDep,
+      surroundings.dsm,
+      weather,
+    ],
     config: { ...config, ...shape },
     weather,
     terrain,
+    surroundings,
   };
 }
 
@@ -502,10 +543,12 @@ function sweepRequest(
  * equals simulateYear at that tilt. `step()` computes the next tilt; `points` is complete when done.
  */
 function createSweep(req: SweepRequest): { points: TiltSweepPoint[]; done: () => boolean; step: () => void } {
-  const { config, weather, terrain } = req;
+  const { config, weather, terrain, surroundings } = req;
   let track: SunTrack | null = null;
-  // Without obstacles no horizon depends on the tilt.
-  const fixed = config.horizon.obstacles.length > 0 ? null : floorHorizonsWithTerrain(config, terrain);
+  // Without obstacles, buildings and laser scan no horizon depends on the tilt.
+  const fixed = tiltDependentHorizon(config, surroundings)
+    ? null
+    : floorHorizonsWithTerrain(config, terrain, surroundings);
   const points: TiltSweepPoint[] = [];
   return {
     points,
@@ -515,7 +558,7 @@ function createSweep(req: SweepRequest): { points: TiltSweepPoint[]; done: () =>
       const tiltFromVertical = DEFAULT_SWEEP_TILTS[points.length];
       const c: Config = { ...config, panels: { ...config.panels, tiltFromVertical } };
       const floorsKwh = annualFloorKwh(
-        createFloorModel(c, fixed ?? floorHorizonsWithTerrain(c, terrain)),
+        createFloorModel(c, fixed ?? floorHorizonsWithTerrain(c, terrain, surroundings)),
         weather,
         track,
       );
@@ -647,7 +690,7 @@ function previousSweep(req: SweepRequest): TiltSweepResult | null {
  * pass enabled = false to skip the computation (returns null).
  */
 export function useTiltSweep(enabled = true): TiltSweepResult | null {
-  const { config, terrain } = useDeferredInputs();
+  const { config, terrain, surroundings } = useDeferredInputs();
   const weather = useAnnualWeather(config);
   const { building, panels, system, horizon } = config;
   const shape = useMemo<SweepShape>(
@@ -657,7 +700,7 @@ export function useTiltSweep(enabled = true): TiltSweepResult | null {
   const settled = useSettledValue(shape, SWEEP_SETTLE_MS);
   // Re-render when a background sweep has finished.
   useSyncExternalStore(subscribeSweeps, getSweepVersion, getSweepVersion);
-  const req = enabled && weather ? sweepRequest(config, settled, terrain, weather) : null;
+  const req = enabled && weather ? sweepRequest(config, settled, terrain, surroundings, weather) : null;
   const cached = req ? sweepCache.peek(req.deps) : undefined;
   const previous = req && !cached ? previousSweep(req) : null;
   useEffect(() => {
@@ -666,7 +709,7 @@ export function useTiltSweep(enabled = true): TiltSweepResult | null {
     else startSweep(req);
   });
   if (!req || !weather) return null;
-  const updating = !sameDeps(sweepRequest(config, shape, terrain, weather).deps, req.deps);
+  const updating = !sameDeps(sweepRequest(config, shape, terrain, surroundings, weather).deps, req.deps);
   if (cached) return updating ? asUpdating(cached) : cached;
   if (previous) return asUpdating(previous);
   return null; // first result for this site and weather: computing in the background (startSweep)

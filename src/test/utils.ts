@@ -17,7 +17,14 @@ export const TEST_DATE = '2025-06-21';
 export function resetStores(): void {
   useConfigStore.setState({ config: DEFAULT_CONFIG });
   useTimeStore.setState({ date: TEST_DATE, minutes: DEFAULT_MINUTES, playing: false, speed: DEFAULT_SPEED });
-  useUiStore.setState({ lang: 'de', theme: 'dark', views: DEFAULT_VIEWS, openSections: {}, focusFloor: 0 });
+  useUiStore.setState({
+    lang: 'de',
+    theme: 'dark',
+    views: DEFAULT_VIEWS,
+    openSections: {},
+    focusFloor: 0,
+    surroundingsImport: null,
+  });
   useDataStore.getState().resetData();
   useShareLinkStore.setState(INITIAL_SHARE_LINK);
   useInstallStore.setState(INITIAL_INSTALL);

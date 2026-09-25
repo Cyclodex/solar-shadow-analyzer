@@ -93,6 +93,53 @@ export interface HorizonPoint {
   elevation: number;
 }
 
+// ── Surroundings (address, laser scan, buildings; docs/ARCHITECTURE.md "Umgebung") ──
+
+/** Where a surrounding building comes from: swisstopo base vector tiles, or entered by the user. */
+export type BuildingSource = 'swisstopo' | 'manual';
+
+/**
+ * Surrounding building as a flat-topped prism, world-anchored: the footprint is in metres East/North (ENU, true
+ * north) of the horizon.buildingImport anchor, so it stays put when the location (facade origin) moves.
+ */
+export interface Building {
+  /** Stable within the config, e.g. 'b1'. */
+  id: string;
+  /** Display name (≤ 40 chars), e.g. an address; '' = unnamed (the UI shows a numbered label). */
+  name: string;
+  /** Outer ring [east, north] in m of the anchor (0.1 m grid, ±2000 m), ≥ 3 vertices, counter-clockwise, open. */
+  footprint: [number, number][];
+  /** Base above the site ground, m (0 for imported buildings). */
+  base: number;
+  /** Height of the top above the base, m. */
+  height: number;
+  source: BuildingSource;
+  /** Imported building deleted by the user: kept (hidden) so that it masks its cells in the laser scan. */
+  removed?: boolean;
+  /** Imported building whose height/base the user changed: its laser-scan cells are masked, the prism is used. */
+  edited?: boolean;
+}
+
+/** Anchor of the building footprints: the point the swisstopo import was centred on (or of manual buildings). */
+export interface BuildingImport {
+  /** Degrees (1e-6), the ENU origin of every Building.footprint. */
+  latitude: number;
+  longitude: number;
+  /** Import radius, m (0 = nothing imported: anchor of manually entered buildings only). */
+  radius: number;
+  /** ISO date of the import, 'YYYY-MM-DD' ('' if unknown). */
+  date: string;
+}
+
+/** Horizon from the swissSURFACE3D laser scan (CH/FL only; computed in the terrain worker, never stored). */
+export interface SurfaceModelConfig {
+  enabled: boolean;
+  /** Trees (non-building cells) shade; false = buildings only. Trees are treated as opaque all year. */
+  trees: boolean;
+  /** Radius of the traced surroundings, m. */
+  radius: number;
+}
+
 export interface HorizonConfig {
   /** Use the DEM-computed terrain horizon (fetched in the browser). */
   terrainEnabled: boolean;
@@ -100,6 +147,12 @@ export interface HorizonConfig {
   obstacles: Obstacle[];
   /** Optional user supplied horizon (e.g. imported PVGIS CSV). Empty = none. */
   manual: HorizonPoint[];
+  /** Surrounding buildings as prisms (imported or manual). Absent in old configs/links = []. */
+  buildings: Building[];
+  /** Anchor of `buildings` (null = none). Absent in old configs/links = null. */
+  buildingImport: BuildingImport | null;
+  /** Laser-scan horizon settings. Absent in old configs/links = off. */
+  surfaceModel: SurfaceModelConfig;
 }
 
 export type WeatherSource = 'open-meteo' | 'clear-sky';

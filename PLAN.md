@@ -53,6 +53,19 @@ Die Phasen des alten Plans und ihre Umsetzung:
     kurzen Scheiben im Hintergrund; Heatmap und Monatstabelle rechnen nur in Bildschirmnähe, die 3D-Szene friert
     ausserhalb des Bildschirms ein; Druck und PNG-Export holen alles nach.
 
+## In Arbeit
+
+- **Umgebung: exakte Adresse, Laserscan-Horizont und Nachbargebäude** (Schweiz und Liechtenstein; Konzept und
+  Zuständigkeiten: [ARCHITECTURE.md](docs/ARCHITECTURE.md#umgebung-adresse-laserscan-gebäude)):
+  - Erledigt, Fundament: Config-Vertrag (`horizon.buildings`, `buildingImport`, `surfaceModel`, additiv ohne
+    Versionswechsel), Koordinaten auf 1e-6°, Teilen-Links mit Gebäuden, WGS84 ⇄ LV95 und lokale Meter,
+    Gebäude-Import aus den swisstopo-Vektorkacheln (zusammengefügt an Kachelkanten), Rechenregeln, Ladezustände und
+    Platzhalter der Oberfläche.
+  - Offen: Adresssuche mit Gebäudeangaben (GWR) und Import der Umgebung nach der Wahl einer Adresse;
+    Laserscan-Horizont (swissSURFACE3D) je Stockwerk und Neigung im Web Worker, Bäume wahlweise; Nachbargebäude als
+    bearbeitbare Prismen, Lageplan zum Bestätigen von Fassade und Balkon, Gebäude in der 3D-Ansicht und im
+    Druckbericht.
+
 ## Offen
 
 - Übersetzungen Französisch und Italienisch (aus dem alten Punkt 4.4).

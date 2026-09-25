@@ -1,5 +1,15 @@
-import type { Config, HorizonPoint, Obstacle } from './types';
+import type {
+  Building,
+  BuildingImport,
+  Config,
+  HorizonConfig,
+  HorizonPoint,
+  LocationConfig,
+  Obstacle,
+  SurfaceModelConfig,
+} from './types';
 import { DEFAULT_CONFIG, LIMITS, createObstacle, type FieldLimit } from './defaults';
+import { dropDuplicateVertices, ensureCcw, ringArea, simplifyRing, type Ring } from './polygon';
 import { clamp, normalizeDeg, roundToStep } from './units';
 
 // ─────────────────────────────────────────────
@@ -18,6 +28,16 @@ export const MAX_TEXT_LENGTH = 40;
 export const MAX_LOCATION_NAME_LENGTH = 80;
 /** Max. length of the currency label. */
 export const MAX_CURRENCY_LENGTH = 8;
+/** Max. surrounding buildings kept by sanitizeConfig (further ones are dropped). */
+export const MAX_BUILDINGS = 150;
+/** Max. footprint vertices per building (longer rings are simplified, see simplifyRing). */
+export const MAX_BUILDING_VERTICES = 64;
+/** Max. footprint vertices of all buildings together (buildings beyond it are dropped). */
+export const MAX_TOTAL_BUILDING_VERTICES = 2000;
+/** Footprints with a smaller area (m², after rounding) are dropped as degenerate. */
+export const MIN_BUILDING_AREA = 0.5;
+/** Rings with more raw vertices are dropped before any work is done on them (untrusted input). */
+const MAX_RAW_RING_VERTICES = 4096;
 
 /** decodeConfig rejects longer inputs (a full config with 720 horizon points is ≈ 15 k chars). */
 const MAX_ENCODED_LENGTH = 200_000;
@@ -25,11 +45,12 @@ const MAX_ENCODED_LENGTH = 200_000;
 const MAX_JSON_LENGTH = 2_000_000;
 
 /**
- * Rounding precision where it deliberately differs from the LIMITS slider step: coordinates keep ~11 m
- * (geocoder/preset precision), money keeps typed tariffs such as 0.3214, module power keeps odd ratings.
+ * Rounding precision where it deliberately differs from the LIMITS slider step: coordinates keep 1e-6° (≤ 0.07 m:
+ * exact addresses and the balcony point on the facade), money keeps typed tariffs such as 0.3214, module power
+ * keeps odd ratings.
  */
 export const ROUNDING_OVERRIDES = {
-  location: { latitude: 1e-4, longitude: 1e-4 },
+  location: { latitude: 1e-6, longitude: 1e-6 },
   panels: { powerWp: 1 },
   economics: { electricityPrice: 1e-4, feedInTariff: 1e-4, investmentPerFloor: 1 },
 } as const;
@@ -168,10 +189,10 @@ export function formatCoordinateName(latitude: number, longitude: number): strin
 
 // ── Collections ──────────────────────────────
 
-function uniqueId(used: Set<string>): string {
+function uniqueId(used: Set<string>, prefix = 'o'): string {
   let k = used.size + 1;
-  while (used.has(`o${k}`)) k++;
-  return `o${k}`;
+  while (used.has(`${prefix}${k}`)) k++;
+  return `${prefix}${k}`;
 }
 
 function sanitizeObstacles(v: unknown): Obstacle[] {
@@ -225,6 +246,136 @@ function sanitizeHorizonPoints(v: unknown): HorizonPoint[] {
   return [...byAz.entries()].sort((p, q) => p[0] - q[0]).map(([az, el]) => ({ azimuth: az, elevation: el }));
 }
 
+// ── Surroundings ─────────────────────────────
+
+/**
+ * Footprint ring: [east, north] tuples (or {e, n} / {x, y} objects), clamped to ±2000 m and rounded to 0.1 m;
+ * consecutive and closing duplicates removed; counter-clockwise; simplified to MAX_BUILDING_VERTICES. Null if
+ * any vertex is invalid, fewer than 3 remain or the area is below MIN_BUILDING_AREA.
+ */
+function sanitizeRing(v: unknown): Ring | null {
+  if (!Array.isArray(v) || v.length < 3 || v.length > MAX_RAW_RING_VERTICES) return null;
+  const L = LIMITS.neighbour.coord;
+  const pts: Ring = [];
+  for (const item of v as unknown[]) {
+    const [rawE, rawN] = Array.isArray(item)
+      ? [ownValue(item, '0'), ownValue(item, '1')]
+      : isRecord(item)
+        ? [ownValue(item, 'e') ?? ownValue(item, 'x'), ownValue(item, 'n') ?? ownValue(item, 'y')]
+        : [undefined, undefined];
+    const e = toNumber(rawE);
+    const n = toNumber(rawN);
+    if (e === undefined || n === undefined) return null;
+    pts.push([num(e, L, 0), num(n, L, 0)]);
+  }
+  let ring = ensureCcw(dropDuplicateVertices(pts));
+  if (ring.length > MAX_BUILDING_VERTICES) ring = ensureCcw(simplifyRing(ring, MAX_BUILDING_VERTICES));
+  if (ring.length < 3 || Math.abs(ringArea(ring)) < MIN_BUILDING_AREA) return null;
+  return ring;
+}
+
+/**
+ * Surrounding buildings: invalid entries skipped, at most MAX_BUILDINGS and MAX_TOTAL_BUILDING_VERTICES
+ * (later buildings dropped), unique ids ('b<k>' when missing or taken), removed/edited only on imported
+ * buildings and only when true.
+ */
+function sanitizeBuildings(v: unknown): Building[] {
+  if (!Array.isArray(v)) return [];
+  const L = LIMITS.neighbour;
+  const out: Building[] = [];
+  const used = new Set<string>();
+  let vertices = 0;
+  for (const raw of v) {
+    if (out.length >= MAX_BUILDINGS) break;
+    if (!isRecord(raw)) continue;
+    const item = ownRecord(raw);
+    const footprint = sanitizeRing(item.footprint);
+    if (!footprint) continue;
+    if (vertices + footprint.length > MAX_TOTAL_BUILDING_VERTICES) break;
+    vertices += footprint.length;
+    let id = text(item.id, MAX_TEXT_LENGTH);
+    if (id === '' || used.has(id)) id = uniqueId(used, 'b');
+    used.add(id);
+    const source = oneOf(item.source, ['swisstopo', 'manual'], 'manual');
+    const b: Building = {
+      id,
+      name: text(item.name, MAX_TEXT_LENGTH),
+      footprint,
+      base: num(item.base, L.base, 0),
+      height: num(item.height, L.height, 10),
+      source,
+    };
+    if (source === 'swisstopo' && item.removed === true) b.removed = true;
+    if (source === 'swisstopo' && item.edited === true) b.edited = true;
+    out.push(b);
+  }
+  return out;
+}
+
+const ISO_DATE = /^(\d{4})-(\d{2})-(\d{2})/;
+
+/** 'YYYY-MM-DD' (a longer ISO timestamp is cut to its date), '' if not a valid calendar date. */
+function isoDate(v: unknown): string {
+  if (typeof v !== 'string') return '';
+  const m = ISO_DATE.exec(v.trim());
+  if (!m) return '';
+  const date = `${m[1]}-${m[2]}-${m[3]}`;
+  const t = Date.parse(`${date}T00:00:00Z`);
+  return Number.isFinite(t) && new Date(t).toISOString().slice(0, 10) === date ? date : '';
+}
+
+/**
+ * Anchor of the building footprints. Buildings without an anchor (only possible from hand-made input) get the
+ * location as anchor with radius 0, so they stay put from then on.
+ */
+function sanitizeBuildingImport(
+  v: unknown,
+  hasBuildings: boolean,
+  location: Pick<LocationConfig, 'latitude' | 'longitude'>,
+): BuildingImport | null {
+  if (!isRecord(v)) {
+    return hasBuildings
+      ? { latitude: location.latitude, longitude: location.longitude, radius: 0, date: '' }
+      : null;
+  }
+  const o = ownRecord(v);
+  const latitude = num(
+    o.latitude,
+    LIMITS.location.latitude,
+    location.latitude,
+    ROUNDING_OVERRIDES.location.latitude,
+  );
+  return {
+    latitude,
+    longitude: longitude(o.longitude, location.longitude),
+    radius: num(o.radius, LIMITS.buildingImport.radius, 0),
+    date: isoDate(o.date),
+  };
+}
+
+function sanitizeSurfaceModel(v: unknown): SurfaceModelConfig {
+  const o = ownRecord(v);
+  const D = DEFAULT_CONFIG.horizon.surfaceModel;
+  return {
+    enabled: bool(o.enabled, D.enabled),
+    trees: bool(o.trees, D.trees),
+    radius: num(o.radius, LIMITS.surfaceModel.radius, D.radius),
+  };
+}
+
+function sanitizeHorizon(hor: Rec, location: Pick<LocationConfig, 'latitude' | 'longitude'>): HorizonConfig {
+  const D = DEFAULT_CONFIG.horizon;
+  const buildings = sanitizeBuildings(hasOwn(hor, 'buildings') ? hor.buildings : D.buildings);
+  return {
+    terrainEnabled: bool(hor.terrainEnabled, D.terrainEnabled),
+    obstacles: sanitizeObstacles(hasOwn(hor, 'obstacles') ? hor.obstacles : D.obstacles),
+    manual: sanitizeHorizonPoints(hasOwn(hor, 'manual') ? hor.manual : D.manual),
+    buildings,
+    buildingImport: sanitizeBuildingImport(hor.buildingImport, buildings.length > 0, location),
+    surfaceModel: sanitizeSurfaceModel(hor.surfaceModel),
+  };
+}
+
 // ── v1 migration ─────────────────────────────
 
 /** Keys of the flat v1 config (pre-2.0 app, localStorage / JSON exports). */
@@ -276,7 +427,10 @@ function section(o: Rec, key: SectionKey): Rec {
  * Deep-validates untrusted input into a complete Config. Never throws.
  * Missing/invalid fields fall back to DEFAULT_CONFIG, numbers are clamped to LIMITS and rounded to the LIMITS
  * step (see ROUNDING_OVERRIDES), azimuths/longitudes are wrapped, unknown time zones → default,
- * obstacles capped at MAX_OBSTACLES, manual horizon at MAX_HORIZON_POINTS. Flat v1 configs are migrated.
+ * obstacles capped at MAX_OBSTACLES, manual horizon at MAX_HORIZON_POINTS, surrounding buildings at
+ * MAX_BUILDINGS / MAX_BUILDING_VERTICES / MAX_TOTAL_BUILDING_VERTICES (footprints on the 0.1 m grid, CCW,
+ * degenerate ones dropped). Fields added later (buildings, buildingImport, surfaceModel) default to
+ * "none/off" when absent. Flat v1 configs are migrated.
  * A missing location name becomes the coordinate label. The result shares no references with the input.
  * Only own properties are read, so values inherited from a (polluted) prototype are ignored.
  */
@@ -344,11 +498,7 @@ function sanitizeRecord(raw: Rec): Config {
       albedo: num(sys.albedo, L.system.albedo, D.system.albedo),
       shadingModel: oneOf(sys.shadingModel, ['linear', 'substring'], D.system.shadingModel),
     },
-    horizon: {
-      terrainEnabled: bool(hor.terrainEnabled, D.horizon.terrainEnabled),
-      obstacles: sanitizeObstacles(hasOwn(hor, 'obstacles') ? hor.obstacles : D.horizon.obstacles),
-      manual: sanitizeHorizonPoints(hasOwn(hor, 'manual') ? hor.manual : D.horizon.manual),
-    },
+    horizon: sanitizeHorizon(hor, { latitude, longitude: lon }),
     weather: {
       source: oneOf(wea.source, ['open-meteo', 'clear-sky'], D.weather.source),
       year: num(wea.year, L.weather.year, D.weather.year),
@@ -405,10 +555,31 @@ function deepFreeze<T>(o: T): T {
 export const SHARE_VERSION: number = 1;
 
 /**
+ * A frozen share base: the config shape of its app version. Horizon fields added later without a version bump
+ * (buildings, buildingImport, surfaceModel) are missing from it; SHARE_ADDED_FIELDS supplies them.
+ */
+export type ShareBase = Omit<Config, 'horizon'> & {
+  horizon: Omit<HorizonConfig, keyof typeof SHARE_ADDED_FIELDS.horizon> & Partial<HorizonConfig>;
+};
+
+/**
+ * Fields added after a share base was frozen, with the value a payload (and base) without them means: "absent =
+ * none/off". Frozen like the bases (never edit): an old link must keep meaning "no buildings, laser scan off"
+ * even if DEFAULT_CONFIG changes. compactDiff omits such a field while it equals this value.
+ */
+export const SHARE_ADDED_FIELDS = deepFreeze({
+  horizon: {
+    buildings: [] as Building[],
+    buildingImport: null as BuildingImport | null,
+    surfaceModel: { enabled: false, trees: true, radius: 300 } as SurfaceModelConfig,
+  },
+});
+
+/**
  * Diff base of each share format version (literal snapshots; never edit an existing entry). Payloads without
  * `v` — every link created before versioning — are version 1.
  */
-export const SHARE_BASES: Readonly<Record<number, Config>> = deepFreeze({
+export const SHARE_BASES: Readonly<Record<number, ShareBase>> = deepFreeze({
   1: {
     version: 2,
     location: {
@@ -450,7 +621,7 @@ export const SHARE_BASES: Readonly<Record<number, Config>> = deepFreeze({
 });
 
 /** Base of payload version `v`: 1 when absent or unknown, the newest base for versions from a newer app. */
-function shareBase(v: unknown): Config {
+function shareBase(v: unknown): ShareBase {
   if (typeof v !== 'number' || !Number.isInteger(v)) return SHARE_BASES[1];
   if (v > SHARE_VERSION) return SHARE_BASES[SHARE_VERSION];
   return hasOwn(SHARE_BASES, String(v)) ? SHARE_BASES[v] : SHARE_BASES[1];
@@ -486,7 +657,17 @@ const ALIASES: AliasTable = {
       shadingModel: 'm',
     },
   },
-  horizon: { key: 'h', fields: { terrainEnabled: 't', obstacles: 'o', manual: 'm' } },
+  horizon: {
+    key: 'h',
+    fields: {
+      terrainEnabled: 't',
+      obstacles: 'o',
+      manual: 'm',
+      buildings: 'g',
+      buildingImport: 'k',
+      surfaceModel: 's',
+    },
+  },
   weather: { key: 'w', fields: { source: 's', year: 'y' } },
   economics: {
     key: 'e',
@@ -534,6 +715,95 @@ function unaliasKeys(o: Rec, table: Record<string, string>): Rec {
   return out;
 }
 
+const BUILDING_IMPORT_ALIASES: { [F in keyof BuildingImport]-?: string } = {
+  latitude: 'a',
+  longitude: 'o',
+  radius: 'r',
+  date: 'd',
+};
+
+const SURFACE_MODEL_ALIASES: { [F in keyof SurfaceModelConfig]-?: string } = {
+  enabled: 'e',
+  trees: 't',
+  radius: 'r',
+};
+
+/** Values of the fields section `s` gained after the share bases were frozen (SHARE_ADDED_FIELDS). */
+function addedFields(s: SectionKey): Rec {
+  const added = (SHARE_ADDED_FIELDS as Record<string, unknown>)[s];
+  return isRecord(added) ? added : {};
+}
+
+/** Value a payload means when it omits `full`: the base's value, else the added-field value. */
+function referenceValue(def: Rec, s: SectionKey, full: string): unknown {
+  return hasOwn(def, full) ? def[full] : addedFields(s)[full];
+}
+
+/** Length on the 0.1 m grid as an integer number of decimetres. */
+const dm = (m: number): number => Math.round(m * 10);
+
+/**
+ * Compact building (share links): [height, base, e0, n0, Δe1, Δn1, …] as integer decimetres, every vertex after
+ * the first as the difference to the previous one (≈ 11–12 chars per vertex). A building with a name, an id other
+ * than 'b<index + 1>', source 'manual' or a removed/edited flag becomes {g: […], i?, n?, m?: 1, r?: 1, e?: 1}.
+ */
+function encodeBuilding(b: Building, index: number): unknown {
+  const g = [dm(b.height), dm(b.base)];
+  let pe = 0;
+  let pn = 0;
+  b.footprint.forEach(([e, n], k) => {
+    const ie = dm(e);
+    const iN = dm(n);
+    g.push(k === 0 ? ie : ie - pe, k === 0 ? iN : iN - pn);
+    pe = ie;
+    pn = iN;
+  });
+  const meta: Rec = {};
+  if (b.id !== `b${index + 1}`) meta.i = b.id;
+  if (b.name !== '') meta.n = b.name;
+  if (b.source === 'manual') meta.m = 1;
+  if (b.removed) meta.r = 1;
+  if (b.edited) meta.e = 1;
+  return Object.keys(meta).length === 0 ? g : { g, ...meta };
+}
+
+/** Inverse of encodeBuilding; a full Building object (long-key JSON) passes through. sanitizeConfig validates. */
+function decodeBuilding(v: unknown, index: number): unknown {
+  const compact: Rec | null = Array.isArray(v)
+    ? { g: v }
+    : isRecord(v) && !hasOwn(v, 'footprint')
+      ? ownRecord(v)
+      : null;
+  if (!compact) return v;
+  const g = compact.g;
+  if (!Array.isArray(g)) return null;
+  const nums: number[] = [];
+  for (const x of g as unknown[]) {
+    const n = toNumber(x);
+    if (n === undefined) return null;
+    nums.push(n);
+  }
+  const footprint: [number, number][] = [];
+  let e = 0;
+  let n = 0;
+  for (let k = 2; k + 1 < nums.length; k += 2) {
+    e += nums[k];
+    n += nums[k + 1];
+    footprint.push([e / 10, n / 10]);
+  }
+  const flag = (x: unknown): boolean => x === 1 || x === true;
+  return {
+    id: hasOwn(compact, 'i') ? compact.i : `b${index + 1}`,
+    name: hasOwn(compact, 'n') ? compact.n : '',
+    footprint,
+    height: (nums[0] ?? NaN) / 10,
+    base: (nums[1] ?? NaN) / 10,
+    source: flag(compact.m) ? 'manual' : 'swisstopo',
+    removed: flag(compact.r),
+    edited: flag(compact.e),
+  };
+}
+
 /** Compact payload of the fields that differ from SHARE_BASES[SHARE_VERSION] (`v` written from version 2 on). */
 function compactDiff(c: Config): Rec {
   const out: Rec = {};
@@ -546,12 +816,24 @@ function compactDiff(c: Config): Rec {
     const fields = ALIASES[s].fields as Record<string, string>;
     const sec: Rec = {};
     for (const [full, alias] of Object.entries(fields)) {
-      if (JSON.stringify(cur[full]) === JSON.stringify(def[full])) continue;
+      const ref = referenceValue(def, s, full);
+      if (JSON.stringify(cur[full]) === JSON.stringify(ref)) continue;
       const v = cur[full];
       if (s === 'horizon' && full === 'obstacles') {
         sec[alias] = (v as Obstacle[]).map((ob) => aliasKeys(ob as unknown as Rec, OBSTACLE_ALIASES));
       } else if (s === 'horizon' && full === 'manual') {
         sec[alias] = (v as HorizonPoint[]).map((p) => [p.azimuth, p.elevation]);
+      } else if (s === 'horizon' && full === 'buildings') {
+        sec[alias] = (v as Building[]).map(encodeBuilding);
+      } else if (s === 'horizon' && full === 'buildingImport') {
+        sec[alias] = v === null ? null : aliasKeys(v as Rec, BUILDING_IMPORT_ALIASES);
+      } else if (s === 'horizon' && full === 'surfaceModel') {
+        // Only the sub-fields that differ from the reference ({"e":true} for "laser scan on").
+        const r = ownRecord(ref);
+        const m = v as Rec;
+        const diff: Rec = {};
+        for (const [f, a] of Object.entries(SURFACE_MODEL_ALIASES)) if (m[f] !== r[f]) diff[a] = m[f];
+        sec[alias] = diff;
       } else {
         sec[alias] = v;
       }
@@ -571,16 +853,24 @@ function expandPayload(o: Rec): Rec {
   for (const s of SECTION_KEYS) {
     const def = base[s] as unknown as Rec;
     const src = pick(o, ALIASES[s].key, s);
-    const sec: Rec = { ...def };
+    // Fields added without a version bump: absent = SHARE_ADDED_FIELDS (the base wins where it has them).
+    const sec: Rec = { ...addedFields(s), ...def };
     if (isRecord(src)) {
       const fields = ALIASES[s].fields as Record<string, string>;
       for (const [full, alias] of Object.entries(fields)) {
         const v = pick(src, alias, full);
         if (v === undefined) continue;
-        sec[full] =
-          s === 'horizon' && full === 'obstacles' && Array.isArray(v)
-            ? v.map((ob: unknown) => (isRecord(ob) ? unaliasKeys(ob, OBSTACLE_ALIASES) : ob))
-            : v;
+        if (s === 'horizon' && full === 'obstacles' && Array.isArray(v)) {
+          sec[full] = v.map((ob: unknown) => (isRecord(ob) ? unaliasKeys(ob, OBSTACLE_ALIASES) : ob));
+        } else if (s === 'horizon' && full === 'buildings' && Array.isArray(v)) {
+          sec[full] = v.map(decodeBuilding);
+        } else if (s === 'horizon' && full === 'buildingImport' && isRecord(v)) {
+          sec[full] = unaliasKeys(v, BUILDING_IMPORT_ALIASES);
+        } else if (s === 'horizon' && full === 'surfaceModel' && isRecord(v)) {
+          sec[full] = { ...ownRecord(sec[full]), ...unaliasKeys(v, SURFACE_MODEL_ALIASES) };
+        } else {
+          sec[full] = v;
+        }
       }
     }
     out[s] = sec;

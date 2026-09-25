@@ -11,6 +11,8 @@ Es ist die verbindliche Referenz für alle Beiträge.
 - Zustand für den App-State (mit `persist` für localStorage)
 - Three.js über `@react-three/fiber` 9 + `@react-three/drei` 10 (nur in der lazy geladenen 3D-Ansicht)
 - fast-png: Dekodierung der DEM-Kacheln (Terrarium-PNG) in `model/terrain.ts`
+- @mapbox/vector-tile 3 + pbf 5 (BSD-3-Clause, ≈ 4.6 kB gzip): Dekodierung der swisstopo-Vektorkacheln (Gebäude) in
+  `model/buildingSources.ts`
 - Web Worker (Modul-Worker) für Download, Dekodierung und Berechnung des Geländehorizonts (`src/workers`), mit
   Rückfall in den Hauptthread, siehe [Gelände-Horizont](#gelände-horizont)
 - vite-plugin-pwa (Workbox): Web-App-Manifest und Service Worker, siehe [PWA und Deployment](#pwa-und-deployment)
@@ -52,6 +54,15 @@ src/
                            volles localStorage ab)
     presets.ts             Standort- (24) und Modul-Presets (5), Ortssuche (Open-Meteo Geocoding)
     share.ts               Config ⇄ URL-Hash (Base64url) und JSON, Validierung (sanitizeConfig), Migration v1 → v2
+    polygon.ts             Ebene Polygone: Fläche/Orientierung, Punkt-in-Polygon, Abstand, Vereinfachung, Clipping,
+                           Höfe als Schlüssellochring (bridgeHoles)
+    enu.ts                 WGS84 ⇄ lokale Meter Ost/Nord (Radien M/N), ENU ⇄ Fassadenrahmen (facadeTransform)
+    lv95.ts                WGS84 ⇄ LV95 (swisstopo-Näherungsformeln), Meridiankonvergenz, lokaler LV95-Rahmen
+    fetchRetry.ts          fetch mit gestutztem exponentiellem Backoff und Jitter, typisierte Fehler (NetError)
+    buildingSources.ts     Gebäude aus den swisstopo-Vektorkacheln (MVT), Zusammenfügen an Kachelkanten, ENU
+    surroundings.ts        Rechenregeln der Umgebung (prismBuildings, dsmMaskPolygons, eigenes Gebäude)
+    dsmHorizon.ts          Laserscan-Horizont: Beobachter- und Standortschlüssel, Auswahl je Stockwerk
+    buildingHorizon.ts     Prismen-Horizont der Umgebungsgebäude je Stockwerk
   app/                     App-Shell: Header, WarningsBar, KpiBar, ViewToggles, ShareButton, ExportMenu, Footer,
                            DataLoader (startet die Loader), useDocumentSettings (<html> data-theme/lang, Titel,
                            theme-color), BottomBar (Steuerleiste der Handys: Uhrzeit, Neigung, «Springe zu»),
@@ -70,18 +81,20 @@ src/
                            technische Meldung aufklappbar), useTimeSlider (Uhrzeitregler für TimeControls und
                            BottomBar)
     location/              PlaceSearch, PresetSelect, MyLocationButton, CompassDial, TimeZoneField, timeZones
-    horizon/               TerrainStatus, ObstacleList/ObstacleItem, ManualHorizon (inkl. PVGIS-Dateiimport),
-                           HorizonSparkline, horizonData
+    horizon/               TerrainStatus, SurfaceModelControls (Laserscan), BuildingList (Umgebungsgebäude),
+                           ObstacleList/ObstacleItem, ManualHorizon (inkl. PVGIS-Dateiimport), HorizonSparkline,
+                           horizonData
+    siteplan/              SitePlan (Lageplan: Fassade und Balkon bestätigen)
   views/                   2D-Ansichten: FrontalView, ProfileView (Seite), SunPathView, PanelShadowView
     svg/                   Reine Layout-Module ohne React (frontalLayout, profileLayout, sunPathLayout,
                            panelShadowLayout, geometry2d, legend, constants) + SvgFigure, Legend, ViewNotice,
                            primitives, messages, svg.module.css
     scene3d/               3D-Ansicht (three.js/R3F), lazy: index.ts → Scene3D → SceneView; SceneStage, SceneContent,
-                           Building, PanelRows, Ground, Surroundings, SkyAndLights, SunMarker, CameraRig, Label,
-                           SceneErrorBoundary, useSceneData, useKeptWhileHidden (Szene ausserhalb des Bildschirms
-                           eingefroren); coords.ts, sceneLayout, palette, shadeMaterial (Modellschatten-Overlay),
-                           textures, webgl, messages, captureRender (Bild für PNG-Export und Druck sofort und in
-                           höherer Auflösung rendern)
+                           Building, PanelRows, Ground, Surroundings, Buildings3D, SkyAndLights, SunMarker,
+                           CameraRig, Label, SceneErrorBoundary, useSceneData, useKeptWhileHidden (Szene ausserhalb
+                           des Bildschirms eingefroren); coords.ts, sceneLayout, palette, shadeMaterial
+                           (Modellschatten-Overlay), textures, webgl, messages, captureRender (Bild für PNG-Export
+                           und Druck sofort und in höherer Auflösung rendern)
   charts/                  Analyse: DailyProfileChart, ShadeHeatmap (Canvas), MonthlyYieldChart, TiltSweepChart,
                            EconomicsCard, MonthlyTable
     lib/                   Chart-Bausteine ohne Library: scale, Axes, timeAxis, legend/ChartLegend, ChartTooltip,
@@ -93,9 +106,10 @@ src/
                            (JSON speichern/laden), clipboard, download, filenames, Druckbericht (print.ts, print.css,
                            PrintReport.tsx, PrintRoot.tsx), canvasRender (Canvas vor PNG-Export/Druck synchron neu
                            zeichnen)
-  hooks/                   useModel (memoisierte Modell-Hooks) + cache.ts, useTerrain/useWeather (je Loader + Leser),
-                           useAnimation, useMediaQuery (Layouts aus app/layout.ts, pointer: coarse),
-                           useNearViewport (Karten weit unter dem Bildschirm rechnen nicht, ausser im Druck)
+  hooks/                   useModel (memoisierte Modell-Hooks) + cache.ts, useTerrain/useWeather/useSurfaceModel
+                           (je Loader + Leser), useAnimation, useMediaQuery (Layouts aus app/layout.ts,
+                           pointer: coarse), useNearViewport (Karten weit unter dem Bildschirm rechnen nicht,
+                           ausser im Druck)
   state/                   configStore, timeStore, uiStore, dataStore, shareLinkStore (Hinweise zum Teilen-Link),
                            urlSync (#c=-Hash), storage (Persistenz der Stores, fängt localStorage-Fehler ab),
                            loadGate (Gelände-Download erst nach der Wetteranfrage)
@@ -117,6 +131,7 @@ public/                    favicon.svg und die daraus erzeugten App-Icons (pwa-1
 e2e/                       Playwright-Specs (smoke.spec.ts, features.spec.ts, mobile.spec.ts, pwa.spec.ts)
 scripts/validate-terrain.ts  Gelände-Horizont gegen PVGIS printhorizon prüfen (braucht Netzwerk)
 scripts/validate-yield.ts    Jahresertrag gegen PVGIS seriescalc/PVcalc prüfen (braucht Netzwerk)
+scripts/validate-buildings.ts  Gebäude-Import aus den swisstopo-Vektorkacheln live prüfen (Kramgasse 49, Bern)
 scripts/generate-icons.ts    App-Icons aus public/favicon.svg rendern (Playwright-Chromium, `npm run icons`)
 scripts/basePath.ts          BASE_PATH → Vite-`base` (für vite.config.ts und playwright.config.ts)
 .github/workflows/ci.yml     CI: Lint, Format, Typecheck, Tests, Build; danach E2E unter / und unter einem Unterpfad
@@ -173,7 +188,8 @@ Geländerebene und wirft keinen Schatten auf aussen hängende Panels.
 Pro Zeitschritt (Wetterdaten stündlich, Werte = Mittel der vorangehenden Stunde → Sonnenstand zur Intervallmitte):
 
 1. Sonnenstand (NOAA) → Fassadenrahmen.
-2. Direktstrahlung blockiert, wenn `s_n ≤ 0` oder Sonnenhöhe < Horizont des Stockwerks (Gelände ∪ manuell ∪ Hindernisse).
+2. Direktstrahlung blockiert, wenn `s_n ≤ 0` oder Sonnenhöhe < Horizont des Stockwerks (Gelände ∪ manuell ∪ Hindernisse
+   ∪ Umgebungsgebäude ∪ Laserscan, siehe [Umgebung](#umgebung-adresse-laserscan-gebäude)).
 3. Beam auf Panel: `DNI · cosInc⁺ · IAM · (1 − Beschattung)`, IAM nach ASHRAE (b0 = 0.05).
    Beschattung je Modul (`geometry.ts`, `substringBeamLoss`):
    - `linear`: verschatteter Flächenanteil des Moduls.
@@ -239,9 +255,12 @@ Laden (`useTerrainLoader`, einmal in `<DataLoader/>` gemountet):
   `setConfig(updater)`, `replace(config)`, `reset()`. Jeder Schreibzugriff läuft durch `sanitizeConfig` und wird
   strukturell geteilt: unveränderte Abschnitte (`location`, `building`, …) behalten ihre Objektidentität.
 - `useTimeStore` (nicht persistiert): Datum, Uhrzeit (lokale Minuten), Animation (`playing`, `speed`).
-- `useUiStore` (persistiert unter `ssa.ui`): Sprache, Theme, sichtbare Ansichten, offene Abschnitte, analysiertes Stockwerk.
-- `useDataStore` (nicht persistiert): Gelände-Horizont und Wetterreihe inkl. Ladezustand/Fehler; geschrieben von den
-  Loadern in `hooks/useTerrain.ts` und `hooks/useWeather.ts` (einmal in `<DataLoader/>` gemountet).
+- `useUiStore` (persistiert unter `ssa.ui`): Sprache, Theme, sichtbare Ansichten, offene Abschnitte, analysiertes Stockwerk;
+  nicht persistiert der ausstehende Umgebungs-Import nach einer Adresswahl (`requestSurroundingsImport`,
+  `consumeSurroundingsImport`, siehe [Umgebung](#umgebung-adresse-laserscan-gebäude)).
+- `useDataStore` (nicht persistiert): Gelände-Horizont, Wetterreihe und Laserscan-Horizonte (`surface`) inkl.
+  Ladezustand/Fehler; geschrieben von den Loadern in `hooks/useTerrain.ts`, `hooks/useWeather.ts` und
+  `hooks/useSurfaceModel.ts` (einmal in `<DataLoader/>` gemountet).
 - `useShareLinkStore` (nicht persistiert, von `resetStores()` zurückgesetzt): Hinweise zum Teilen-Link für die
   WarningsBar (ersetzte eigene Config wiederherstellen, ungültiger Link).
 - URL-Hash `#c=…` überschreibt beim Laden die gespeicherte Config (Teilen-Link, `state/urlSync.ts`); ein nicht
@@ -256,6 +275,169 @@ Laden (`useTerrainLoader`, einmal in `<DataLoader/>` gemountet):
   Schlüssel die Config-_Abschnitte_ sind. Neigungsänderungen berechnen daher z. B. den Neigungs-Sweep nicht neu,
   Zeitänderungen nur den Momentanzustand. Jahresrechnungen lesen ihre Eingaben über `useDeferredValue`.
   Neigungs-Sweep im Hintergrund und vorläufige Jahreswerte: siehe [Laden und Rechenlast](#laden-und-rechenlast).
+
+## Umgebung: Adresse, Laserscan, Gebäude
+
+Stand: in Arbeit (PLAN.md). Das Fundament (Config-Vertrag, Koordinaten, Rechenregeln, Gebäude-Import, Zustände,
+Platzhalter der UI) ist gelegt; Adresssuche, Laserscan-Horizont und Gebäude entstehen parallel (siehe
+[Zuständigkeiten](#zuständigkeiten-der-parallelen-arbeit)). Nur Schweiz und Liechtenstein; ausserhalb bleibt alles wie
+bisher (Ortssuche Open-Meteo, Hindernisse als Quader, Terrarium-Gelände). Messungen und Quellen: Recherche vom
+25.09.2026.
+
+### Konventionen (verbindlich)
+
+- **Standort:** `config.location` ist der Punkt _auf_ der Fassadenlinie in der Mitte der Panelreihen, der Ursprung
+  des Fassadenrahmens (u = 0, n = 0). Nach der Bestätigung von Fassade und Balkon im Lageplan wird er auf diesen
+  Punkt gesetzt. Koordinaten werden auf 1e-6° gerundet (höchstens 0.07 m; vorher 1e-4°, bis 6.8 m daneben);
+  Ortsvorlagen und GeoNames-Treffer bleiben bei 1e-4° (`presets.ts`).
+- **Gebäude sind in der Welt verankert:** Grundrisse in m Ost/Nord (ENU, geographisch Nord) relativ zum Anker
+  `horizon.buildingImport` (lat/lon), mit den WGS84-Krümmungsradien M und N am Anker (`enu.ts`, eine Kugel läge
+  0.29 % daneben). In den Fassadenrahmen erst beim Rechnen: `facadeTransform(anchor, location, facadeAzimuth)`.
+  Vektorkacheln (Web Mercator) → lat/lon → ENU; dafür ist kein LV95 nötig.
+- **Fassadenrahmen** wie in [Koordinatensysteme](#koordinatensysteme): `enuToFacade`/`facadeToEnu`
+  (u = −e·cos γ + n·sin γ, n = e·sin γ + n·cos γ), getestet gegen `sunInFacade` und `obstacleHorizon`.
+- **Laserscan in LV95** (EPSG:2056, `lv95.ts`): swisstopo-Näherungsformeln (Dezember 2016,
+  [PDF](https://www.swisstopo.admin.ch/dam/en/sd-web/KLRCX9XIdXDu/ch1903wgs84-EN.pdf)), gegen REFRAME höchstens
+  0.35 m an 10 Punkten; die Umkehrung wird mit Newton-Schritten auf die Vorwärtsformel verfeinert (die publizierte
+  Umkehrformel liegt bei Genf bis ~2 m daneben). Im LV95-Gitter gemessene Azimute um die Meridiankonvergenz
+  korrigieren (`gridToTrueAzimuth`; Genf +0.947°, Bümpliz +0.035°, St. Gallen −1.416°, Chur −1.530°, wie REFRAME).
+  Modell und Config kennen nur geographische Azimute. `lv95LocalFrame(origin)`: affine Beziehung ENU ⇄ LV95 um
+  einen Ursprung (≤ 1 cm bis 300 m, ≤ 3 cm bis 500 m) für den Strahlengang im Raster.
+- **Höhen nie mischen:** Laserscan-Höhen sind absolut (LHN95); der Boden am Beobachter kommt aus swissALTI3D oder
+  dem Höhendienst am Standort; Horizontwinkel = atan2(z_dsm − (Boden + Beobachterhöhe), d). Terrarium behält seine
+  eigene Bodenhöhe (liegt in Bern 2.6–8.6 m über LHN95). Horizonte werden je Azimut per Maximum kombiniert.
+
+### Config-Vertrag
+
+`HorizonConfig` bekommt drei Felder (Typen in `types.ts`):
+
+- `buildings: Building[]`: `{ id, name, footprint, base, height, source: 'swisstopo' | 'manual', removed?, edited? }`.
+  `footprint` = Aussenring in m Ost/Nord des Ankers (0.1-m-Raster, ±2000 m, mindestens 3 Ecken, gegen den
+  Uhrzeigersinn, offen); `base` = Unterkante über dem Boden am Standort (importiert: 0), `height` = Höhe über `base`.
+  `removed`: importiertes Gebäude gelöscht (bleibt gespeichert, damit es im Laserscan maskiert wird); `edited`:
+  Höhe/Basis geändert (Laserscan maskiert, Prisma zählt). `name` darf leer sein (die UI zeigt eine Nummer).
+- `buildingImport: { latitude, longitude, radius, date } | null`: Anker aller Grundrisse (1e-6°), Radius des Imports
+  (0 = nur Anker manueller Gebäude), Datum `YYYY-MM-DD`.
+- `surfaceModel: { enabled, trees, radius }`: Laserscan-Horizont ein, Bäume berücksichtigen, Radius (m).
+
+Standardwerte: `[]`, `null`, `{ enabled: false, trees: true, radius: 300 }`. Die Felder sind **additiv**: fehlend =
+keine Gebäude, kein Anker, Laserscan aus. `Config.version`, `SHARE_VERSION` und `SHARE_BASES` bleiben unverändert (ein
+paralleler Zweig erhöht sie); die Werte für «fehlend» stehen eingefroren in `SHARE_ADDED_FIELDS` (share.ts), der Typ
+`ShareBase` erlaubt Basen ohne die Felder. `LIMITS` (am Ende angehängt): `neighbour` (height 0.5–300 m, base −50…100 m,
+coord ±2000 m, je 0.1 m), `surfaceModel.radius` 150–500 m (Schritt 50), `buildingImport.radius` 0–1000 m (10).
+
+`sanitizeConfig`: höchstens `MAX_BUILDINGS` = 150 Gebäude, `MAX_BUILDING_VERTICES` = 64 Ecken je Gebäude (längere
+Grundrisse vereinfacht, Visvalingam-Whyatt, nur Ecken entfernt), `MAX_TOTAL_BUILDING_VERTICES` = 2000 Ecken insgesamt
+(spätere Gebäude fallen weg); Ecken auf 0.1 m gerundet und geklemmt, doppelte Ecken und der Schlusspunkt entfernt,
+Ringe gegen den Uhrzeigersinn (umgedreht ab der zweiten Ecke), Fläche unter `MIN_BUILDING_AREA` = 0.5 m² verworfen,
+eindeutige ids (`b<k>`), `removed`/`edited` nur bei `source: 'swisstopo'` und nur als `true`. Gebäude ohne Anker
+erhalten den Standort als Anker (Radius 0). Gespeicherte Configs (localStorage) ohne die Felder bekommen die
+Standardwerte beim Laden (keine neue Speicherversion).
+
+**Teilen-Link:** Er enthält immer den genauen Standort (1e-6°, Bezeichnung = Adresse) und die gespeicherten Gebäude.
+Kurzschlüssel im Abschnitt `h`: `g` = Gebäude, `k` = Anker `{a, o, r, d}`, `s` = Laserscan (nur abweichende Felder
+`{e, t, r}`, z. B. `{"e":true}`). Ein Gebäude ist `[Höhe, Basis, e0, n0, Δe1, Δn1, …]` in ganzen Dezimetern (jede
+weitere Ecke als Differenz zur vorigen); mit Namen, einer id ausser `b<Index + 1>`, `source: 'manual'` oder einer
+Markierung `{g: […], i?, n?, m?: 1, r?: 1, e?: 1}`. Fehlende Felder bedeuten «keine/aus»: Links von vor dem Feature
+bleiben gültig (Test mit einem Link, der mit main 030c38d erzeugt wurde). Länge: 78 Gebäude mit 612 Ecken ≈ 7'160
+Zeichen (11.4 je Ecke; echte Teile der Kramgasse 11.6), `MAX_ENCODED_LENGTH` 200'000 bleibt.
+
+### Rechenregeln (verbindlich)
+
+- `dsmActive` = `surfaceModel.enabled` und die Laserscan-Horizonte sind für `surfaceSiteKey(config)` geladen
+  (`'ready'`): `useDsmActive(config)` in `hooks/useSurfaceModel.ts`. `surfaceSiteKey` fasst alles ausser den
+  Beobachtern: Standort, Fassadenazimut, Balkontiefe, Reihenbreite, Bäume, Radius und die maskierten Grundrisse.
+- **Horizont je Stockwerk (und Neigung)** = Maximum je Azimut aus Gelände (falls ein) ∪ eigenen Punkten ∪ Hindernissen
+  ∪ Prismen ∪ Laserscan (falls dsmActive): `floorHorizonsWithTerrain(config, terrain, surroundings)`
+  (`hooks/useTerrain.ts`); `useHorizons`, Jahresrechnung, Heatmap und Neigungs-Sweep geben die `SurroundingsSource`
+  (`useSurroundingsSource`) mit. Mit Gebäuden oder Laserscan rechnet der Sweep jede Neigung mit eigenen Horizonten.
+- **Prismen:** `prismBuildings(buildings, dsmActive, ownBuildingIds(…))`: mit dsmActive nur `source: 'manual'` oder
+  `edited`, sonst alle; entfernte nie; das eigene Gebäude nie (`buildingHorizon.ts prismFloorHorizons`).
+- **Masken des Laserscans** (Worker): Zellen in Grundrissen mit `removed || edited` (`dsmMaskPolygons`) → Boden (DTM).
+  Mit `trees === false` wird jede Zelle ausserhalb der Vereinigung _aller_ swisstopo-Gebäudegrundrisse im Radius (der
+  Worker lädt die Kacheln vollständig, nicht nur die gespeicherten Gebäude) zu Boden.
+- **Eigenes Gebäude im Laserscan** (`OWN_BUILDING_EXCLUSION`, `ownExclusionZone`, `isOwnBuildingCell`): Zellen mit
+  n < 0.5 m (hinter der Fassadenebene) und die eigene Balkonzone 0 ≤ n ≤ Balkontiefe + 0.5 m innerhalb der Ausdehnung
+  des eigenen Gebäudes entlang der Fassade zählen nicht. Die Ausdehnung kommt aus dem eigenen Grundriss (Teil der
+  Vektorkacheln, der den Punkt 0.5 m hinter dem Fassadenursprung enthält), sonst ± (Reihenbreite / 2 + 2 m).
+  Annahme: Das darüberliegende Stockwerk wirkt über die Verschattung durch dessen Panelreihe, nicht über
+  Balkonplatten; Balkone der Nachbarn ausserhalb dieser Ausdehnung sind echte Hindernisse. Bei den Prismen ist jeder
+  gespeicherte Grundriss, der diesen Punkt enthält, das eigene Gebäude (`ownBuildingIds`); andere Teile (Flügel,
+  Anbauten vor der Fassade) schatten.
+- **Beobachter** für Laserscan und Prismen = Mitte der Panelreihe jedes Stockwerks (u = 0, n = center.n, z = center.z
+  über Boden), abhängig von der Neigung. Laserscan-Horizonte liegen je Beobachter unter `surfaceObserverKey(center)`
+  (n und z auf 1 cm) in `dataStore.surface.horizons`; fehlt ein Schlüssel (eine neue Neigung wird noch gerechnet),
+  nimmt `dsmFloorHorizons` den nächsten Beobachter.
+- **Laden:** Solange der Laserscan lädt, gelten die Prismen aller Gebäude und die Jahreswerte sind vorläufig
+  (`useSurfacePending` in `useTerrainPending`); nach einem Fehler oder ausserhalb der Abdeckung (keine STAC-Items:
+  Status `'unavailable'`, Hinweis «nur in der Schweiz und Liechtenstein verfügbar») ebenfalls die Prismen.
+- **Offene Annahmen:** Bäume gelten ganzjährig als undurchsichtig (Befliegungen meist ohne Laub, Bern März 2023);
+  Prismen mit flachem Dach überschätzen Schrägdächer (RMS 5.7–10.2° gegen den Laserscan an einem Ort); importierte
+  Gebäude stehen auf dem Boden des Standorts (Basis 0); ob die Grundrisse Dachüberstände enthalten, ist offen.
+  `Building` speichert nur einen Ring: Höfe als Schlüssellochring speichern (`polygon.ts bridgeHoles`), sonst gilt
+  ein Beobachter im Hof als «im Gebäude» und das Gebäude fehlt im Horizont.
+
+### Datenquellen, Lizenz und Anfragen
+
+- **Adresssuche:** `api3.geo.admin.ch/rest/services/api/SearchServer?type=locations&origins=address&sr=2056`; LV95
+  aus `geom_st_box2d` (mm) → `lv95ToWgs84`; `<b>` aus dem Label entfernen; `attrs.x/y` sind vertauscht (x = Nord);
+  exakter Treffer = Strasse + `attrs.num` gegen den eingegebenen Text, `weight > 1000` = unscharf; featureId
+  `<EGID>_<EDID>`. Gebäudeangaben: `…/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/<featureId>` (Geschosse
+  `gastw`, Baujahr `gbauj`, `garea`, `egid`; in Liechtenstein 404 → ausblenden). Höhe:
+  `…/rest/services/height?easting=…&northing=…&sr=2056`.
+- **Gebäude:** Basiskarte-Vektorkacheln `vectortiles.geo.admin.ch/tiles/ch.swisstopo.base.vt/v1.0.0/{z}/{x}/{y}.pbf`
+  (`buildingSources.ts`): z14, Layer `building` mit `class`, `render_height`, `render_min_height` (ganze Meter,
+  mindestens 5 m, `render_min_height` überall 0), ohne Feature-ids, Polygone mit 16 Einheiten Puffer (≈ 6.5 m) über
+  die Kachel hinaus beschnitten. Jedes Teil wird auf seine Kachel beschnitten und Stücke gleicher Höhe und Klasse
+  werden über Kachelkanten wieder zusammengefügt (Kramgasse 49, vier Kacheln: ohne das 179 getrennte Paare, danach 0;
+  im 300-m-Umkreis 1'545 → 1'513 Teile). `class: 'underground'` wird übersprungen; ausserhalb CH/FL enthalten die
+  Kacheln keine Gebäude (`covered: false`). 300 m um die Kramgasse: 4 Kacheln, 694 kB, 1.2 s, Dekodieren ≈ 55 ms,
+  Zusammensetzen ≈ 30 ms (Node). `npm run validate:buildings` prüft live.
+- **Laserscan:** STAC v1 `data.geo.admin.ch/api/stac/v1/collections/ch.swisstopo.swisssurface3d-raster/items?bbox=…`
+  (neuestes Jahr je Kachel), COG float32 LZW (Prädiktor 1), 512 × 512 Kacheln, NoData −9999, 0.5 m; volle Auflösung
+  nötig (Übersichten glätten Kanten, RMS 1.3–3.8°). Range → 206, aber `Content-Range` ist per CORS nicht lesbar. Die
+  Cache API nimmt keine 206-Antworten: die fertigen Horizonte cachen (storageCache), nicht die Bytes. Boden:
+  swissALTI3D (`ch.swisstopo.swissalti3d`) oder der Höhendienst. Eigener LZW-Leser statt geotiff (216 ms gegen
+  1.4–2.0 s für dasselbe Fenster, 0 Abweichungen).
+- **Lizenz:** freie Geodaten von swisstopo, auch kommerziell; Quellenangabe «© swisstopo» ist Pflicht (Footer;
+  Druckbericht mit den Gebäuden). Die Attribution der Vektorkacheln kommt aus `tiles.json`.
+- **Anfragen:** FSDI-Nutzungsbedingungen: «API Rest Services (general) | \*.geo.admin.ch | 21 Mio requests / year | 40
+  requests / minute». Suche frühestens 300 ms nach der letzten Eingabe, mit Cache. Alle Anfragen über
+  `fetchWithRetry` (`fetchRetry.ts`): gestutzter exponentieller Backoff mit Jitter, wie geo.admin.ch es verlangt
+  (1 s, 2 s, 4 s … höchstens 8 s, plus 0–1 s, Frist 20 s), nur Netzwerkfehler, 408, 429 und 5xx. Netzwerkcode wirft
+  nie bis zur UI (typisierte Fehler), nimmt `AbortSignal` und ein `fetchImpl` für Tests. Ohne Nutzeraktion gibt es
+  keine Anfrage ausser dem Import der Umgebung nach der Wahl einer Adresse.
+- **Ablauf nach einer Adresswahl:** Die Adresssuche setzt Standort (Label, 1e-6°, Zeitzone Europe/Zurich bzw.
+  Europe/Vaduz, Höhe vom Höhendienst) und ruft `useUiStore.requestSurroundingsImport(lat, lon)`; der Gebäude-Import
+  holt die Anfrage mit `consumeSurroundingsImport()` ab (einmal je Anfrage), importiert die Gebäude im Radius
+  `surfaceModel.radius`, schaltet den Laserscan ein und öffnet den Lageplan.
+
+### Zuständigkeiten der parallelen Arbeit
+
+Jede Datei hat genau eine Zuständigkeit; neue Dateien gehören ihrem Feature. Das Fundament ändert sich nur nach
+Absprache (additiv, ohne bestehende Signaturen zu brechen).
+
+- **Fundament** (eingefroren): `model/types.ts`, `defaults.ts`, `share.ts` (+ Test), `polygon.ts`, `enu.ts`,
+  `lv95.ts`, `fetchRetry.ts`, `buildingSources.ts`, `surroundings.ts`; `state/dataStore.ts`, `uiStore.ts`,
+  `configStore.ts`; `hooks/useTerrain.ts`, `hooks/useModel.ts`; `app/DataLoader.tsx`, `app/Footer.tsx`;
+  `controls/HorizonSection.tsx`, `controls/BuildingSection.tsx`, `controls/horizon/HorizonSparkline.tsx`;
+  `test/utils.ts`; `package.json`; README «Datenquellen und Datenschutz»; dieser Abschnitt bis hier.
+- **A, Adresssuche und GWR:** `controls/LocationSection.tsx` (+ Test; Breiten- und Längengrad mit 6
+  Nachkommastellen), `controls/location/*` (Adresssuche statt PlaceSearch, Gruppen «Adressen»/«Orte»,
+  Gebäudeangaben), neu `model/geocode.ts` (+ Test), `e2e/address.spec.ts`.
+- **B, Laserscan:** `hooks/useSurfaceModel.ts` (Loader; Semantik der Leser), `model/dsmHorizon.ts`, neu
+  `model/dsm.ts` und `model/cog.ts`, `workers/*`, `controls/horizon/SurfaceModelControls.tsx`,
+  `controls/horizon/TerrainStatus.tsx`, die Hinweise «vorläufig» (`app/KpiBar.tsx`, `controls/TiltControl.tsx`,
+  `charts/ShadeHeatmap.tsx`), `scripts/validate-dsm.ts` (dazu die Zeile `validate:dsm` in `package.json`),
+  `e2e/surface.spec.ts`.
+- **C, Gebäude, Lageplan, 3D:** `model/buildingHorizon.ts` (`prismFloorHorizons`), neu `model/buildings.ts`
+  (Kantensweep, Ausdünnen, Fassadenkanten, Brandmauern), `controls/horizon/BuildingList.tsx`, `controls/siteplan/*`,
+  `views/scene3d/*` (`Buildings3D.tsx`, `SceneContent.tsx`, `useSceneData.ts`, `SceneStage.tsx`, `sceneLayout.ts`,
+  `Surroundings.tsx`), `export/PrintReport.tsx`, `e2e/buildings.spec.ts`.
+
+Jedes Feature ergänzt diesen Abschnitt nur in seinem eigenen Unterabschnitt (neue `###`-Überschrift am Ende), PLAN.md
+nur in seiner eigenen Zeile. Die E2E-Specs blockieren `geo.admin.ch` bereits (`page.route`); eigene Specs mocken die
+Antworten.
 
 ## i18n
 

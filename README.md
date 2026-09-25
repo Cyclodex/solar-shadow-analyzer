@@ -176,6 +176,14 @@ ruft direkt aus dem Browser folgende Dienste auf:
   [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), «Weather data by Open-Meteo.com».
 - **Open-Meteo Geocoding API** (`geocoding-api.open-meteo.com`): erhält den Suchtext, nur bei einer Ortssuche. Ortsdaten
   von GeoNames (CC BY 4.0).
+- **swisstopo / geo.admin.ch** (nur für die Schweiz und Liechtenstein; freie Geodaten, «© swisstopo»,
+  [Nutzungsbedingungen](https://www.swisstopo.admin.ch/de/nutzungsbedingungen-kostenlose-geodaten-und-geodienste)):
+  - Adresssuche (`api3.geo.admin.ch`): erhält den Suchtext bei einer Adresssuche; nach der Wahl einer Adresse die
+    Gebäudeangaben aus dem Gebäude- und Wohnungsregister (Geschosse, Baujahr) und die Höhe am Standort (Koordinaten).
+  - Gebäude der Basiskarte (`vectortiles.geo.admin.ch`): Kartenkacheln rund um den Standort (etwa 0.2–0.7 MB),
+    nach der Wahl einer Adresse und bei einem Import der Gebäude.
+  - Oberflächenmodell swissSURFACE3D und Geländemodell swissALTI3D (`data.geo.admin.ch`): Ausschnitte rund um den
+    Standort (etwa 5–9 MB bei 300 m Umkreis), nur mit eingeschalteter Laserscan-Umgebung.
 - **Terrain Tiles** (AWS Open Data, `s3.amazonaws.com/elevation-tiles-prod`): Höhenkacheln rund um den Standort,
   automatisch bei eingeschaltetem Geländehorizont (Standard). Quellen und Namensnennung:
   [Tilezen/Mapzen](https://github.com/tilezen/joerd/blob/master/docs/attribution.md), u. a. SRTM, GMTED2010, ETOPO1
@@ -188,8 +196,9 @@ Koordinaten), UI-Einstellungen und zwischengespeicherte Wetter- und Geländedate
 App-Dateien für den Offline-Start im Cache des Service Workers (nur Dateien der App selbst). Wird die Seite verlassen,
 bevor der URL-Hash nachgeführt ist, übergibt der `sessionStorage` (`ssa.pendingHash`) ihn dem nächsten Aufruf im
 selben Tab; dort merkt sich die App auch, wann sie sich wegen einer neuen Version selbst neu geladen hat
-(`ssa.chunkReload`). Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet, wer
-den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechnet.
+(`ssa.chunkReload`). Der Teilen-Link trägt die Konfiguration im URL-Hash: Dieser wird an keinen Server gesendet. **Wer
+den Link erhält, sieht den genauen Standort** (Koordinaten auf etwa 10 cm, nach einer Adresssuche auch die Adresse als
+Bezeichnung) und die gespeicherten Nachbargebäude. Der Sonnenstand wird lokal berechnet.
 
 ## Einschränkungen
 
@@ -205,15 +214,17 @@ den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechn
   langjähriges Mittel; das Jahr mit klarem Himmel ist eine Obergrenze.
 - Der Geländehorizont hängt von der Auflösung der Höhenkacheln ab. Lassen sich die Kacheln nicht laden, rechnet die
   App ohne Gelände und zeigt einen Hinweis.
+- Laserscan-Umgebung und Gebäude-Import gibt es nur in der Schweiz und in Liechtenstein (swisstopo). Bäume gelten
+  ganzjährig als undurchsichtig; Nachbargebäude als Grundriss mit flachem Dach überschätzen Schrägdächer.
 - Wirtschaftlichkeit mit konstanten Preisen, ohne Diskontierung und ohne laufende Kosten.
 - Modellrechnung ohne Gewähr: Sie ersetzt keine Fachplanung.
 
 ## Stack
 
 React 19 · TypeScript 6 · Vite 8 · zustand 5 · three.js 0.186 mit @react-three/fiber 9 und drei 10 (nur die 3D-Ansicht,
-lazy geladen) · fast-png in einem Web Worker für den Geländehorizont · CSS Modules mit CSS-Variablen · SVG- und
-Canvas-Diagramme ohne Chart-Library · vite-plugin-pwa (Workbox) für Installation und Offline-Start · Vitest 5,
-Testing Library, Playwright, ESLint 10, Prettier 3.
+lazy geladen) · fast-png in einem Web Worker für den Geländehorizont · @mapbox/vector-tile und pbf für die
+swisstopo-Gebäude · CSS Modules mit CSS-Variablen · SVG- und Canvas-Diagramme ohne Chart-Library · vite-plugin-pwa
+(Workbox) für Installation und Offline-Start · Vitest 5, Testing Library, Playwright, ESLint 10, Prettier 3.
 
 ## Weiterentwicklung
 

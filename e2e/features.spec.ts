@@ -2,7 +2,7 @@ import { expect, test, type Locator } from '@playwright/test';
 
 // External data is blocked: results come from the clear-sky fallback, terrain is skipped.
 test.beforeEach(async ({ page }) => {
-  await page.route(/open-meteo\.com|amazonaws\.com/, (route) => route.abort());
+  await page.route(/open-meteo\.com|amazonaws\.com|geo\.admin\.ch/, (route) => route.abort());
 });
 
 test('3D view renders a WebGL canvas with content', async ({ page }) => {
@@ -123,7 +123,7 @@ test('share link restores the configuration', async ({ page, context }) => {
   await expect(tilt).toHaveValue('46');
 
   const fresh = await context.newPage();
-  await fresh.route(/open-meteo\.com|amazonaws\.com/, (route) => route.abort());
+  await fresh.route(/open-meteo\.com|amazonaws\.com|geo\.admin\.ch/, (route) => route.abort());
   await fresh.goto(link);
   await expect(fresh.getByRole('slider', { name: /Neigung θ ab Senkrechte/ })).toHaveValue('45');
 });
