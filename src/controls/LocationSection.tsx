@@ -9,6 +9,8 @@ import { MAX_LOCATION_NAME_LENGTH, formatCoordinateName } from '../model/share';
 import type { LocationConfig } from '../model/types';
 import { useConfigSection, usePatch } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
+import { AddressBuilding } from './location/AddressBuilding';
+import { applyAddress } from './location/addressSession';
 import { MyLocationButton } from './location/MyLocationButton';
 import { PlaceSearch } from './location/PlaceSearch';
 import { PresetSelect } from './location/PresetSelect';
@@ -55,8 +57,9 @@ const messages: Messages<typeof de> = {
 };
 
 /**
- * Site: place search (Open-Meteo geocoding), device position, presets, name, coordinates, elevation
- * (with the terrain model's value as suggestion) and time zone.
+ * Site: search for building addresses (swisstopo, CH/FL) and places (Open-Meteo geocoding), device position (with
+ * the nearest address), presets, the building at a picked address, name, coordinates (1e-6°), elevation (with the
+ * terrain model's value as suggestion) and time zone.
  */
 export function LocationSection() {
   const t = useMessages(messages);
@@ -92,8 +95,12 @@ export function LocationSection() {
     <Section level={3} id="location" title={t.title} summary={shownName}>
       <div className={sections.group}>
         <h4 className={sections.subheading}>{t.find}</h4>
-        <PlaceSearch onSelect={(loc) => patch('location', loc)} />
-        <MyLocationButton onLocate={(loc) => patch('location', loc)} />
+        <PlaceSearch onSelectPlace={(loc) => patch('location', loc)} onSelectAddress={applyAddress} />
+        <MyLocationButton
+          onLocate={(loc) => patch('location', loc)}
+          onAddress={applyAddress}
+          location={location}
+        />
         <PresetSelect
           label={t.preset}
           value={preset?.id ?? ''}
@@ -101,6 +108,8 @@ export function LocationSection() {
           onSelect={(p) => patch('location', presetToLocation(p))}
         />
       </div>
+
+      <AddressBuilding />
 
       <div className={sections.group}>
         <h4 className={sections.subheading}>{t.details}</h4>
@@ -111,11 +120,11 @@ export function LocationSection() {
           onChange={(v) => setCoordinate('latitude', v)}
           limit={L.latitude}
           unit="°"
-          digits={4}
+          digits={6}
           slider={false}
           hint={t.latitudeHint}
-          // Coordinates need 4 decimals and a sign ("−122.4194").
-          inputWidth="9ch"
+          // Coordinates keep 6 decimals (≤ 0.07 m, exact addresses) and a sign: "−122.419412".
+          inputWidth="11.5ch"
         />
         <NumberField
           label={t.longitude}
@@ -123,11 +132,11 @@ export function LocationSection() {
           onChange={(v) => setCoordinate('longitude', v)}
           limit={L.longitude}
           unit="°"
-          digits={4}
+          digits={6}
           slider={false}
           hint={t.longitudeHint}
-          // Coordinates need 4 decimals and a sign ("−122.4194").
-          inputWidth="9ch"
+          // Coordinates keep 6 decimals (≤ 0.07 m, exact addresses) and a sign: "−122.419412".
+          inputWidth="11.5ch"
         />
         <div className={styles.elevation}>
           <NumberField

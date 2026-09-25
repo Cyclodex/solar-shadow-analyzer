@@ -1,0 +1,1422 @@
+{
+  "_": "Recorded from api3.geo.admin.ch on 2026-09-25 (© swisstopo, BFS). Verbatim bodies; used by geocode.test.ts, LocationSection.test.tsx and e2e/address.spec.ts.",
+  "search": {
+    "Kramgasse 49 Bern": {
+      "results": [
+        {
+          "attrs": {
+            "detail": "kramgasse 49 3011 bern 351 bern ch be",
+            "featureId": "1230393_0",
+            "geom_quadindex": "021300202211103211332",
+            "geom_st_box2d": "BOX(2600863.761 1199640.3740000017,2600863.761 1199640.3740000017)",
+            "label": "Kramgasse 49 <b>3011 Bern</b>",
+            "lat": 46.94784927368164,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100775538",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230393_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.449978351593018,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199640.375,
+            "y": 2600863.75,
+            "zoomlevel": 10
+          },
+          "id": 1784087,
+          "weight": 7
+        }
+      ]
+    },
+    "Kramgasse 4": {
+      "results": [
+        {
+          "attrs": {
+            "detail": "kramgasse 4 3506 grosshoechstetten 608 grosshoechstetten ch be",
+            "featureId": "1354387_0",
+            "geom_quadindex": "021301222223212211110",
+            "geom_st_box2d": "BOX(2615306.9800000004 1195072.932,2615306.9800000004 1195072.932)",
+            "label": "Kramgasse 4 <b>3506 Grosshöchstetten</b>",
+            "lat": 46.90658950805664,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100868089",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1354387_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.639541149139404,
+            "num": 4,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1195072.875,
+            "y": 2615307.0,
+            "zoomlevel": 10
+          },
+          "id": 915987,
+          "weight": 100
+        },
+        {
+          "attrs": {
+            "detail": "kramgasse 4 3011 bern 351 bern ch be",
+            "featureId": "1230449_0",
+            "geom_quadindex": "021300202300011200022",
+            "geom_st_box2d": "BOX(2601025.625 1199671.1240000017,2601025.625 1199671.1240000017)",
+            "label": "Kramgasse 4 <b>3011 Bern</b>",
+            "lat": 46.948123931884766,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100776287",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230449_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.452104568481445,
+            "num": 4,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199671.125,
+            "y": 2601025.5,
+            "zoomlevel": 10
+          },
+          "id": 1318043,
+          "weight": 100
+        },
+        {
+          "attrs": {
+            "detail": "kramgasse 4a 3506 grosshoechstetten 608 grosshoechstetten ch be",
+            "featureId": "502083975_0",
+            "geom_quadindex": "021301222223203101221",
+            "geom_st_box2d": "BOX(2615282.9189999998 1195084.892000001,2615282.9189999998 1195084.892000001)",
+            "label": "Kramgasse 4a <b>3506 Grosshöchstetten</b>",
+            "lat": 46.90669631958008,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102945204",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/502083975_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.639225959777832,
+            "num": 4,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1195084.875,
+            "y": 2615283.0,
+            "zoomlevel": 10
+          },
+          "id": 1245069,
+          "weight": 5
+        },
+        {
+          "attrs": {
+            "detail": "kramgasse 40 3011 bern 351 bern ch be",
+            "featureId": "2243979_0",
+            "geom_quadindex": "021300202211110202010",
+            "geom_st_box2d": "BOX(2600880.267000001 1199668.8839999996,2600880.267000001 1199668.8839999996)",
+            "label": "Kramgasse 40 <b>3011 Bern</b>",
+            "lat": 46.94810485839844,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101005695",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/2243979_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.4501953125,
+            "num": 40,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199668.875,
+            "y": 2600880.25,
+            "zoomlevel": 10
+          },
+          "id": 847767,
+          "weight": 5
+        },
+        {
+          "attrs": {
+            "detail": "kramgasse 41 3011 bern 351 bern ch be",
+            "featureId": "1230389_0",
+            "geom_quadindex": "021300202211112201320",
+            "geom_st_box2d": "BOX(2600884.892999999 1199640.7980000004,2600884.892999999 1199640.7980000004)",
+            "label": "Kramgasse 41 <b>3011 Bern</b>",
+            "lat": 46.947853088378906,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100775534",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230389_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.450255870819092,
+            "num": 41,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199640.75,
+            "y": 2600885.0,
+            "zoomlevel": 10
+          },
+          "id": 1715345,
+          "weight": 5
+        },
+        {
+          "attrs": {
+            "detail": "kramgasse 43 3011 bern 351 bern ch be",
+            "featureId": "1230390_0",
+            "geom_quadindex": "021300202211112202032",
+            "geom_st_box2d": "BOX(2600880.1900000013 1199638.572999999,2600880.1900000013 1199638.572999999)",
+            "label": "Kramgasse 43 <b>3011 Bern</b>",
+            "lat": 46.94783020019531,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100775535",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230390_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.450193881988525,
+            "num": 43,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199638.625,
+            "y": 2600880.25,
+            "zoomlevel": 10
+          },
+          "id": 1726105,
+          "weight": 5
+        }
+      ]
+    },
+    "Kramgase 49 Bern": {
+      "fuzzy": "true",
+      "results": [
+        {
+          "attrs": {
+            "detail": "kramgasse 49 3011 bern 351 bern ch be",
+            "featureId": "1230393_0",
+            "geom_quadindex": "021300202211103211332",
+            "geom_st_box2d": "BOX(2600863.761 1199640.3740000017,2600863.761 1199640.3740000017)",
+            "label": "Kramgasse 49 <b>3011 Bern</b>",
+            "lat": 46.94784927368164,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100775538",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230393_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.449978351593018,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199640.375,
+            "y": 2600863.75,
+            "zoomlevel": 10
+          },
+          "id": 1784087,
+          "weight": 1575
+        },
+        {
+          "attrs": {
+            "detail": "bernstrasse 49 3018 bern 351 bern ch be",
+            "featureId": "1242131_0",
+            "geom_quadindex": "021211312230233322310",
+            "geom_st_box2d": "BOX(2596824.4959999993 1198986.0599999987,2596824.4959999993 1198986.0599999987)",
+            "label": "Bernstrasse 49 <b>3018 Bern</b>",
+            "lat": 46.94195556640625,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100743228",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1242131_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.396925926208496,
+            "num": 49,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1198986.0,
+            "y": 2596824.5,
+            "zoomlevel": 10
+          },
+          "id": 1578878,
+          "weight": 1553
+        },
+        {
+          "attrs": {
+            "detail": "kramgasse 1 3011 bern 351 bern ch be",
+            "featureId": "1230364_0",
+            "geom_quadindex": "021300202300013023201",
+            "geom_st_box2d": "BOX(2601030.0419999994 1199645.2600000016,2601030.0419999994 1199645.2600000016)",
+            "label": "Kramgasse 1 <b>3011 Bern</b>",
+            "lat": 46.94789123535156,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100775511",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230364_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.452162265777588,
+            "num": 1,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199645.25,
+            "y": 2601030.0,
+            "zoomlevel": 10
+          },
+          "id": 911627,
+          "weight": 1552
+        },
+        {
+          "attrs": {
+            "detail": "kramgasse 2 3011 bern 351 bern ch be",
+            "featureId": "1230448_0",
+            "geom_quadindex": "021300202300011200123",
+            "geom_st_box2d": "BOX(2601027.835000001 1199671.375,2601027.835000001 1199671.375)",
+            "label": "Kramgasse 2 <b>3011 Bern</b>",
+            "lat": 46.94812774658203,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100776285",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1230448_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.452133655548096,
+            "num": 2,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1199671.375,
+            "y": 2601027.75,
+            "zoomlevel": 10
+          },
+          "id": 934445,
+          "weight": 1552
+        }
+      ]
+    },
+    "Städtle 1 Vaduz": {
+      "results": [
+        {
+          "attrs": {
+            "detail": "staedtle 1 9490 vaduz 7001 vaduz ch",
+            "featureId": "299001764_1",
+            "geom_quadindex": "030132100223311133002",
+            "geom_st_box2d": "BOX(2757965.8269999996 1223230.4880000018,2757965.8269999996 1223230.4880000018)",
+            "label": "Städtle 1 <b>9490 Vaduz</b>",
+            "lat": 47.14118576049805,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/299012140",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/299001764_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.521305084228516,
+            "num": 1,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1223230.5,
+            "y": 2757965.75,
+            "zoomlevel": 10
+          },
+          "id": 3309774,
+          "weight": 7
+        },
+        {
+          "attrs": {
+            "detail": "staedtle 11 9490 vaduz 7001 vaduz ch",
+            "featureId": "299001765_1",
+            "geom_quadindex": "030132100232212123321",
+            "geom_st_box2d": "BOX(2758048.9990000017 1223198.460000001,2758048.9990000017 1223198.460000001)",
+            "label": "Städtle 11 <b>9490 Vaduz</b>",
+            "lat": 47.14087677001953,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/299012682",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/299001765_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.522390365600586,
+            "num": 11,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1223198.5,
+            "y": 2758049.0,
+            "zoomlevel": 10
+          },
+          "id": 3314125,
+          "weight": 2
+        }
+      ]
+    },
+    "Breitenrainstrasse 10": {
+      "results": [
+        {
+          "attrs": {
+            "detail": "breitenrainstrasse 10 3013 bern 351 bern ch be",
+            "featureId": "1240693_1",
+            "geom_quadindex": "021300200322112131121",
+            "geom_st_box2d": "BOX(2601141.5309999995 1200821.7520000003,2601141.5309999995 1200821.7520000003)",
+            "label": "Breitenrainstrasse 10 <b>3013 Bern</b>",
+            "lat": 46.958473205566406,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101484762",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1240693_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.453629493713379,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1200821.75,
+            "y": 2601141.5,
+            "zoomlevel": 10
+          },
+          "id": 1109774,
+          "weight": 100
+        },
+        {
+          "attrs": {
+            "detail": "breitenrainstrasse 10 8280 kreuzlingen 4671 kreuzlingen ch tg",
+            "featureId": "191549752_0",
+            "geom_quadindex": "012322123202113230202",
+            "geom_st_box2d": "BOX(2729588.344999999 1278148.7410000004,2729588.344999999 1278148.7410000004)",
+            "label": "Breitenrainstrasse 10 <b>8280 Kreuzlingen</b>",
+            "lat": 47.641178131103516,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102215154",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191549752_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.163213729858398,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1278148.75,
+            "y": 2729588.25,
+            "zoomlevel": 10
+          },
+          "id": 2089084,
+          "weight": 100
+        },
+        {
+          "attrs": {
+            "detail": "breitenrainstrasse 10b 8280 kreuzlingen 4671 kreuzlingen ch tg",
+            "featureId": "191549751_0",
+            "geom_quadindex": "012322123200333311302",
+            "geom_st_box2d": "BOX(2729608.416000001 1278214.5190000013,2729608.416000001 1278214.5190000013)",
+            "label": "Breitenrainstrasse 10b <b>8280 Kreuzlingen</b>",
+            "lat": 47.64176559448242,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102214802",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191549751_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.16349983215332,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1278214.5,
+            "y": 2729608.5,
+            "zoomlevel": 10
+          },
+          "id": 1909469,
+          "weight": 5
+        },
+        {
+          "attrs": {
+            "detail": "breitenrainstrasse 10a 8280 kreuzlingen 4671 kreuzlingen ch tg",
+            "featureId": "191549752_1",
+            "geom_quadindex": "012322123202113013103",
+            "geom_st_box2d": "BOX(2729594.3999999985 1278168.7309999987,2729594.3999999985 1278168.7309999987)",
+            "label": "Breitenrainstrasse 10a <b>8280 Kreuzlingen</b>",
+            "lat": 47.641357421875,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102215155",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191549752_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.163300514221191,
+            "num": 10,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1278168.75,
+            "y": 2729594.5,
+            "zoomlevel": 10
+          },
+          "id": 1926944,
+          "weight": 5
+        }
+      ]
+    },
+    "Stephansplatz 1 Wien": {
+      "fuzzy": "true",
+      "results": [
+        {
+          "attrs": {
+            "detail": "wien-strasse 2 4053 basel 2701 basel ch bs",
+            "featureId": "243027943_0",
+            "geom_quadindex": "021100130312133212012",
+            "geom_st_box2d": "BOX(2612870.368999999 1264971.8539999984,2612870.368999999 1264971.8539999984)",
+            "label": "Wien-Strasse 2 <b>4053 Basel</b>",
+            "lat": 47.53535079956055,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101372656",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/243027943_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.609549045562744,
+            "num": 2,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1264971.875,
+            "y": 2612870.25,
+            "zoomlevel": 10
+          },
+          "id": 12740,
+          "weight": 1507
+        },
+        {
+          "attrs": {
+            "detail": "wien-strasse 8 4053 basel 2701 basel ch bs",
+            "featureId": "2756953_0",
+            "geom_quadindex": "021100130312303103302",
+            "geom_st_box2d": "BOX(2612823.476 1264925.8570000008,2612823.476 1264925.8570000008)",
+            "label": "Wien-Strasse 8 <b>4053 Basel</b>",
+            "lat": 47.53493881225586,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101229356",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/2756953_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.608924865722656,
+            "num": 8,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1264925.875,
+            "y": 2612823.5,
+            "zoomlevel": 10
+          },
+          "id": 15655,
+          "weight": 1507
+        },
+        {
+          "attrs": {
+            "detail": "wien-strasse 22 4053 basel 2701 basel ch bs",
+            "featureId": "2080106_1",
+            "geom_quadindex": "021100130330203201133",
+            "geom_st_box2d": "BOX(2612693.2989999987 1264681.4699999988,2612693.2989999987 1264681.4699999988)",
+            "label": "Wien-Strasse 22 <b>4053 Basel</b>",
+            "lat": 47.53274154663086,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/101305283",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/2080106_1",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 7.607189178466797,
+            "num": 22,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1264681.5,
+            "y": 2612693.25,
+            "zoomlevel": 10
+          },
+          "id": 19164,
+          "weight": 1507
+        }
+      ]
+    },
+    "Seestrasse 5.1": {
+      "results": [
+        {
+          "attrs": {
+            "detail": "seestrasse 5.1 9403 goldach 3213 goldach ch sg",
+            "featureId": "191927247_0",
+            "geom_quadindex": "030110210220321000311",
+            "geom_st_box2d": "BOX(2753900.670000002 1260915.2710000016,2753900.670000002 1260915.2710000016)",
+            "label": "Seestrasse 5.1 <b>9403 Goldach</b>",
+            "lat": 47.48098373413086,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102914715",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191927247_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.480663299560547,
+            "num": 51,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1260915.25,
+            "y": 2753900.75,
+            "zoomlevel": 10
+          },
+          "id": 932725,
+          "weight": 100
+        },
+        {
+          "attrs": {
+            "detail": "seestrasse 5.1 7310 bad ragaz 3291 bad ragaz ch sg",
+            "featureId": "191627332_0",
+            "geom_quadindex": "030310013112010320323",
+            "geom_st_box2d": "BOX(2757107.6460000016 1207864.8539999984,2757107.6460000016 1207864.8539999984)",
+            "label": "Seestrasse 5.1 <b>7310 Bad Ragaz</b>",
+            "lat": 47.00322341918945,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/102298931",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/191627332_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.504661560058594,
+            "num": 51,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1207864.875,
+            "y": 2757107.75,
+            "zoomlevel": 10
+          },
+          "id": 1072898,
+          "weight": 100
+        }
+      ]
+    },
+    "Fösera 9470": {
+      "results": [
+        {
+          "attrs": {
+            "detail": "foesera # 9470 buchs sg 3275 sevelen ch sg",
+            "featureId": "192060361_0",
+            "geom_quadindex": "030132011213200103200",
+            "geom_st_box2d": "BOX(2756347.25 1223705.125,2756347.25 1223705.125)",
+            "label": "Fösera # <b>9470 Buchs SG</b>",
+            "lat": 47.14583969116211,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/103569821",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/192060361_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.500139236450195,
+            "num": 0,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1223705.125,
+            "y": 2756347.25,
+            "zoomlevel": 10
+          },
+          "id": 898778,
+          "weight": 1
+        },
+        {
+          "attrs": {
+            "detail": "foesera 2245 9470 buchs sg 3275 sevelen ch sg",
+            "featureId": "1104768_0",
+            "geom_quadindex": "030132011213200102210",
+            "geom_st_box2d": "BOX(2756344.6840000004 1223704.7509999983,2756344.6840000004 1223704.7509999983)",
+            "label": "Fösera 2245 <b>9470 Buchs SG</b>",
+            "lat": 47.145835876464844,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/100685778",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/1104768_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.500105857849121,
+            "num": 2245,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1223704.75,
+            "y": 2756344.75,
+            "zoomlevel": 10
+          },
+          "id": 1129365,
+          "weight": 4
+        },
+        {
+          "attrs": {
+            "detail": "foesera 2826 9470 buchs sg 3275 sevelen ch sg",
+            "featureId": "502215954_0",
+            "geom_quadindex": "030132011213031213322",
+            "geom_st_box2d": "BOX(2756429.5320000015 1223747.3709999993,2756429.5320000015 1223747.3709999993)",
+            "label": "Fösera 2826 <b>9470 Buchs SG</b>",
+            "lat": 47.14619827270508,
+            "links": [
+              {
+                "href": "/rest/services/ech/MapServer/ch.swisstopo.amtliches-gebaeudeadressverzeichnis/103200406",
+                "rel": "related",
+                "title": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis"
+              },
+              {
+                "href": "/rest/services/ech/MapServer/ch.bfs.gebaeude_wohnungs_register/502215954_0",
+                "rel": "related",
+                "title": "ch.bfs.gebaeude_wohnungs_register"
+              }
+            ],
+            "lon": 9.501238822937012,
+            "num": 2826,
+            "objectclass": "",
+            "origin": "address",
+            "rank": 7,
+            "x": 1223747.375,
+            "y": 2756429.5,
+            "zoomlevel": 10
+          },
+          "id": 1269183,
+          "weight": 4
+        }
+      ]
+    }
+  },
+  "gwr": {
+    "1230393_0": {
+      "status": 200,
+      "body": {
+        "feature": {
+          "featureId": "1230393_0",
+          "bbox": [600863.8, 199640.4, 600863.8, 199640.4],
+          "layerBodId": "ch.bfs.gebaeude_wohnungs_register",
+          "layerName": "GWR: Gebäudestatus",
+          "id": "1230393_0",
+          "geometry": {
+            "x": 600863.8,
+            "y": 199640.4,
+            "spatialReference": {
+              "wkid": 21781
+            }
+          },
+          "attributes": {
+            "egid": "1230393",
+            "strname_deinr": "Kramgasse 49",
+            "plz_plz6": "3011/301100",
+            "ggdename": "Bern",
+            "ggdenr": 351,
+            "gexpdat": "23.09.2026",
+            "gdekt": "BE",
+            "egrid": "CH427636463563",
+            "lgbkr": 1,
+            "lparz": "575",
+            "lparzsx": null,
+            "ltyp": null,
+            "gebnr": "",
+            "gbez": "",
+            "gkode": 2600862.854,
+            "gkodn": 1199629.751,
+            "gksce": 901,
+            "gstat": 1004,
+            "gkat": 1030,
+            "gklas": 1122,
+            "gbauj": null,
+            "gbaum": null,
+            "gbaup": 8011,
+            "gabbj": null,
+            "garea": 147,
+            "gvol": null,
+            "gvolnorm": null,
+            "gvolsce": null,
+            "gastw": 5,
+            "ganzwhg": 3,
+            "gazzi": null,
+            "gschutzr": null,
+            "gebf": null,
+            "gwaerzh1": 7434,
+            "genh1": 7520,
+            "gwaersceh1": 855,
+            "gwaerdath1": "26.04.2023",
+            "gwaerzh2": null,
+            "genh2": null,
+            "gwaersceh2": null,
+            "gwaerdath2": "-",
+            "gwaerzw1": 7634,
+            "genw1": 7520,
+            "gwaerscew1": 855,
+            "gwaerdatw1": "26.04.2023",
+            "gwaerzw2": 7600,
+            "genw2": 7500,
+            "gwaerscew2": 860,
+            "gwaerdatw2": "29.11.2001",
+            "edid": "0",
+            "egaid": 100775538,
+            "deinr": "49",
+            "esid": 10006889,
+            "strname": ["Kramgasse"],
+            "strnamk": ["Kramgasse"],
+            "strindx": ["Kra"],
+            "strsp": ["DE"],
+            "stroffiziel": "1",
+            "dplz4": 3011,
+            "dplzz": 0,
+            "dplzname": "Bern",
+            "dkode": 2600863.761,
+            "dkodn": 1199640.374,
+            "doffadr": 1,
+            "dexpdat": "23.09.2026",
+            "ewid": ["1", "5", "6"],
+            "whgnr": ["202", "303", "404"],
+            "wstwk": [3102, 3103, 3104],
+            "wmehrg": [0, 0, 1],
+            "weinr": [null, null, null],
+            "wbez": [null, null, null],
+            "wstat": [3004, 3004, 3004],
+            "wexpdat": ["2026-09-23T00:00:00", "2026-09-23T00:00:00", "2026-09-23T00:00:00"],
+            "wbauj": [1999, 2021, 2021],
+            "wabbj": [null, null, null],
+            "warea": [70, 70, 98],
+            "wazim": [2, 2, 3],
+            "wkche": [1, 1, 1],
+            "label": "Kramgasse 49"
+          }
+        }
+      }
+    },
+    "1240693_1": {
+      "status": 200,
+      "body": {
+        "feature": {
+          "featureId": "1240693_1",
+          "bbox": [601141.5, 200821.8, 601141.5, 200821.8],
+          "layerBodId": "ch.bfs.gebaeude_wohnungs_register",
+          "layerName": "GWR: Gebäudestatus",
+          "id": "1240693_1",
+          "geometry": {
+            "x": 601141.5,
+            "y": 200821.8,
+            "spatialReference": {
+              "wkid": 21781
+            }
+          },
+          "attributes": {
+            "egid": "1240693",
+            "strname_deinr": "Breitenrainstrasse 10",
+            "plz_plz6": "3013/301300",
+            "ggdename": "Bern",
+            "ggdenr": 351,
+            "gexpdat": "23.09.2026",
+            "gdekt": "BE",
+            "egrid": "CH234688351458",
+            "lgbkr": 5,
+            "lparz": "74",
+            "lparzsx": null,
+            "ltyp": null,
+            "gebnr": "",
+            "gbez": "",
+            "gkode": 2601126.505,
+            "gkodn": 1200819.126,
+            "gksce": 901,
+            "gstat": 1004,
+            "gkat": 1030,
+            "gklas": 1122,
+            "gbauj": null,
+            "gbaum": null,
+            "gbaup": 8017,
+            "gabbj": null,
+            "garea": 585,
+            "gvol": null,
+            "gvolnorm": null,
+            "gvolsce": null,
+            "gastw": 5,
+            "ganzwhg": 12,
+            "gazzi": null,
+            "gschutzr": null,
+            "gebf": null,
+            "gwaerzh1": 7430,
+            "genh1": 7520,
+            "gwaersceh1": 855,
+            "gwaerdath1": "29.01.2020",
+            "gwaerzh2": 7400,
+            "genh2": 7500,
+            "gwaersceh2": 860,
+            "gwaerdath2": "29.11.2001",
+            "gwaerzw1": 7630,
+            "genw1": 7520,
+            "gwaerscew1": 855,
+            "gwaerdatw1": "29.01.2020",
+            "gwaerzw2": 7600,
+            "genw2": 7500,
+            "gwaerscew2": 860,
+            "gwaerdatw2": "29.11.2001",
+            "edid": "1",
+            "egaid": 101484762,
+            "deinr": "10",
+            "esid": 10084844,
+            "strname": ["Breitenrainstrasse"],
+            "strnamk": ["Breitenrainstr."],
+            "strindx": ["Bre"],
+            "strsp": ["DE"],
+            "stroffiziel": "1",
+            "dplz4": 3013,
+            "dplzz": 0,
+            "dplzname": "Bern",
+            "dkode": 2601141.531,
+            "dkodn": 1200821.752,
+            "doffadr": 1,
+            "dexpdat": "23.09.2026",
+            "ewid": null,
+            "whgnr": null,
+            "wstwk": null,
+            "wmehrg": null,
+            "weinr": null,
+            "wbez": null,
+            "wstat": null,
+            "wexpdat": null,
+            "wbauj": null,
+            "wabbj": null,
+            "warea": null,
+            "wazim": null,
+            "wkche": null,
+            "label": "Breitenrainstrasse 10"
+          }
+        }
+      }
+    },
+    "11203391_0": {
+      "status": 200,
+      "body": {
+        "feature": {
+          "featureId": "11203391_0",
+          "bbox": [717009.6, 96394.0, 717009.6, 96394.0],
+          "layerBodId": "ch.bfs.gebaeude_wohnungs_register",
+          "layerName": "GWR: Gebäudestatus",
+          "id": "11203391_0",
+          "geometry": {
+            "x": 717009.6,
+            "y": 96394.0,
+            "spatialReference": {
+              "wkid": 21781
+            }
+          },
+          "attributes": {
+            "egid": "11203391",
+            "strname_deinr": "Via San Gottardo 10",
+            "plz_plz6": "6900/690000",
+            "ggdename": "Lugano",
+            "ggdenr": 5192,
+            "gexpdat": "23.09.2026",
+            "gdekt": "TI",
+            "egrid": "CH600907740242",
+            "lgbkr": 1,
+            "lparz": "904",
+            "lparzsx": null,
+            "ltyp": null,
+            "gebnr": "904a",
+            "gbez": "Palazzo San Gottardo",
+            "gkode": 2717007.24,
+            "gkodn": 1096398.7,
+            "gksce": 905,
+            "gstat": 1004,
+            "gkat": 1040,
+            "gklas": 1220,
+            "gbauj": 1991,
+            "gbaum": null,
+            "gbaup": 8018,
+            "gabbj": null,
+            "garea": 762,
+            "gvol": null,
+            "gvolnorm": null,
+            "gvolsce": null,
+            "gastw": 7,
+            "ganzwhg": 2,
+            "gazzi": null,
+            "gschutzr": null,
+            "gebf": 4821,
+            "gwaerzh1": 7434,
+            "genh1": 7520,
+            "gwaersceh1": 864,
+            "gwaerdath1": "16.09.2021",
+            "gwaerzh2": 7452,
+            "genh2": 7560,
+            "gwaersceh2": 864,
+            "gwaerdath2": "16.09.2021",
+            "gwaerzw1": 7630,
+            "genw1": 7520,
+            "gwaerscew1": 864,
+            "gwaerdatw1": "16.09.2021",
+            "gwaerzw2": 7650,
+            "genw2": 7560,
+            "gwaerscew2": 864,
+            "gwaerdatw2": "16.09.2021",
+            "edid": "0",
+            "egaid": 101413336,
+            "deinr": "10",
+            "esid": 10135985,
+            "strname": ["Via San Gottardo"],
+            "strnamk": ["Via San Gottardo"],
+            "strindx": ["Got"],
+            "strsp": ["IT"],
+            "stroffiziel": "1",
+            "dplz4": 6900,
+            "dplzz": 0,
+            "dplzname": "Lugano",
+            "dkode": 2717009.649,
+            "dkodn": 1096394.014,
+            "doffadr": 1,
+            "dexpdat": "23.09.2026",
+            "ewid": ["30", "31"],
+            "whgnr": ["603", "202"],
+            "wstwk": [3106, 3102],
+            "wmehrg": [0, 0],
+            "weinr": ["27", "8"],
+            "wbez": [null, null],
+            "wstat": [3004, 3004],
+            "wexpdat": ["2026-09-23T00:00:00", "2026-09-23T00:00:00"],
+            "wbauj": [1999, 1999],
+            "wabbj": [null, null],
+            "warea": [213, 50],
+            "wazim": [5, 1],
+            "wkche": [1, 1],
+            "label": "Via San Gottardo 10"
+          }
+        }
+      }
+    },
+    "504052250_0": {
+      "status": 200,
+      "body": {
+        "feature": {
+          "featureId": "504052250_0",
+          "bbox": [570467.2, 208585.5, 570467.2, 208585.5],
+          "layerBodId": "ch.bfs.gebaeude_wohnungs_register",
+          "layerName": "GWR: Gebäudestatus",
+          "id": "504052250_0",
+          "geometry": {
+            "x": 570467.2,
+            "y": 208585.5,
+            "spatialReference": {
+              "wkid": 21781
+            }
+          },
+          "attributes": {
+            "egid": "504052250",
+            "strname_deinr": "Dorfstrasse 12a",
+            "plz_plz6": "3238/323800",
+            "ggdename": "Gals",
+            "ggdenr": 494,
+            "gexpdat": "23.09.2026",
+            "gdekt": "BE",
+            "egrid": "CH773577954639",
+            "lgbkr": 0,
+            "lparz": "319",
+            "lparzsx": null,
+            "ltyp": null,
+            "gebnr": "",
+            "gbez": "",
+            "gkode": 2570468.601,
+            "gkodn": 1208582.894,
+            "gksce": 901,
+            "gstat": 1004,
+            "gkat": 1060,
+            "gklas": 1252,
+            "gbauj": 2005,
+            "gbaum": null,
+            "gbaup": 8020,
+            "gabbj": null,
+            "garea": 37,
+            "gvol": null,
+            "gvolnorm": null,
+            "gvolsce": null,
+            "gastw": null,
+            "ganzwhg": null,
+            "gazzi": null,
+            "gschutzr": 0,
+            "gebf": null,
+            "gwaerzh1": null,
+            "genh1": null,
+            "gwaersceh1": null,
+            "gwaerdath1": "-",
+            "gwaerzh2": null,
+            "genh2": null,
+            "gwaersceh2": null,
+            "gwaerdath2": "-",
+            "gwaerzw1": null,
+            "genw1": null,
+            "gwaerscew1": null,
+            "gwaerdatw1": "-",
+            "gwaerzw2": null,
+            "genw2": null,
+            "gwaerscew2": null,
+            "gwaerdatw2": "-",
+            "edid": "0",
+            "egaid": 102959695,
+            "deinr": "12a",
+            "esid": 10009456,
+            "strname": ["Dorfstrasse"],
+            "strnamk": ["Dorfstr."],
+            "strindx": ["Dor"],
+            "strsp": ["DE"],
+            "stroffiziel": "1",
+            "dplz4": 3238,
+            "dplzz": 0,
+            "dplzname": "Gals",
+            "dkode": 2570467.212,
+            "dkodn": 1208585.495,
+            "doffadr": 1,
+            "dexpdat": "23.09.2026",
+            "ewid": null,
+            "whgnr": null,
+            "wstwk": null,
+            "wmehrg": null,
+            "weinr": null,
+            "wbez": null,
+            "wstat": null,
+            "wexpdat": null,
+            "wbauj": null,
+            "wabbj": null,
+            "warea": null,
+            "wazim": null,
+            "wkche": null,
+            "label": "Dorfstrasse 12a"
+          }
+        }
+      }
+    },
+    "299001764_1": {
+      "status": 404,
+      "body": {
+        "detail": "No feature with id 299001764_1",
+        "status": "error",
+        "code": 404
+      }
+    }
+  },
+  "height": {
+    "kramgasse49": {
+      "status": 200,
+      "easting": 2600863.761,
+      "northing": 1199640.374,
+      "body": {
+        "height": "537.7"
+      }
+    },
+    "breitenrain10": {
+      "status": 200,
+      "easting": 2601141.531,
+      "northing": 1200821.752,
+      "body": {
+        "height": "558.9"
+      }
+    },
+    "outside": {
+      "status": 400,
+      "easting": 2000000,
+      "northing": 1000000,
+      "body": {
+        "error": {
+          "code": 400,
+          "message": "Query is out of bounds"
+        },
+        "success": false
+      }
+    }
+  },
+  "identify": {
+    "breitenrain": {
+      "status": 200,
+      "easting": 2601150,
+      "northing": 1200830,
+      "radius": 15,
+      "body": {
+        "results": [
+          {
+            "type": "Feature",
+            "featureId": 101484762,
+            "bbox": [2601141.5, 1200821.8, 2601141.5, 1200821.8],
+            "layerBodId": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis",
+            "layerName": "Amtliches Gebäudeadressverzeichnis",
+            "id": 101484762,
+            "geometry": {
+              "type": "Point",
+              "coordinates": [2601141.5, 1200821.8]
+            },
+            "properties": {
+              "adr_egaid": 101484762,
+              "bdg_egid": 1240693,
+              "adr_edid": 1,
+              "str_esid": 10084844,
+              "stn_label": "Breitenrainstrasse",
+              "adr_number": "10",
+              "zip_label": "3013 Bern",
+              "com_fosnr": 351,
+              "com_name": "Bern",
+              "adr_status": "1",
+              "adr_official": true,
+              "bdg_category": "other_residential",
+              "adr_modified": "20241115",
+              "label": 101484762
+            }
+          },
+          {
+            "type": "Feature",
+            "featureId": 102151502,
+            "bbox": [2601157.0, 1200829.4, 2601157.0, 1200829.4],
+            "layerBodId": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis",
+            "layerName": "Amtliches Gebäudeadressverzeichnis",
+            "id": 102151502,
+            "geometry": {
+              "type": "Point",
+              "coordinates": [2601157.0, 1200829.4]
+            },
+            "properties": {
+              "adr_egaid": 102151502,
+              "bdg_egid": 1240703,
+              "adr_edid": 0,
+              "str_esid": 10182894,
+              "stn_label": "Breitenrainplatz",
+              "adr_number": "42",
+              "zip_label": "3014 Bern",
+              "com_fosnr": 351,
+              "com_name": "Bern",
+              "adr_status": "1",
+              "adr_official": true,
+              "bdg_category": "other_residential",
+              "adr_modified": "20241115",
+              "label": 102151502
+            }
+          }
+        ]
+      }
+    },
+    "vaduz": {
+      "status": 200,
+      "easting": 2757970,
+      "northing": 1223220,
+      "radius": 15,
+      "body": {
+        "results": [
+          {
+            "type": "Feature",
+            "featureId": 299012039,
+            "bbox": [2757974.8, 1223207.1, 2757974.8, 1223207.1],
+            "layerBodId": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis",
+            "layerName": "Amtliches Gebäudeadressverzeichnis",
+            "id": 299012039,
+            "geometry": {
+              "type": "Point",
+              "coordinates": [2757974.8, 1223207.1]
+            },
+            "properties": {
+              "adr_egaid": 299012039,
+              "bdg_egid": 299001772,
+              "adr_edid": 1,
+              "str_esid": 89440095,
+              "stn_label": "Städtle",
+              "adr_number": "2",
+              "zip_label": "9490 Vaduz",
+              "com_fosnr": 7001,
+              "com_name": "Vaduz",
+              "adr_status": "1",
+              "adr_official": true,
+              "bdg_category": "uncategorized",
+              "adr_modified": "20251124",
+              "label": 299012039
+            }
+          },
+          {
+            "type": "Feature",
+            "featureId": 299012140,
+            "bbox": [2757965.8, 1223230.5, 2757965.8, 1223230.5],
+            "layerBodId": "ch.swisstopo.amtliches-gebaeudeadressverzeichnis",
+            "layerName": "Amtliches Gebäudeadressverzeichnis",
+            "id": 299012140,
+            "geometry": {
+              "type": "Point",
+              "coordinates": [2757965.8, 1223230.5]
+            },
+            "properties": {
+              "adr_egaid": 299012140,
+              "bdg_egid": 299001764,
+              "adr_edid": 1,
+              "str_esid": 89440095,
+              "stn_label": "Städtle",
+              "adr_number": "1",
+              "zip_label": "9490 Vaduz",
+              "com_fosnr": 7001,
+              "com_name": "Vaduz",
+              "adr_status": "1",
+              "adr_official": true,
+              "bdg_category": "uncategorized",
+              "adr_modified": "20251124",
+              "label": 299012140
+            }
+          }
+        ]
+      }
+    },
+    "none": {
+      "status": 200,
+      "easting": 2729000,
+      "northing": 1280600,
+      "radius": 15,
+      "body": {
+        "results": []
+      }
+    }
+  }
+}
