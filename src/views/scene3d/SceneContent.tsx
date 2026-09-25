@@ -3,6 +3,7 @@ import type { Format, Lang } from '../../i18n';
 import type { HorizonProfile, InstantState, Obstacle } from '../../model/types';
 import { Building } from './Building';
 import { Buildings3D } from './Buildings3D';
+import { buildingShadowPoints, type ScenePrism } from './buildingsGeometry';
 import { CameraRig, type ActivePreset, type CameraApi } from './CameraRig';
 import { facadeRotationY, type Tuple3 } from './coords';
 import { Ground } from './Ground';
@@ -13,6 +14,7 @@ import {
   boxCorners,
   facadeOccluderBox,
   obstacleBox,
+  rowTargets,
   skyState,
   viewTargets,
   type HourMark,
@@ -40,6 +42,8 @@ export interface SceneContentProps {
   farHorizon: HorizonProfile | null;
   observerHeight: number;
   obstacles: readonly Obstacle[];
+  /** Surrounding buildings (world frame around the facade origin). */
+  buildings: readonly ScenePrism[];
   labels: readonly string[];
   lang: Lang;
   format: Format;
@@ -63,6 +67,7 @@ export const SceneContent = memo(function SceneContent({
   farHorizon,
   observerHeight,
   obstacles,
+  buildings,
   labels,
   lang,
   format,
@@ -100,11 +105,16 @@ export const SceneContent = memo(function SceneContent({
       depth.push(...corners);
       if (o.distance <= SHADOW_FIT_OBSTACLE_DISTANCE) fit.push(...corners);
     }
+    // Surrounding buildings: all of them may cast into the fitted area (depth), the near ones are fitted.
+    const near = buildingShadowPoints(buildings);
+    fit.push(...near.fit);
+    depth.push(...near.depth);
     if (facadeShadow) depth.push(...boxCorners(facadeOccluderBox(dims), facadeAzimuth));
     return { fitPoints: fit, depthPoints: depth };
-  }, [dims, obstacles, facadeAzimuth, facadeShadow]);
+  }, [dims, obstacles, buildings, facadeAzimuth, facadeShadow]);
   const occluder = facadeOccluderBox(dims);
   const targets = useMemo(() => viewTargets(dims), [dims]);
+  const buildingTargets = useMemo(() => rowTargets(dims), [dims]);
 
   const glow = useMemo(() => createGlowTexture(palette), [palette]);
   useEffect(() => () => glow.dispose(), [glow]);
@@ -127,7 +137,13 @@ export const SceneContent = memo(function SceneContent({
       <Ground palette={palette} compassRadius={compassRadius} lang={lang} />
       {farHorizon && <HorizonRing profile={farHorizon} observerHeight={observerHeight} palette={palette} />}
       {/* Surrounding buildings: world coordinates (ENU), outside the facade-rotated group. */}
-      <Buildings3D />
+      <Buildings3D
+        prisms={buildings}
+        palette={palette}
+        targets={buildingTargets}
+        facadeAzimuth={facadeAzimuth}
+        fade={preset !== 'sun'}
+      />
       <group rotation-y={facadeRotationY(facadeAzimuth)}>
         <Building palette={palette} dims={dims} day={sky.day} />
         <PanelRows

@@ -1,12 +1,22 @@
+import { lazy, Suspense } from 'react';
+import { useConfigSection } from '../../state/configStore';
+
 // ─────────────────────────────────────────────
-// SITE PLAN «Lageplan» (placeholder)
-// Owned by the buildings feature (docs/ARCHITECTURE.md, "Umgebung", file ownership): SVG top view (north up,
-// scale bar, zoom/pan with the touch rules), own building, neighbours, facade choice (outward normal of an
-// exterior edge → building.facadeAzimuth), balcony point along it (→ location, 1e-6°), keyboard/list
-// alternative. Reads the stores itself; BuildingSection renders it without props after the facade azimuth.
+// SITE PLAN «Lageplan»: ENTRY (owned by the buildings feature, docs/ARCHITECTURE.md "Umgebung")
+// BuildingSection renders <SitePlan/> without props. The plan (SitePlanPanel.tsx with its drawing,
+// SitePlanMap.tsx) is a chunk of its own, loaded once surrounding buildings are stored: without them there
+// is nothing to show, and most visits never need it.
 // ─────────────────────────────────────────────
 
-/** Site plan to confirm facade and balcony position. Placeholder: renders nothing. */
+const SitePlanPanel = lazy(() => import('./SitePlanPanel').then((m) => ({ default: m.SitePlanPanel })));
+
+/** The site plan once surrounding buildings (with their anchor) are stored; nothing before. */
 export function SitePlan() {
-  return null;
+  const { buildings, buildingImport } = useConfigSection('horizon');
+  if (!buildingImport || !buildings.some((b) => !b.removed)) return null;
+  return (
+    <Suspense fallback={null}>
+      <SitePlanPanel />
+    </Suspense>
+  );
 }

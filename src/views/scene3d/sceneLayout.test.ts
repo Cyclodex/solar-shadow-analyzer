@@ -26,6 +26,7 @@ import {
   modelShadeRects,
   obstacleBlocksView,
   obstacleBox,
+  rowTargets,
   sceneDims,
   segmentHitsBox,
   spriteHeightForPx,
@@ -104,6 +105,37 @@ describe('sceneDims', () => {
     expect(hasRailing(dimsOf({ building: { balconyDepth: 5 } }).railN)).toBe(false);
     expect(hasRailing(dimsOf({ building: { balconyDepth: 10 } }).railN)).toBe(true);
     expect(hasRailing(dimsOf().railN)).toBe(true);
+  });
+});
+
+describe('own building and row targets', () => {
+  it('keeps the real own building at least as high as the schematic box', () => {
+    const cfg = DEFAULT_CONFIG;
+    const rows = floorPlacements(cfg);
+    const layout = panelLayout(cfg);
+    const plain = sceneDims(layout, rows, 202, 1);
+    expect(plain.own).toBeNull();
+    const ring: [number, number][] = [
+      [-6, 0],
+      [-6, -12],
+      [9, -12],
+      [9, 0],
+    ];
+    const low = sceneDims(layout, rows, 202, 1, { ring, u0: -6, u1: 9, top: 2 });
+    expect(low.own?.top).toBe(plain.buildingHeight);
+    const tall = sceneDims(layout, rows, 202, 1, { ring, u0: -6, u1: 9, top: 40 });
+    expect(tall.own?.top).toBe(40);
+    // Framing and shadow fit keep the schematic sizes.
+    expect(tall.buildingWidth).toBe(plain.buildingWidth);
+    expect(tall.focus).toEqual(plain.focus);
+  });
+
+  it('rowTargets: both ends and the middle of each row, halfway down the panels', () => {
+    const dims = dimsOf({ building: { numFloors: 3 } });
+    const t = rowTargets(dims);
+    expect(t).toHaveLength(9);
+    expect(t[0].u).toBeCloseTo(-dims.layout.rowWidth / 2, 12);
+    expect(t[1]).toEqual(panelPointFacade(dims.rows[0], dims.layout, 0, dims.layout.length / 2));
   });
 });
 

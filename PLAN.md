@@ -63,15 +63,23 @@ Die Phasen des alten Plans und ihre Umsetzung:
     Platzhalter der Oberfläche.
   - Erledigt, Adresssuche (A): Adressen der Schweiz und Liechtensteins (swisstopo) und Orte in einer Suche,
     Gebäudeangaben aus dem GWR, Höhe vom Höhendienst, «Nächste Adresse übernehmen», Koordinaten auf 6 Stellen.
-  - Offen: Adresssuche mit Gebäudeangaben (GWR) und Import der Umgebung nach der Wahl einer Adresse;
-    Laserscan-Horizont (swissSURFACE3D) je Stockwerk und Neigung im Web Worker, Bäume wahlweise; Nachbargebäude als
-    bearbeitbare Prismen, Lageplan zum Bestätigen von Fassade und Balkon, Gebäude in der 3D-Ansicht und im
-    Druckbericht.
   - Erledigt, Laserscan: swissSURFACE3D-Horizont je Stockwerk und Neigung im Web Worker (eigener COG-Leser, STAC,
     Masken für entfernte Gebäude und «nur Gebäude», Ergebnis-Cache), Einstellungen mit Status, Datenstand und
     geschätzter Datenmenge; `npm run validate:dsm` (Breitenrainstrasse 10: 32.52° / 17.92°). Nach dem Review:
     Rechnen und Laden getrennt (Neigung und Fassade brechen keinen Download mehr ab, Nachladen nach einem Reload
     sichtbar und gemeldet), Eigenbereich je Auftrag, Pipeline aus dem Haupt-Chunk.
+  - Erledigt, Gebäude Teil 1: exakter Prismen-Horizont (Kantensweep) je Stockwerk und Neigung, Import nach der
+    Adresswahl und mit «Gebäude laden» (Fortschritt, Abbrechen, Fehler, Rückfrage vor dem Verwerfen von Änderungen),
+    Ausdünnen auf die Gebäude, die den Horizont einer möglichen Fassade setzen, plus Umgebung, Fassadenkanten und
+    Brandmauern, Gebäudeliste mit Bearbeiten, Entfernen/Wiederherstellen und Eingabe von Hand.
+  - Erledigt, Gebäude Teil 2: Lageplan (Draufsicht mit Massstab, Nordpfeil, Adresse, Sonnenrichtung; Fassade und
+    Balkon antippen, ziehen oder per Auswahl und Regler, «Übernehmen» setzt Standort und Fassadenazimut; Zoom mit
+    zwei Fingern, Strg + Mausrad oder Knöpfen; öffnet sich nach einer Adresswahl), Nachbargebäude als Prismen in der
+    3D-Ansicht (zusammengeführt, verdeckende durchscheinend, eigenes Gebäude mit echtem Grundriss) und Zeilen zu
+    Lage, Gebäuden, Laserscan und Datenquellen im Druckbericht.
+  - Erledigt, Gebäude Teil 3 (Durchsicht): Gebäude eines anderen Orts (Hinweis, nicht in 3D, wo sie alle Schatten
+    löschten), Flügel des eigenen Teils schatten, «Eigenes Gebäude» per Tastatur, von Hand erfasste nie das eigene,
+    spitze Ecken, kompakter Teilen-Link, Import im Web Worker, Liste und Lageplan als eigene Chunks.
 
 ## Offen
 

@@ -1,12 +1,21 @@
+import { lazy, Suspense } from 'react';
+
 // ─────────────────────────────────────────────
-// SURROUNDING BUILDINGS (placeholder)
-// Owned by the buildings feature (docs/ARCHITECTURE.md, "Umgebung", file ownership): import / re-import from
-// swisstopo (count, date, attribution), per building name, height, base, delete/restore, edit; add a manual
-// building. Reads and writes config.horizon.buildings / buildingImport itself; HorizonSection renders it
-// without props.
+// SURROUNDING BUILDINGS: ENTRY (owned by the buildings feature, docs/ARCHITECTURE.md "Umgebung")
+// HorizonSection renders <BuildingList/> without props (only while «Horizont & Umgebung» is open). The list
+// with its import status and manual entry (BuildingListPanel.tsx) is a chunk of its own, loaded the first
+// time the section opens.
 // ─────────────────────────────────────────────
 
-/** List of the surrounding buildings in the «Horizont & Umgebung» section. Placeholder: renders nothing. */
+const BuildingListPanel = lazy(() =>
+  import('./BuildingListPanel').then((m) => ({ default: m.BuildingListPanel })),
+);
+
+/** Surrounding buildings of «Horizont & Umgebung» (BuildingListPanel, loaded on first use). */
 export function BuildingList() {
-  return null;
+  return (
+    <Suspense fallback={null}>
+      <BuildingListPanel />
+    </Suspense>
+  );
 }

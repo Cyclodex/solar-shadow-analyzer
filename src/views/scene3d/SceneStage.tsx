@@ -19,6 +19,7 @@ import { CANVAS_RENDER_EVENT, type CanvasRenderDetail } from '../../export/canva
 import { useFormat, useLang, useMessages } from '../../i18n';
 import { useCommon } from '../../i18n/common';
 import { floorColor } from '../../styles/tokens';
+import type { ScenePrism } from './buildingsGeometry';
 import type { ActivePreset, CameraApi } from './CameraRig';
 import { renderForCapture } from './captureRender';
 import { sceneMessages } from './messages';
@@ -37,6 +38,8 @@ import styles from './Scene3D.module.css';
 // ─────────────────────────────────────────────
 
 const PRESET_BUTTONS: readonly CameraPreset[] = ['front', 'side', 'top', 'sun'];
+/** Stable empty list while the buildings layer is off (SceneContent is memoised). */
+const NO_BUILDINGS: readonly ScenePrism[] = [];
 const KEY_ORBIT_DEG = 10;
 const KEY_POLAR_DEG = 5;
 const KEY_ZOOM = 0.85;
@@ -83,9 +86,17 @@ export interface SceneStageProps {
   showModelShade: boolean;
   castShadows: boolean;
   showSunPath: boolean;
+  /** Draw the surrounding buildings (legend toggle; default on). */
+  showBuildings?: boolean;
 }
 
-export function SceneStage({ data, showModelShade, castShadows, showSunPath }: SceneStageProps) {
+export function SceneStage({
+  data,
+  showModelShade,
+  castShadows,
+  showSunPath,
+  showBuildings = true,
+}: SceneStageProps) {
   const t = useMessages(sceneMessages);
   const c = useCommon();
   const f = useFormat();
@@ -226,6 +237,7 @@ export function SceneStage({ data, showModelShade, castShadows, showSunPath }: S
             farHorizon={scene.farHorizon}
             observerHeight={scene.observerHeight}
             obstacles={scene.obstacles}
+            buildings={showBuildings ? scene.buildings : NO_BUILDINGS}
             labels={scene.labels}
             lang={lang}
             format={f}
