@@ -15,6 +15,7 @@ import { useDismissOnOutsidePointer, useKeepInViewport } from '../components/use
 import { floorLabel, useLang, useMessages, type Messages } from '../i18n';
 import { useCommon } from '../i18n/common';
 import {
+  useBattery,
   useFloorPlacements,
   useHeatmap,
   useResultsReady,
@@ -31,6 +32,8 @@ import {
 } from '../export/configFile';
 import { clearSkyParts, exportFilename } from '../export/filenames';
 import {
+  batteryHourlyCsv,
+  batteryMonthlyCsv,
   downloadCsv,
   heatmapCsv,
   monthlyResultsCsv,
@@ -51,6 +54,8 @@ const de = {
   monthly: 'Monatsertrag je Stockwerk',
   tiltSweep: 'Neigungsvergleich',
   heatmap: (floor: string) => `Schatten-Heatmap ${floor}`,
+  batteryMonthly: 'Batterie: Energiefluss je Monat',
+  batteryHourly: 'Batterie: Stundenwerte',
   computing: 'wird berechnet …',
   print: 'Bericht drucken …',
   printHint: 'auch als PDF',
@@ -76,6 +81,8 @@ const messages: Messages<typeof de> = {
     monthly: 'Monthly yield per floor',
     tiltSweep: 'Tilt comparison',
     heatmap: (floor) => `Shade heatmap ${floor}`,
+    batteryMonthly: 'Battery: energy flow per month',
+    batteryHourly: 'Battery: hourly values',
     computing: 'computing …',
     print: 'Print report …',
     printHint: 'or save as PDF',
@@ -140,6 +147,42 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
   const placements = useFloorPlacements();
   const name = config.location.name;
   const heatmapFloor = floorLabel(placements[heatmap.floor]?.storey ?? heatmap.floor, lang);
+  const battery = useBattery();
+  const batteryReady = resultsReady && battery !== null;
+  const batteryItems: MenuItem[] = config.battery.enabled
+    ? [
+        {
+          id: 'csv-battery-monthly',
+          label: t.batteryMonthly,
+          format: c.exportCsv,
+          disabled: !batteryReady,
+          detail: batteryReady ? undefined : t.computing,
+          onSelect: () => {
+            if (!batteryReady) return;
+            const parts = [name, battery.year, ...clearSkyParts(battery.source, lang)];
+            downloadCsv(
+              batteryMonthlyCsv(battery, lang, userCsvFormat(lang)),
+              exportFilename('batteryMonthly', lang, parts, 'csv'),
+            );
+          },
+        },
+        {
+          id: 'csv-battery-hourly',
+          label: t.batteryHourly,
+          format: c.exportCsv,
+          disabled: !batteryReady,
+          detail: batteryReady ? undefined : t.computing,
+          onSelect: () => {
+            if (!batteryReady) return;
+            const parts = [name, battery.year, ...clearSkyParts(battery.source, lang)];
+            downloadCsv(
+              batteryHourlyCsv(battery, config.location.timezone, lang, userCsvFormat(lang)),
+              exportFilename('batteryHourly', lang, parts, 'csv'),
+            );
+          },
+        },
+      ]
+    : [];
 
   return [
     {
@@ -204,6 +247,7 @@ function useMenuGroups(t: MessageSet, onLoadConfig: () => void): MenuGroup[] {
             );
           },
         },
+        ...batteryItems,
       ],
     },
     {

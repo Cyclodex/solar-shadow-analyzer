@@ -127,8 +127,63 @@ export interface EconomicsConfig {
   lifetimeYears: number;
 }
 
+// ── Battery storage ──────────────────────────
+// Model and sources: docs/ARCHITECTURE.md ("Batteriespeicher"), src/model/battery.ts.
+
+/**
+ * How the storage feeds the house:
+ * - 'surplus': PV goes out directly up to the AC limit; only the PV above it charges the battery, which later
+ *   discharges at the base load (baseLoadW) while PV output is below it;
+ * - 'base-load': constant output of baseLoadW; PV above it charges the battery;
+ * - 'self-consumption': the output follows the household load (smart meter); PV above the load charges.
+ * In every strategy a full battery lets the PV surplus go out up to the AC limit.
+ */
+export type BatteryStrategy = 'surplus' | 'base-load' | 'self-consumption';
+
+/** 'shared' = one storage system for all floors (one AC limit); 'per-floor' = one system per floor. */
+export type BatteryLayout = 'shared' | 'per-floor';
+
+/** Household load shape: BDEW standard load profile H0 or a constant load. */
+export type LoadProfileKind = 'h0' | 'flat';
+
+export interface BatteryConfig {
+  /** Storage modelled at all (off = results exactly as without this section). */
+  enabled: boolean;
+  /** Device preset id (src/model/batteryPresets.ts) or 'custom'. */
+  preset: string;
+  layout: BatteryLayout;
+  /** Battery units per system (identical devices / packs). */
+  units: number;
+  /** Usable capacity of one unit, Wh. */
+  unitCapacityWh: number;
+  /** Max. PV input power of one system (MPPTs), W; PV above it is lost. */
+  pvInputW: number;
+  /** Max. charging power of one system (from PV), W. */
+  chargeW: number;
+  /** Max. discharging power of one system, W. */
+  dischargeW: number;
+  /** AC output limit of one system, W (CH: 600 W per household, EU: 800 W). */
+  acLimitW: number;
+  /** Charging efficiency relative to the direct PV → AC path, %. */
+  chargeEfficiencyPct: number;
+  /** Discharging efficiency relative to the direct PV → AC path, %. */
+  dischargeEfficiencyPct: number;
+  /** Lowest state of charge the system discharges to (reserve), %. */
+  minSocPct: number;
+  /** Own consumption of one system, W (drawn from PV, else the battery, else the grid). */
+  standbyW: number;
+  strategy: BatteryStrategy;
+  /** Base load output of one system, W ('surplus' and 'base-load'). */
+  baseLoadW: number;
+  /** Annual consumption of the household supplied by the system(s), kWh. */
+  consumptionKwh: number;
+  loadProfile: LoadProfileKind;
+  /** Investment for the storage system(s), total (currency). */
+  investment: number;
+}
+
 export interface Config {
-  version: 2;
+  version: 3;
   location: LocationConfig;
   building: BuildingConfig;
   panels: PanelConfig;
@@ -136,6 +191,7 @@ export interface Config {
   horizon: HorizonConfig;
   weather: WeatherConfig;
   economics: EconomicsConfig;
+  battery: BatteryConfig;
 }
 
 // ── Geometry ─────────────────────────────────
@@ -383,4 +439,85 @@ export interface EconomicsResult {
   /** Cumulative savings over the lifetime incl. degradation, minus investment. */
   lifetimeNet: number;
   investment: number;
+}
+
+/** Energy flows of the storage simulation over a period, kWh (AC-equivalent, see src/model/battery.ts). */
+export interface BatteryFlows {
+  /** PV energy after system losses, before any limit (= yield without AC limit). */
+  pv: number;
+  /** PV above the systems' PV input limit (MPPT), lost. */
+  pvInputLimited: number;
+  /** PV sent to the AC side directly (incl. surplus fed in while the battery is full). */
+  direct: number;
+  /** PV into the battery (before charging losses). */
+  charged: number;
+  /** Battery energy delivered to the AC side (after discharging losses). */
+  discharged: number;
+  /** Household load covered by direct PV / by the battery. */
+  selfDirect: number;
+  selfBattery: number;
+  /** AC energy fed into the grid. */
+  exported: number;
+  /** Energy drawn from the grid (load not covered + standby without PV or battery). */
+  imported: number;
+  /** Household consumption. */
+  load: number;
+  /** PV lost at the AC limit (battery full or charging power exceeded). */
+  curtailed: number;
+  chargeLoss: number;
+  dischargeLoss: number;
+  /** Own consumption of the system(s), from any source. */
+  standby: number;
+  /** Stored energy at the end minus at the start of the period. */
+  storedDelta: number;
+}
+
+/** Same household and AC limit without storage (plain inverter), kWh. */
+export interface BaselineFlows {
+  /** AC output = min(PV, AC limit) per system. */
+  output: number;
+  selfConsumed: number;
+  exported: number;
+  imported: number;
+  /** PV lost at the AC limit. */
+  curtailed: number;
+}
+
+/** Hourly (weather step) series of the storage simulation, W (soc: 0…1 of the total capacity). */
+export interface BatterySeries {
+  timesUtc: readonly number[];
+  stepMinutes: number;
+  pv: Float32Array;
+  direct: Float32Array;
+  charge: Float32Array;
+  discharge: Float32Array;
+  load: Float32Array;
+  exported: Float32Array;
+  imported: Float32Array;
+  soc: Float32Array;
+}
+
+export interface BatteryResult {
+  source: WeatherSource;
+  year: number;
+  /** Number of storage systems (1 shared, or one per floor). */
+  systems: number;
+  /** Usable capacity of all systems, kWh. */
+  capacityKwh: number;
+  annual: BatteryFlows;
+  monthly: BatteryFlows[];
+  baseline: { annual: BaselineFlows; monthly: BaselineFlows[] };
+  /** Full cycles per year: energy taken from the cells / total capacity. */
+  cycles: number;
+  /** Self-consumed share of the PV energy (pv), % — with and without storage. */
+  selfConsumptionPct: number;
+  baselineSelfConsumptionPct: number;
+  /** Share of the load covered by PV, % — with and without storage. */
+  autarkyPct: number;
+  baselineAutarkyPct: number;
+  /** AC energy delivered with storage minus without (same AC limit), kWh. */
+  extraOutputKwh: number;
+  /** Self-consumed energy with storage minus without, kWh. */
+  extraSelfKwh: number;
+  series: BatterySeries;
 }

@@ -24,6 +24,13 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
   Balkontiefe; 5 Modul-Presets, Quer- oder Hochformat, 1–8 Module nebeneinander, Modulabstand, Nennleistung.
 - **System:** Wechselrichter-Grenze je Stockwerk, Systemverluste, Temperaturkoeffizient, NOCT, Albedo, Modell der
   Teilverschattung.
+- **Batteriespeicher:** Balkonspeicher mit eigenem Solareingang wie EcoFlow STREAM (Presets: STREAM Ultra X,
+  Ultra, Pro, Anker SOLIX Solarbank 3 E2700 Pro, Zendure SolarFlow 800 Pro, oder eigene Werte): Anzahl Einheiten,
+  ein System für alle Stockwerke oder eines je Stockwerk, AC-Ausgangsgrenze (CH 600 W), Betriebsart (nur
+  Überschuss speichern, konstante Grundlast, Eigenverbrauch mit Smart Meter), Haushaltsverbrauch mit
+  BDEW-Standardlastprofil H0. Ergebnisse: Mehrertrag gegenüber dem reinen Wechselrichter, Eigenverbrauch,
+  Autarkie, Vollzyklen, Tagesverlauf mit Ladestand, Energiefluss je Monat mit und ohne Batterie,
+  Wirtschaftlichkeit mit und ohne Batterie, CSV je Monat und je Stunde.
 - **Horizont & Umgebung:** Geländehorizont aus einem Höhenmodell (bis ca. 50 km), bis zu 20 Hindernisse
   (Nachbargebäude als Quader), eigene Horizontpunkte oder Import einer PVGIS-Horizontdatei.
 - **Wetterdaten:** stündliche Open-Meteo-Daten für ein Jahr ab 1940 bis zum letzten vollständigen Jahr, oder ein
@@ -32,7 +39,7 @@ Wirtschaftlichkeit. Alles läuft im Browser, ohne eigenes Backend.
   gewählten Zeitpunkt), Tagesverlauf, Jahres-Heatmap der Verschattung, Monatsertrag, Neigungsvergleich 0–90° in
   5°-Schritten, Wirtschaftlichkeit und Monatstabelle.
 - **Teilen und Export:** Teilen-Link (`#c=…`), Konfiguration als JSON speichern und laden, CSV (Monatsertrag je
-  Stockwerk, Neigungsvergleich, Heatmap), PNG je Ansicht und Diagramm, Druckbericht (auch als PDF). Einstellungen bleiben im
+  Stockwerk, Neigungsvergleich, Heatmap, Batterie), PNG je Ansicht und Diagramm, Druckbericht (auch als PDF). Einstellungen bleiben im
   Browser gespeichert.
 - **Oberfläche:** Deutsch und Englisch, dunkles und helles Design. Ab 1100 px Breite stehen die Eingaben in einer
   Seitenleiste; schmaler ist die Seite einspaltig, mit den Ergebnissen vor den Einstellungen (ausgelegt ab 320 px
@@ -143,6 +150,9 @@ stehen dort in `LIMITS`.
   NOCT 45 °C, Albedo 0.2, Teilverschattung mit Bypass-Teilsträngen.
 - **Horizont:** Geländehorizont an, keine Hindernisse, keine eigenen Horizontpunkte.
 - **Wetterdaten:** Open-Meteo, Jahr 2025.
+- **Batterie (aus):** 2 × EcoFlow STREAM Ultra X (je 3.84 kWh) als ein System, AC-Grenze 600 W, «nur Überschuss
+  speichern» mit Grundlast 200 W, Haushalt 2500 kWh/Jahr (ElCom-Profil H2) mit Profil H0, Investition CHF 2998.
+  Annahmen ohne Herstellerangabe: Wirkungsgrad Laden und Entladen je 95 %, Reserve 10 %, Eigenverbrauch 0 W.
 - **Wirtschaftlichkeit (Beispielwerte):** CHF, Strompreis 0.30/kWh, Einspeisevergütung 0.08/kWh, Eigenverbrauch
   70 %, Investition 900 je Stockwerk, Degradation 0.5 %/Jahr, Betrachtungsdauer 25 Jahre.
 
@@ -180,6 +190,8 @@ ruft direkt aus dem Browser folgende Dienste auf:
   automatisch bei eingeschaltetem Geländehorizont (Standard). Quellen und Namensnennung:
   [Tilezen/Mapzen](https://github.com/tilezen/joerd/blob/master/docs/attribution.md), u. a. SRTM, GMTED2010, ETOPO1
   und EU-DEM (produced using Copernicus data and information funded by the European Union).
+- **BDEW-Standardlastprofil H0** (Haushaltsverbrauch der Batteriesimulation) ist in der App enthalten, aus
+  `Profile.zip` von [bdew.de](https://www.bdew.de/energie/standardlastprofile-strom/); es wird nichts abgefragt.
 - **PVGIS** wird nicht automatisch abgefragt (keine CORS-Freigabe): Die App verlinkt nur den Horizont für den
   Standort, die heruntergeladene Datei kann importiert werden.
 
@@ -206,6 +218,9 @@ den Link erhält, sieht aber die Koordinaten. Der Sonnenstand wird lokal berechn
 - Der Geländehorizont hängt von der Auflösung der Höhenkacheln ab. Lassen sich die Kacheln nicht laden, rechnet die
   App ohne Gelände und zeigt einen Hinweis.
 - Wirtschaftlichkeit mit konstanten Preisen, ohne Diskontierung und ohne laufende Kosten.
+- Batterie: stündliche Energiebilanz ohne Alterung und Ersatz des Speichers, ohne Laden aus dem Netz, ohne
+  Feiertage im Lastprofil (H0 ist ein deutsches Standardprofil); Wirkungsgrade und Eigenverbrauch sind Annahmen.
+  Modell und Quellen: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md#batteriespeicher).
 - Modellrechnung ohne Gewähr: Sie ersetzt keine Fachplanung.
 
 ## Stack

@@ -9,6 +9,8 @@ import { WarningsBar } from './app/WarningsBar';
 import { jumpTo } from './app/jumpTo';
 import { BOTTOM_BAR_LAYOUT, WIDE_LAYOUT } from './app/layout';
 import { useDocumentSettings } from './app/useDocumentSettings';
+import { BatteryDayChart } from './charts/BatteryDayChart';
+import { BatteryMonthlyChart } from './charts/BatteryMonthlyChart';
 import { DailyProfileChart } from './charts/DailyProfileChart';
 import { EconomicsCard } from './charts/EconomicsCard';
 import { MonthlyTable } from './charts/MonthlyTable';
@@ -24,6 +26,7 @@ import { useMediaQuery } from './hooks/useMediaQuery';
 import { useMessages, type Messages } from './i18n';
 import { PwaToast } from './pwa/PwaToast';
 import { reloadPage } from './pwa/updates';
+import { useConfigSection } from './state/configStore';
 import { useUiStore } from './state/uiStore';
 import { FrontalView } from './views/FrontalView';
 import { PanelShadowView } from './views/PanelShadowView';
@@ -80,6 +83,7 @@ export default function App() {
   useDocumentSettings();
   const t = useMessages(messages);
   const views = useUiStore((s) => s.views);
+  const batteryEnabled = useConfigSection('battery').enabled;
   const viewsId = useId();
   const analysisId = useId();
   const wide = useMediaQuery(WIDE_LAYOUT);
@@ -191,6 +195,8 @@ export default function App() {
                 <ShadeHeatmap />
                 <MonthlyYieldChart />
                 <TiltSweepChart />
+                {batteryEnabled && <BatteryDayChart />}
+                {batteryEnabled && <BatteryMonthlyChart />}
               </div>
               <EconomicsCard />
               <MonthlyTable />

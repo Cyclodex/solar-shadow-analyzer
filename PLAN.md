@@ -53,6 +53,16 @@ Die Phasen des alten Plans und ihre Umsetzung:
     kurzen Scheiben im Hintergrund; Heatmap und Monatstabelle rechnen nur in Bildschirmnähe, die 3D-Szene friert
     ausserhalb des Bildschirms ein; Druck und PNG-Export holen alles nach.
 
+## Batteriespeicher (September 2026)
+
+- Balkonspeicher mit MPPT und Wechselrichter (EcoFlow STREAM u. a.): stündliche Energiebilanz mit PV-Eingangs-,
+  Lade-, Entlade- und AC-Grenze, Wirkungsgraden, Reserve und Eigenverbrauch; drei Betriebsarten; Haushaltslast
+  nach BDEW H0 oder konstant; ein System oder eines je Stockwerk. KPIs, Tagesverlauf, Energiefluss je Monat,
+  Wirtschaftlichkeit mit/ohne Batterie, CSV, Druckbericht. Config v3, Teilen-Format v2 (alte Links unverändert).
+- Offen: Batterie-Symbol in der 3D-Ansicht; gemischte Systeme (z. B. Ultra X mit STREAM AC Pro); Alterung des
+  Speichers; Laden aus dem Netz und dynamische Tarife; Herstellerwerte für Wirkungsgrad und Eigenverbrauch, sobald
+  veröffentlicht.
+
 ## Offen
 
 - Übersetzungen Französisch und Italienisch (aus dem alten Punkt 4.4).
@@ -86,7 +96,7 @@ Die Phasen des alten Plans und ihre Umsetzung:
 - Mehrjahresmittel der Wetterdaten statt eines einzelnen Jahres.
 - Teilschatten einzelner Module durch Hindernisse (Ray-Casting statt Horizont von der Panelmitte).
 - Seitenwände und Nachbarbalkone als zusätzliche Schattenwerfer.
-- Wirtschaftlichkeit mit Diskontierung, Preisentwicklung und Eigenverbrauch aus einem Lastprofil.
+- Wirtschaftlichkeit mit Diskontierung und Preisentwicklung; Eigenverbrauch aus dem Lastprofil auch ohne Batterie.
 
 ## Arbeitsweise
 

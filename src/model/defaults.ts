@@ -5,7 +5,7 @@ import type { Config, Obstacle } from './types';
 // ─────────────────────────────────────────────
 
 export const DEFAULT_CONFIG: Config = {
-  version: 2,
+  version: 3,
   location: {
     name: '47.100° N, 7.450° E',
     latitude: 47.1,
@@ -55,6 +55,34 @@ export const DEFAULT_CONFIG: Config = {
     degradationPct: 0.5,
     lifetimeYears: 25,
   },
+  // Off by default. Device values: 2 × EcoFlow STREAM Ultra X in parallel on one AC output
+  // (src/model/batteryPresets.ts). Sources and assumptions: docs/ARCHITECTURE.md, "Batteriespeicher".
+  battery: {
+    enabled: false,
+    preset: 'ecoflow-stream-ultra-x',
+    layout: 'shared',
+    units: 2,
+    unitCapacityWh: 3840,
+    pvInputW: 4000,
+    chargeW: 3000,
+    dischargeW: 2400,
+    // ESTI Mitteilung 7/2014: plug-in PV "gesamthaft maximal 600 W" per supply line (CH); EU 800 VA.
+    acLimitW: 600,
+    // Assumption: no manufacturer of the presets states charging/discharging efficiencies.
+    chargeEfficiencyPct: 95,
+    dischargeEfficiencyPct: 95,
+    // Assumption: EcoFlow documents a reserve setting, not its default.
+    minSocPct: 10,
+    // Not stated by the manufacturers: 0 until measured.
+    standbyW: 0,
+    strategy: 'surplus',
+    baseLoadW: 200,
+    // ElCom consumption profile H2 (4-room apartment with electric cooker), Wegleitung Tarife 2027, 7.3.2.
+    consumptionKwh: 2500,
+    loadProfile: 'h0',
+    // Example value: 2 × CHF 1'499 (ch.ecoflow.com, distributor Soltark by Hoelzle AG, 2026-09-24).
+    investment: 2998,
+  },
 };
 
 export interface FieldLimit {
@@ -103,6 +131,21 @@ export const LIMITS = {
     investmentPerFloor: { min: 0, max: 20000, step: 10 },
     degradationPct: { min: 0, max: 3, step: 0.1 },
     lifetimeYears: { min: 1, max: 40, step: 1 },
+  },
+  battery: {
+    units: { min: 1, max: 12, step: 1 },
+    unitCapacityWh: { min: 100, max: 20000, step: 10 },
+    pvInputW: { min: 100, max: 20000, step: 10 },
+    chargeW: { min: 0, max: 20000, step: 10 },
+    dischargeW: { min: 0, max: 20000, step: 10 },
+    acLimitW: { min: 100, max: 5000, step: 10 },
+    chargeEfficiencyPct: { min: 50, max: 100, step: 0.5 },
+    dischargeEfficiencyPct: { min: 50, max: 100, step: 0.5 },
+    minSocPct: { min: 0, max: 90, step: 1 },
+    standbyW: { min: 0, max: 100, step: 0.5 },
+    baseLoadW: { min: 0, max: 5000, step: 5 },
+    consumptionKwh: { min: 100, max: 50000, step: 10 },
+    investment: { min: 0, max: 50000, step: 10 },
   },
   obstacle: {
     offsetAlong: { min: -300, max: 300, step: 0.5 },
