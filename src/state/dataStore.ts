@@ -59,6 +59,11 @@ export interface SurfaceData {
   bytes: number;
   /** Acquisition years of the scan tiles used, ascending (e.g. [2023]); [] while unknown. */
   dataYears: number[];
+  /**
+   * Share of the traced circle with scan data, 0–1 (below 1 at the CH/FL border: no scan outside); null while
+   * unknown.
+   */
+  coverage: number | null;
   /** Error message (technical, English) when status 'error'. */
   error: string | null;
   /**
@@ -114,6 +119,7 @@ export const INITIAL_SURFACE: SurfaceData = {
   progress: 0,
   bytes: 0,
   dataYears: [],
+  coverage: null,
   error: null,
   horizons: null,
   siteKey: null,

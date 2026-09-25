@@ -16,6 +16,7 @@ import {
   useSimulation,
   useSimulationConfig,
 } from '../hooks/useModel';
+import { useProvisionalNote } from '../controls/horizon/provisional';
 import { useConfig } from '../state/configStore';
 import { useTimeStore } from '../state/timeStore';
 import { floorColor } from '../styles/tokens';
@@ -48,7 +49,6 @@ const de = {
   power: 'Leistung jetzt',
   powerSub: 'bei klarem Himmel, AC',
   loading: 'Jahresergebnisse werden berechnet …',
-  provisional: 'vorläufig – Geländehorizont wird geladen',
 };
 const messages: Messages<typeof de> = {
   de,
@@ -79,7 +79,6 @@ const messages: Messages<typeof de> = {
     power: 'Power now',
     powerSub: 'clear sky, AC',
     loading: 'Computing annual results …',
-    provisional: 'provisional – loading terrain horizon',
   },
 };
 
@@ -185,6 +184,7 @@ export function KpiBar() {
   const simConfig = useSimulationConfig();
   const econ = useEconomics();
   const annualState = useAnnualResultsState();
+  const provisionalNote = useProvisionalNote();
   const instant = useInstant();
   const power = useInstantPower();
   const layout = useLayout();
@@ -271,7 +271,7 @@ export function KpiBar() {
           {t.year} {config.weather.year}
         </h3>
         {loading && <span className="sr-only">{t.loading}</span>}
-        {provisional && <p className={styles.provisionalNote}>{t.provisional}</p>}
+        {provisional && <p className={styles.provisionalNote}>{provisionalNote}</p>}
         <dl className={styles.grid}>
           <Kpi
             label={t.annualYield}
