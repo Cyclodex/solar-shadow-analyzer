@@ -67,6 +67,11 @@ Die Phasen des alten Plans und ihre Umsetzung:
     Laserscan-Horizont (swissSURFACE3D) je Stockwerk und Neigung im Web Worker, Bäume wahlweise; Nachbargebäude als
     bearbeitbare Prismen, Lageplan zum Bestätigen von Fassade und Balkon, Gebäude in der 3D-Ansicht und im
     Druckbericht.
+  - Erledigt, Laserscan: swissSURFACE3D-Horizont je Stockwerk und Neigung im Web Worker (eigener COG-Leser, STAC,
+    Masken für entfernte Gebäude und «nur Gebäude», Ergebnis-Cache), Einstellungen mit Status, Datenstand und
+    geschätzter Datenmenge; `npm run validate:dsm` (Breitenrainstrasse 10: 32.52° / 17.92°). Nach dem Review:
+    Rechnen und Laden getrennt (Neigung und Fassade brechen keinen Download mehr ab, Nachladen nach einem Reload
+    sichtbar und gemeldet), Eigenbereich je Auftrag, Pipeline aus dem Haupt-Chunk.
 
 ## Offen
 
