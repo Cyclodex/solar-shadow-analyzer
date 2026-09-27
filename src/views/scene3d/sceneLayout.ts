@@ -13,6 +13,7 @@ import { sunInFacade } from '../../model/geometry';
 import { sunVectorEnu } from '../../model/sun';
 import type { SolarPathPoint } from '../../model/sun';
 import { clamp, toDeg, toRad } from '../../model/units';
+import type { OwnBody } from './buildingsGeometry';
 import { enuToThree, facadeToThree, offsetAlong, panelPointFacade, type Tuple3 } from './coords';
 
 // ─────────────────────────────────────────────
@@ -85,9 +86,15 @@ export interface Box3Facade {
 
 export interface SceneDims {
   facadeAzimuth: number;
+  /** Schematic building (framing, shadow fit, compass): row width + margins, BUILDING_DEPTH, floors. */
   buildingWidth: number;
   buildingDepth: number;
   buildingHeight: number;
+  /**
+   * The own building as drawn in place of the schematic box: its real footprint (facade frame, facade edge on
+   * n = 0; buildingsGeometry.ts ownBody), at least as high as the schematic box. Null: the schematic box.
+   */
+  own: OwnBody | null;
   /** Floor-to-floor height H, m. */
   storeyHeight: number;
   /** Highest storey number with panels. */
@@ -113,12 +120,13 @@ export interface SceneDims {
   radius: number;
 }
 
-/** Scene dimensions from the model's panel layout and floor placements. */
+/** Scene dimensions from the model's panel layout and floor placements (and the own building, if known). */
 export function sceneDims(
   layout: PanelLayout,
   rows: readonly FloorPlacement[],
   facadeAzimuth: number,
   railHeight: number,
+  own: OwnBody | null = null,
 ): SceneDims {
   const H = layout.floorHeight;
   const lowest = rows[0];
@@ -160,6 +168,7 @@ export function sceneDims(
     buildingWidth,
     buildingDepth: BUILDING_DEPTH,
     buildingHeight,
+    own: own ? { ...own, top: Math.max(own.top, buildingHeight) } : null,
     storeyHeight: H,
     topStorey: top?.storey ?? 0,
     balconyWidth,
@@ -230,6 +239,20 @@ export function viewTargets(dims: SceneDims): FacadeVector[] {
         for (const v of [0, layout.length]) out.push(panelPointFacade(row, layout, u, v));
       }
     }
+  }
+  return out;
+}
+
+/**
+ * Fewer points for the prism view test (Buildings3D): per floor both ends and the middle of the row, halfway
+ * down the panels (facade frame).
+ */
+export function rowTargets(dims: SceneDims): FacadeVector[] {
+  const { layout } = dims;
+  const half = layout.rowWidth / 2;
+  const out: FacadeVector[] = [];
+  for (const row of dims.rows) {
+    for (const u of [-half, 0, half]) out.push(panelPointFacade(row, layout, u, layout.length / 2));
   }
   return out;
 }

@@ -30,12 +30,16 @@
     "e2e": "playwright test",
     "validate:terrain": "tsx scripts/validate-terrain.ts",
     "validate:yield": "tsx scripts/validate-yield.ts",
+    "validate:buildings": "tsx scripts/validate-buildings.ts",
+    "validate:dsm": "tsx scripts/validate-dsm.ts",
     "icons": "tsx scripts/generate-icons.ts"
   },
   "dependencies": {
+    "@mapbox/vector-tile": "^3.0.0",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.8.0",
     "fast-png": "^8.0.0",
+    "pbf": "^5.1.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "three": "^0.186.0",

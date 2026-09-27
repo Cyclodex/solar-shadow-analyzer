@@ -1,10 +1,11 @@
 import { encode } from 'fast-png';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { DsmJobRequest, DsmJobResult, DsmProgress } from '../model/dsm';
 import type { TerrainComputer, TerrainHorizonResult } from '../model/terrain';
 import { clearTerrainTileCache } from '../model/terrain';
 import type { TerrainWorkerRequest, TerrainWorkerResponse } from './terrainProtocol';
-import { computeTerrainInWorker, resetTerrainWorker } from './terrainClient';
-import { createTerrainWorkerHandler } from './terrainWorkerHandler';
+import { computeDsmInWorker, computeTerrainInWorker, resetTerrainWorker } from './terrainClient';
+import { createTerrainWorkerHandler, type DsmComputer } from './terrainWorkerHandler';
 
 const result = (h: number): TerrainHorizonResult => ({
   profile: { stepDeg: 90, elevations: [h, h, h, h] },
@@ -12,8 +13,9 @@ const result = (h: number): TerrainHorizonResult => ({
   tiles: 2,
 });
 
-/** Controllable stand-in for the worker's computation. */
+/** Controllable stand-ins for the worker's computations. */
 let compute: TerrainComputer;
+let dsm: DsmComputer;
 const workers: FakeWorker[] = [];
 const posted: TerrainWorkerRequest[] = [];
 
@@ -28,11 +30,15 @@ class FakeWorker extends EventTarget {
     this.url = String(url);
     this.options = options;
     workers.push(this);
-    this.handle = createTerrainWorkerHandler((m: TerrainWorkerResponse) => {
-      setTimeout(() => {
-        if (!this.terminated) this.dispatchEvent(new MessageEvent('message', { data: m }));
-      }, 0);
-    }, compute);
+    this.handle = createTerrainWorkerHandler(
+      (m: TerrainWorkerResponse) => {
+        setTimeout(() => {
+          if (!this.terminated) this.dispatchEvent(new MessageEvent('message', { data: m }));
+        }, 0);
+      },
+      compute,
+      (request, opts) => dsm(request, opts),
+    );
   }
   postMessage(m: TerrainWorkerRequest): void {
     posted.push(m);
@@ -141,5 +147,98 @@ describe('computeTerrainInWorker', () => {
     const [r] = await computeTerrainInWorker(47.1, 7.45, [4], { fetchImpl });
     expect(r.siteElevation).toBe(0);
     expect(workers).toHaveLength(0);
+  });
+});
+
+const DSM_STATS: DsmJobResult['stats'] = {
+  requests: 0,
+  downloaded: 0,
+  ms: { stac: 0, download: 0, decode: 0, mask: 0, rays: 0, total: 0 },
+};
+const DSM_REQUEST: DsmJobRequest = {
+  site: {
+    latitude: 46.95,
+    longitude: 7.45,
+    facadeAzimuth: 180,
+    radius: 300,
+    trees: true,
+    masks: null,
+    exclusion: { balconyDepthM: 1.5, rowWidthM: 3.5, ownFootprint: null },
+  },
+  groups: [{ n: 1.9, heights: [4.1, 6.9] }],
+};
+
+describe('computeDsmInWorker', () => {
+  beforeEach(() => {
+    workers.length = 0;
+    posted.length = 0;
+    resetTerrainWorker();
+    vi.stubGlobal('Worker', FakeWorker);
+    dsm = async (request, opts) => {
+      opts.onProgress?.({ fraction: 0.5, bytes: 10, totalBytes: 20 });
+      await new Promise((r) => setTimeout(r, 5));
+      return {
+        status: 'ok',
+        horizons: request.groups.map((g) => g.heights.map(() => ({ stepDeg: 90, elevations: [1, 2, 3, 4] }))),
+        info: {
+          dataYears: [2023],
+          bytes: 20,
+          coverage: 1,
+          ground: 500,
+          groundSource: 'height-service',
+          files: 1,
+          tiles: 1,
+        },
+        stats: DSM_STATS,
+      };
+    };
+  });
+  afterEach(() => {
+    resetTerrainWorker();
+    vi.unstubAllGlobals();
+  });
+
+  it('runs the job in the terrain worker and relays progress and the result', async () => {
+    const progress: DsmProgress[] = [];
+    const r = await computeDsmInWorker(DSM_REQUEST, { onProgress: (p) => progress.push(p) });
+    expect(r.status).toBe('ok');
+    expect(r.status === 'ok' && r.horizons[0]).toHaveLength(2);
+    expect(progress).toEqual([{ fraction: 0.5, bytes: 10, totalBytes: 20 }]);
+    expect(posted.map((m) => m.type)).toEqual(['dsm']);
+    // The same worker as the terrain jobs (its memory keeps the site's rasters).
+    compute = async (_lat, _lon, heights) => heights.map(result);
+    await computeTerrainInWorker(47, 7, [4], {});
+    expect(workers).toHaveLength(1);
+  });
+
+  it('rejects at once when aborted and tells the worker to drop the job', async () => {
+    const ctrl = new AbortController();
+    const run = computeDsmInWorker(DSM_REQUEST, { signal: ctrl.signal });
+    ctrl.abort();
+    await expect(run).rejects.toMatchObject({ name: 'AbortError' });
+    expect(posted.map((m) => m.type)).toEqual(['dsm', 'abort']);
+  });
+
+  it('passes an exception of the worker on', async () => {
+    dsm = async () => {
+      throw new Error('out of memory');
+    };
+    await expect(computeDsmInWorker(DSM_REQUEST)).rejects.toThrow('out of memory');
+  });
+
+  it('runs in this thread with an injected fetch or without Worker support', async () => {
+    const fetchImpl = vi.fn() as unknown as typeof fetch;
+    // Outside the scan's extent (Paris): unavailable without a request.
+    const paris = { ...DSM_REQUEST, site: { ...DSM_REQUEST.site, latitude: 48.8566, longitude: 2.3522 } };
+    expect((await computeDsmInWorker(paris, { fetchImpl })).status).toBe('unavailable');
+    expect(workers).toHaveLength(0);
+    vi.stubGlobal('Worker', undefined);
+    expect((await computeDsmInWorker(paris)).status).toBe('unavailable');
+    expect(fetchImpl).not.toHaveBeenCalled();
+    const pre = new AbortController();
+    pre.abort();
+    await expect(computeDsmInWorker(paris, { signal: pre.signal })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
   });
 });

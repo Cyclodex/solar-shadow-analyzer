@@ -58,6 +58,7 @@ export default function SceneView() {
   const [showModelShade, setShowModelShade] = useState(true);
   const [castShadows, setCastShadows] = useState(true);
   const [showSunPath, setShowSunPath] = useState(true);
+  const [showBuildings, setShowBuildings] = useState(true);
   const [explain, setExplain] = useState(false);
   const listId = useId();
 
@@ -68,6 +69,7 @@ export default function SceneView() {
         showModelShade={showModelShade}
         castShadows={castShadows}
         showSunPath={showSunPath}
+        showBuildings={showBuildings}
       />
       <div className={styles.legendBar}>
         <ul
@@ -99,6 +101,16 @@ export default function SceneView() {
           >
             {t.legendPath(f.date(data.date))}
           </LegendItem>
+          {data.buildings.length > 0 && (
+            <LegendItem
+              swatch={styles.swatchBuildings}
+              label={t.buildings}
+              pressed={showBuildings}
+              onToggle={() => setShowBuildings((v) => !v)}
+            >
+              {t.legendBuildings}
+            </LegendItem>
+          )}
           {data.farHorizon && (
             <LegendItem swatch={styles.swatchHorizon} label={t.horizon}>
               {t.legendHorizon(f.unit(HORIZON_RING_RADIUS, 'm'))}

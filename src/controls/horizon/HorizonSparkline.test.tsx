@@ -1,6 +1,9 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { floorPlacements } from '../../model/geometry';
+import { surfaceObserverKey, surfaceSiteKey } from '../../model/dsmHorizon';
 import { useConfigStore } from '../../state/configStore';
+import { useDataStore } from '../../state/dataStore';
 import { resetStores } from '../../test/utils';
 import { HorizonSparkline } from './HorizonSparkline';
 
@@ -43,5 +46,22 @@ describe('HorizonSparkline', () => {
     fireEvent.pointerCancel(svg, { pointerId: 1, pointerType: 'touch' });
     expect(screen.queryByText(/^Bei /)).not.toBeInTheDocument();
     expect(screen.getByText('Höchstwerte im Bereich')).toBeInTheDocument();
+  });
+
+  it('shows the laser-scan horizon of the focus floor while the scan is active', () => {
+    setup(180);
+    expect(screen.queryByText('Laserscan')).not.toBeInTheDocument();
+    act(() => {
+      const { patch } = useConfigStore.getState();
+      patch('horizon', { surfaceModel: { enabled: true, trees: true, radius: 300 } });
+      const config = useConfigStore.getState().config;
+      const scan = { stepDeg: 1, elevations: new Array<number>(360).fill(21) };
+      const horizons = Object.fromEntries(
+        floorPlacements(config).map((p) => [surfaceObserverKey(p.center), scan]),
+      );
+      useDataStore.getState().setSurface({ status: 'ready', siteKey: surfaceSiteKey(config), horizons });
+    });
+    expect(screen.getByText('Laserscan')).toBeInTheDocument();
+    expect(screen.getByText(/Höchste Werte: .*Laserscan 21\.0°/)).toBeInTheDocument();
   });
 });

@@ -70,9 +70,17 @@
   stroke-width: 1;
 }
 
-/* Series identity: categorical slots 2 / 1 / 0 (validated palette, fixed per series). */
+/* Series identity: categorical slots 2 / 4 / 3 / 1 / 0 (validated palette, fixed per series). */
 .terrain {
   --series: var(--floor-2);
+}
+
+.surface {
+  --series: var(--floor-4);
+}
+
+.buildings {
+  --series: var(--floor-3);
 }
 
 .obstacles {

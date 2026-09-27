@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DEFAULT_CONFIG } from '../model/defaults';
 import { substringBeamLoss } from '../model/geometry';
 import { clearSkyYear } from '../model/weather';
+import { markAddressPoint } from '../state/addressPointStore';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { useTimeStore } from '../state/timeStore';
@@ -98,6 +99,34 @@ describe('KpiBar', () => {
       act(() => useDataStore.getState().setTerrain({ status: 'ready', profile: null, profiles: {} }));
       expect(within(annual).queryByText(/vorläufig/)).not.toBeInTheDocument();
       expect(num(dds(kpi('Jahresertrag'))[0])).toBe(provisional); // no terrain profile: same numbers
+    });
+
+    it('marks the numbers provisional while the laser scan waits for the location (address point)', () => {
+      const { latitude, longitude } = useConfigStore.getState().config.location;
+      act(() => {
+        patch('horizon', { surfaceModel: { enabled: true, trees: true, radius: 300 } });
+        markAddressPoint(latitude, longitude);
+        useDataStore.getState().setWeather({ status: 'ready', series });
+        useDataStore.getState().setSurface({ status: 'waiting' });
+      });
+      render(<KpiBar />);
+      const annual = screen.getByRole('heading', { name: 'Jahr 2025' }).parentElement as HTMLElement;
+      expect(
+        within(annual).getByText('vorläufig – Standort noch nicht im Lageplan bestätigt'),
+      ).toBeInTheDocument();
+      expect(kpi('Jahresertrag')).toHaveTextContent(/kWh/);
+      // No buildings yet (import under way or failed): the action loads them.
+      act(() => {
+        useUiStore.getState().consumeSurroundingsImport();
+      });
+      within(annual).getByRole('button', { name: 'Gebäude laden' }).click();
+      expect(useUiStore.getState().surroundingsImport).toMatchObject({ latitude, longitude });
+      // Placed on the facade (another location): final again.
+      act(() => {
+        patch('location', { latitude: latitude + 1e-4 });
+        useDataStore.getState().setSurface({ status: 'loading' });
+      });
+      expect(within(annual).queryByText(/Standort noch nicht/)).not.toBeInTheDocument();
     });
 
     it('never combines a new site with the previous site’s weather', () => {

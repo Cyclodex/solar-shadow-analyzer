@@ -37,6 +37,8 @@ const TOKENS = [
   'shade',
   'grid',
   'axis',
+  'warn',
+  'ok',
   'floor-0',
   'floor-1',
   'floor-2',
@@ -72,6 +74,9 @@ export interface ScenePalette {
   glass: Color;
   gridLine: Color;
   obstacle: Color;
+  /** Surrounding buildings: edited ones tinted warm, manual ones green (as in the site plan). */
+  neighbourEdited: Color;
+  neighbourManual: Color;
   horizonFill: Color;
   /** Font stack for labels (--font-sans). */
   font: string;
@@ -101,6 +106,7 @@ export function readPalette(theme: string, root: Element = document.documentElem
     return c;
   };
   const mix = (a: SceneToken, b: SceneToken, t: number): Color => color(a).clone().lerp(color(b), t);
+  const obstacle = mix('wall', 'ground', 0.3);
   return {
     theme,
     rgba,
@@ -111,7 +117,9 @@ export function readPalette(theme: string, root: Element = document.documentElem
     nightHorizon: color('sky-bottom').clone().multiplyScalar(0.1),
     glass: mix('sky-top', 'panel', 0.55).multiplyScalar(0.7),
     gridLine: mix('ground', 'text', 0.22),
-    obstacle: mix('wall', 'ground', 0.3),
+    obstacle,
+    neighbourEdited: obstacle.clone().lerp(color('warn'), 0.45),
+    neighbourManual: obstacle.clone().lerp(color('ok'), 0.4),
     horizonFill: mix('ground', 'sky-bottom', 0.3).multiplyScalar(0.8),
     font: style.getPropertyValue('--font-sans').trim() || 'system-ui, sans-serif',
   };

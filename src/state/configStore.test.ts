@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Config } from '../model/types';
 import { DEFAULT_CONFIG } from '../model/defaults';
-import { CONFIG_STORAGE_KEY, shareConfig, useConfigStore } from './configStore';
+import { CONFIG_STORAGE_KEY, CONFIG_STORAGE_VERSION, shareConfig, useConfigStore } from './configStore';
 import { resetStores } from '../test/utils';
 
 describe('useConfigStore', () => {
@@ -119,6 +120,40 @@ describe('persist hydration', () => {
     expect(store.getState().config.panels.count).toBe(8);
     expect(store.getState().config.version).toBe(3);
     expect(store.getState().config.battery).toEqual(DEFAULT_CONFIG.battery);
+  });
+
+  it('adds the surroundings fields to a stored config from before them (buildings none, laser scan off)', async () => {
+    const { buildings, buildingImport, surfaceModel, ...oldHorizon } = DEFAULT_CONFIG.horizon;
+    void buildings;
+    void buildingImport;
+    void surfaceModel;
+    localStorage.setItem(
+      CONFIG_STORAGE_KEY,
+      JSON.stringify({
+        state: {
+          config: {
+            ...DEFAULT_CONFIG,
+            location: { ...DEFAULT_CONFIG.location, latitude: 46.9478, longitude: 7.45 },
+            horizon: { ...oldHorizon, terrainEnabled: false },
+          },
+        },
+        version: 2,
+      }),
+    );
+    const store = await freshStore();
+    const { config } = store.getState();
+    expect(config.horizon).toEqual({ ...DEFAULT_CONFIG.horizon, terrainEnabled: false });
+    expect(config.location.latitude).toBe(46.9478);
+    // Written back with the new fields on the next change (no storage version bump needed).
+    store.getState().patch('horizon', { surfaceModel: { ...config.horizon.surfaceModel, enabled: true } });
+    const stored = JSON.parse(localStorage.getItem(CONFIG_STORAGE_KEY) ?? '{}') as {
+      state: { config: Config };
+      version: number;
+    };
+    // The storage version is the battery migration's (the surroundings fields needed none of their own).
+    expect(stored.version).toBe(CONFIG_STORAGE_VERSION);
+    expect(stored.state.config.horizon.surfaceModel.enabled).toBe(true);
+    expect(stored.state.config.horizon.buildings).toEqual([]);
   });
 
   it('falls back to defaults for corrupt storage', async () => {

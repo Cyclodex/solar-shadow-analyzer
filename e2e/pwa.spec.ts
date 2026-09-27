@@ -6,7 +6,7 @@ import { basePath } from '../scripts/basePath.ts';
 // service worker runs here. External data stays blocked: results come from the clear-sky fallback.
 test.use({ serviceWorkers: 'allow' });
 
-const EXTERNAL = /open-meteo\.com|amazonaws\.com/;
+const EXTERNAL = /open-meteo\.com|amazonaws\.com|geo\.admin\.ch/;
 
 test.beforeEach(async ({ context }) => {
   await context.route(EXTERNAL, (route) => route.abort());

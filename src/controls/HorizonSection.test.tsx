@@ -128,6 +128,30 @@ describe('HorizonSection', () => {
     });
   });
 
+  describe('surroundings', () => {
+    it('summarises the laser scan and the shown (not removed) buildings', () => {
+      const square: [number, number][] = [
+        [0, 10],
+        [8, 10],
+        [8, 18],
+        [0, 18],
+      ];
+      useConfigStore.getState().patch('horizon', {
+        terrainEnabled: false,
+        surfaceModel: { enabled: true, trees: true, radius: 300 },
+        buildings: [
+          { id: 'b1', name: '', footprint: square, base: 0, height: 12, source: 'swisstopo' },
+          { id: 'b2', name: '', footprint: square, base: 0, height: 12, source: 'swisstopo', removed: true },
+          { id: 'b3', name: 'Neubau', footprint: square, base: 0, height: 9, source: 'manual' },
+        ],
+      });
+      render(<HorizonSection />);
+      expect(screen.getByRole('button', { name: /Horizont & Umgebung/ })).toHaveTextContent(
+        'Laserscan · 2 Gebäude',
+      );
+    });
+  });
+
   describe('obstacles', () => {
     it('adds, edits and removes an obstacle', () => {
       render(<HorizonSection />);

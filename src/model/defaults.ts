@@ -1,4 +1,4 @@
-import type { Config, Obstacle } from './types';
+import type { Building, Config, Obstacle } from './types';
 
 // ─────────────────────────────────────────────
 // DEFAULT CONFIG & FIELD LIMITS
@@ -42,6 +42,9 @@ export const DEFAULT_CONFIG: Config = {
     terrainEnabled: true,
     obstacles: [],
     manual: [],
+    buildings: [],
+    buildingImport: null,
+    surfaceModel: { enabled: false, trees: true, radius: 300 },
   },
   weather: {
     source: 'open-meteo',
@@ -158,6 +161,23 @@ export const LIMITS = {
     depth: { min: 0.5, max: 300, step: 0.5 },
     height: { min: 0.5, max: 300, step: 0.5 },
   },
+  // Surroundings (docs/ARCHITECTURE.md, "Umgebung"). Appended at the end on purpose (parallel branches insert
+  // sections before `obstacle`). Surrounding buildings, m:
+  neighbour: {
+    /** Height of the top above the base. */
+    height: { min: 0.5, max: 300, step: 0.1 },
+    /** Base above the site ground. */
+    base: { min: -50, max: 100, step: 0.1 },
+    /** Footprint vertex coordinate (east or north of the anchor). */
+    coord: { min: -2000, max: 2000, step: 0.1 },
+  },
+  surfaceModel: {
+    radius: { min: 150, max: 500, step: 50 },
+  },
+  buildingImport: {
+    /** 0 = no import (anchor of manual buildings only). */
+    radius: { min: 0, max: 1000, step: 10 },
+  },
 } as const satisfies Record<string, Record<string, FieldLimit>>;
 
 /** Latest calendar year with complete historical weather data, given "now". */
@@ -167,4 +187,32 @@ export function latestCompleteWeatherYear(nowMs: number): number {
 
 export function createObstacle(id: string, name: string): Obstacle {
   return { id, name, offsetAlong: 0, distance: 20, width: 15, depth: 10, height: 12 };
+}
+
+/**
+ * A manual building: square footprint of `size` m centred on `center` (ENU m of the buildingImport anchor),
+ * `height` m high on the site ground.
+ */
+export function createBuilding(
+  id: string,
+  name: string,
+  center: readonly [number, number] = [0, 20],
+  size = 10,
+  height = 10,
+): Building {
+  const [e, n] = center;
+  const h = size / 2;
+  return {
+    id,
+    name,
+    footprint: [
+      [e - h, n - h],
+      [e + h, n - h],
+      [e + h, n + h],
+      [e - h, n + h],
+    ],
+    base: 0,
+    height,
+    source: 'manual',
+  };
 }

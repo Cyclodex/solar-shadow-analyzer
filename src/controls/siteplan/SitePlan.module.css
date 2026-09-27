@@ -1,0 +1,459 @@
+/* Site plan «Lageplan»: disclosure, map (SVG, north up), legend, facade fields, selected building. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  /* Scrolled to after an address pick: keep clear of the page edge. */
+  scroll-margin-top: calc(var(--safe-top) + var(--space-4));
+}
+
+.heading {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--text);
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--touch);
+  padding: 0 var(--space-1);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+}
+
+.toggle:hover {
+  color: var(--accent);
+}
+
+.chevron {
+  flex: 0 0 auto;
+  width: 7px;
+  height: 7px;
+  border-right: 2px solid var(--text-muted);
+  border-bottom: 2px solid var(--text-muted);
+  transform: rotate(-45deg);
+  transition: transform var(--transition);
+}
+
+[aria-expanded='true'] > .chevron {
+  transform: rotate(45deg);
+}
+
+.status {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.body[hidden] {
+  display: none;
+}
+
+.guide,
+.notice {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.notice {
+  border-color: var(--border-strong);
+  background: var(--surface-2);
+  color: var(--text-muted);
+}
+
+/* ── Map ─────────────────────────────────── */
+
+.mapWrap {
+  position: relative;
+  min-width: 0;
+}
+
+.frame {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+}
+
+.frame:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.map {
+  display: block;
+  width: 100%;
+  cursor: grab;
+  /* One finger: vertical swipes scroll the page, sideways drags pan the plan; two fingers zoom it. */
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.map:active {
+  cursor: grabbing;
+}
+
+.ground {
+  fill: color-mix(in srgb, var(--surface-2) 45%, var(--surface));
+}
+
+.footprint {
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+/* Outline at least 3:1 against the ground in both themes (light 4.1:1, dark 4.6:1). */
+.neighbour {
+  fill: color-mix(in srgb, var(--border-strong) 20%, var(--surface-3));
+  stroke: color-mix(in srgb, var(--text-muted) 40%, var(--border-strong));
+}
+
+.own {
+  fill: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  stroke: var(--accent);
+}
+
+.edited {
+  fill: color-mix(in srgb, var(--warn) 22%, var(--surface));
+  stroke: var(--warn);
+}
+
+.manual {
+  fill: color-mix(in srgb, var(--ok) 18%, var(--surface));
+  stroke: var(--ok);
+  stroke-dasharray: 5 3;
+}
+
+.removed {
+  fill: none;
+  stroke: var(--text-faint);
+  stroke-dasharray: 2 3;
+}
+
+.selected {
+  stroke: var(--text);
+  stroke-width: 2.5;
+}
+
+.edge,
+.party,
+.edgeChosen,
+.edgeHit {
+  fill: none;
+  stroke-linecap: round;
+}
+
+.edge {
+  stroke: var(--accent);
+  stroke-width: 3;
+}
+
+.party {
+  stroke: var(--text-muted);
+  stroke-width: 3;
+  stroke-dasharray: 0.1 6;
+}
+
+.edgeShort {
+  stroke: none;
+}
+
+.edgeHit {
+  stroke: transparent;
+  stroke-width: 24px;
+  cursor: pointer;
+  pointer-events: stroke;
+}
+
+.edgeChosen {
+  stroke: var(--accent);
+  stroke-width: 6;
+}
+
+.row {
+  stroke: var(--panel-edge);
+  stroke-width: 5;
+}
+
+.arrow {
+  stroke: var(--accent);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+}
+
+.arrowHead {
+  fill: var(--accent);
+}
+
+.handle {
+  fill: var(--bg);
+  stroke: var(--accent);
+  stroke-width: 3.5;
+}
+
+.handleHit {
+  fill: transparent;
+  cursor: grab;
+}
+
+/* HTML touch target over the balcony handle (touch-action set inline by the facade's direction; SVG children
+   do not take touch-action in every browser). */
+.handleTouch {
+  position: absolute;
+  width: 44px;
+  height: 44px;
+  margin: -22px 0 0 -22px;
+  border-radius: 50%;
+  cursor: grab;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.marker path {
+  fill: var(--text);
+  stroke: var(--surface);
+  stroke-width: 1.5;
+}
+
+.markerText,
+.north text,
+.scale text {
+  font-size: 12px;
+  font-weight: 600;
+  fill: var(--text);
+  paint-order: stroke;
+  stroke: var(--surface);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.locationMark circle {
+  fill: none;
+  stroke: var(--text-muted);
+  stroke-width: 2;
+  stroke-dasharray: 3 2;
+}
+
+.north path {
+  fill: var(--text);
+}
+
+.scale path {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+.sunRay {
+  stroke: var(--sun);
+  stroke-width: 2.5;
+  stroke-dasharray: 7 5;
+  stroke-linecap: round;
+}
+
+.sunDisc {
+  fill: var(--sun);
+  stroke: var(--sun-ink);
+  stroke-width: 1.5;
+}
+
+.zoom {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.wheelHint {
+  position: absolute;
+  inset: auto var(--space-3) var(--space-8);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--bg) 85%, transparent);
+  font-size: var(--fs-xs);
+  color: var(--text);
+  text-align: center;
+  pointer-events: none;
+}
+
+/* ── Legend ──────────────────────────────── */
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+}
+
+.legend li {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  white-space: nowrap;
+}
+
+.sw {
+  flex: none;
+  display: block;
+  width: 16px;
+  height: 11px;
+  border-radius: 2px;
+}
+
+.swOwn {
+  background: color-mix(in srgb, var(--accent) 24%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--accent);
+}
+
+.swFacade {
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--accent);
+}
+
+.swParty {
+  height: 0;
+  border-radius: 0;
+  border-top: 3px dotted var(--text-muted);
+}
+
+.swBalcony {
+  width: 12px;
+  height: 12px;
+  border: 3px solid var(--accent);
+  border-radius: 50%;
+  background: var(--bg);
+}
+
+.swNeighbour {
+  background: color-mix(in srgb, var(--border-strong) 20%, var(--surface-3));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--text-muted) 40%, var(--border-strong));
+}
+
+.swEdited {
+  background: color-mix(in srgb, var(--warn) 22%, var(--surface));
+  box-shadow: inset 0 0 0 1px var(--warn);
+}
+
+.swManual {
+  background: color-mix(in srgb, var(--ok) 18%, var(--surface));
+  border: 1px dashed var(--ok);
+}
+
+.swRemoved {
+  border: 1px dashed var(--text-faint);
+}
+
+.swSun {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--sun);
+}
+
+/* ── Fields, actions, card ───────────────── */
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.unavailable {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.cardTitle {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px var(--space-2);
+}
+
+.cardName {
+  font-size: var(--fs-sm);
+  font-weight: 650;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.badge {
+  padding: 0 var(--space-1);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--fs-xs);
+  line-height: 1.4;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.cardMeta {
+  font-size: var(--fs-xs);
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.cardActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+}
+
+@media (pointer: coarse) {
+  .edgeHit {
+    stroke-width: 44px;
+  }
+}
+
+@media (forced-colors: active) {
+  .edge,
+  .edgeChosen,
+  .arrow {
+    stroke: Highlight;
+  }
+
+  .arrowHead,
+  .handle {
+    fill: Highlight;
+  }
+}

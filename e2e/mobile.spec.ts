@@ -2,7 +2,7 @@ import { devices, expect, test, type Page } from '@playwright/test';
 
 // External data is blocked: results come from the clear-sky fallback, terrain is skipped.
 test.beforeEach(async ({ page }) => {
-  await page.route(/open-meteo\.com|amazonaws\.com/, (route) => route.abort());
+  await page.route(/open-meteo\.com|amazonaws\.com|geo\.admin\.ch/, (route) => route.abort());
 });
 
 const controlBar = (page: Page) => page.getByRole('region', { name: 'Schnellsteuerung' });

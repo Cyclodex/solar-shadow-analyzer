@@ -1,0 +1,30 @@
+/* Location not yet placed on a facade: prompt in «Standort», note next to the annual results. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  font-size: var(--fs-xs);
+  color: var(--text);
+}
+
+.problem {
+  border-color: var(--warn);
+  background: var(--warn-soft);
+}
+
+.hint {
+  color: var(--text-muted);
+}
+
+.results {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1) var(--space-3);
+}

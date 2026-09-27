@@ -6,8 +6,14 @@ import { clearTerrainTileCache } from '../model/terrain';
 import { useConfigStore } from '../state/configStore';
 import { useDataStore } from '../state/dataStore';
 import { resetStores } from '../test/utils';
+import { floorPlacements } from '../model/geometry';
+import { FLOOR_HORIZON_STEP_DEG, floorHorizons } from '../model/horizon';
+import { surfaceObserverKey } from '../model/dsmHorizon';
+import type { Config } from '../model/types';
 import {
+  NO_SURROUNDINGS,
   TERRAIN_DEBOUNCE_MS,
+  floorHorizonsWithTerrain,
   floorTerrainHeight,
   terrainObserverHeights,
   terrainProfileAt,
@@ -166,5 +172,39 @@ describe('useTerrainLoader', () => {
     expect(terrainProfileAt(profiles, 8)).toBe(profiles[10]);
     expect(terrainProfileAt(p(3), 99)?.elevations[0]).toBe(3);
     expect(terrainProfileAt(null, 4)).toBeNull();
+  });
+});
+
+describe('floorHorizonsWithTerrain: surroundings', () => {
+  const config: Config = {
+    ...DEFAULT_CONFIG,
+    horizon: {
+      ...DEFAULT_CONFIG.horizon,
+      terrainEnabled: false,
+      manual: [
+        { azimuth: 180, elevation: 0 },
+        { azimuth: 202, elevation: 5 },
+      ],
+    },
+  };
+  const flat = (deg: number) => ({ stepDeg: 1, elevations: new Array<number>(360).fill(deg) });
+
+  it('without buildings and laser scan it equals the model floorHorizons', () => {
+    expect(floorHorizonsWithTerrain(config, null)).toEqual(floorHorizons(config, null));
+    expect(floorHorizonsWithTerrain(config, null, NO_SURROUNDINGS)).toEqual(floorHorizons(config, null));
+  });
+
+  it('adds the laser-scan horizon of each floor observer as the per-azimuth maximum', () => {
+    const [lower, upper] = floorPlacements(config);
+    const dsm = {
+      [surfaceObserverKey(lower!.center)]: flat(12),
+      [surfaceObserverKey(upper!.center)]: flat(3),
+    };
+    const got = floorHorizonsWithTerrain(config, null, { dsm });
+    expect(got[0]!.stepDeg).toBe(FLOOR_HORIZON_STEP_DEG);
+    expect(got[0]!.elevations.every((e) => e === 12)).toBe(true);
+    // Upper floor: max(manual 0° at 180° … 5° at 202°, scan 3°).
+    expect(Math.max(...got[1]!.elevations)).toBeCloseTo(5, 9);
+    expect(Math.min(...got[1]!.elevations)).toBe(3);
   });
 });

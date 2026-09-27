@@ -13,6 +13,7 @@ import { horizonAt, horizonFromPoints, maxHorizon } from '../../model/horizon';
 import type { HorizonProfile, InstantState, Obstacle } from '../../model/types';
 import { useConfig } from '../../state/configStore';
 import { useTimeStore } from '../../state/timeStore';
+import { sceneBuildings, type ScenePrism } from './buildingsGeometry';
 import type { Tuple3 } from './coords';
 import {
   hourMarks,
@@ -38,6 +39,8 @@ export interface SceneData {
   /** Height above ground the terrain horizon is seen from (the focus floor's, see floorTerrainHeight), m. */
   observerHeight: number;
   obstacles: readonly Obstacle[];
+  /** Surrounding buildings as prisms around the facade origin (removed and own ones left out). */
+  buildings: readonly ScenePrism[];
   /** Storey label per floor index. */
   labels: readonly string[];
 }
@@ -47,7 +50,7 @@ export interface SceneData {
  * time step only recomputes the instant, the sun direction and the far-horizon test.
  */
 export function useSceneData(): SceneData {
-  const { building, horizon } = useConfig();
+  const { building, horizon, location } = useConfig();
   const lang = useLang();
   const layout = useLayout();
   const placements = useFloorPlacements();
@@ -58,11 +61,17 @@ export function useSceneData(): SceneData {
   const date = useTimeStore((s) => s.date);
   const azimuth = building.facadeAzimuth;
 
+  const { latitude, longitude } = location;
+  const surroundings = useMemo(
+    () => sceneBuildings(horizon.buildings, horizon.buildingImport, { latitude, longitude }, azimuth),
+    [horizon.buildings, horizon.buildingImport, latitude, longitude, azimuth],
+  );
+  const own = surroundings.own;
   const dims = useMemo(() => {
     const first = placements[0];
     const railHeight = first ? first.railTopZ - first.slabZ : 0;
-    return sceneDims(layout, placements, azimuth, railHeight);
-  }, [layout, placements, azimuth]);
+    return sceneDims(layout, placements, azimuth, railHeight, own);
+  }, [layout, placements, azimuth, own]);
   const segments = useMemo(() => sunPathSegments(path, azimuth), [path, azimuth]);
   const hours = useMemo(() => hourMarks(path, azimuth), [path, azimuth]);
   const manual = horizon.manual;
@@ -89,6 +98,7 @@ export function useSceneData(): SceneData {
     farHorizon,
     observerHeight: floorTerrainHeight(placements[focus]),
     obstacles: horizon.obstacles,
+    buildings: surroundings.prisms,
     labels,
   };
 }
